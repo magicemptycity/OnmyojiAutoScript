@@ -12,7 +12,7 @@ TASK_NAME_ALIASES = {
     'SixRealms': ['六道之门'],
     'OtherWorldTwilight': ['彼世逢魔'],
     'DailyTrifles': ['每日琐事'],
-    'DailyTriflesSpecial': ['每日琐事特殊任务'],
+    'DailyTriflesSpecial': ['每日琐事特殊任务', '每日特殊'],
     'AreaBoss': ['地域鬼王'],
     'GoldYoukai': ['金币妖怪'],
     'ExperienceYoukai': ['经验妖怪'],

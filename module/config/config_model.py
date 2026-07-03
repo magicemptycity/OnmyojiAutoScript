@@ -32,6 +32,7 @@ from tasks.KekkaiUtilize.config import KekkaiUtilize
 from tasks.KekkaiActivation.config import KekkaiActivation
 from tasks.DemonEncounter.config import DemonEncounter
 from tasks.DailyTrifles.config import DailyTrifles
+from tasks.DailyTriflesSpecial.config import DailyTriflesSpecial
 from tasks.TalismanPass.config import TalismanPass
 from tasks.Pets.config import Pets
 from tasks.SoulsTidy.config import SoulsTidy
@@ -102,6 +103,7 @@ class ConfigModel(ConfigBase):
     kekkai_activation: KekkaiActivation = Field(default_factory=KekkaiActivation)
     demon_encounter: DemonEncounter = Field(default_factory=DemonEncounter)
     daily_trifles: DailyTrifles = Field(default_factory=DailyTrifles)
+    daily_trifles_special: DailyTriflesSpecial = Field(default_factory=DailyTriflesSpecial)
     talisman_pass: TalismanPass = Field(default_factory=TalismanPass)
     pets: Pets = Field(default_factory=Pets)
     souls_tidy: SoulsTidy = Field(default_factory=SoulsTidy)
