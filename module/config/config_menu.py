@@ -35,6 +35,8 @@ class ConfigMenu:
             "FindJade",
             "MemoryScrolls",
             "MultiAccountRepeat",
+            "MultiAccountRepeatDay",
+            "MultiAccountRepeatWeek",
         ]
         # 阴阳寮
         self.menu["Guild"] = ['KekkaiUtilize', 'KekkaiActivation', 'RealmRaid', 'RyouToppa', 'Dokan', 'CollectiveMissions',

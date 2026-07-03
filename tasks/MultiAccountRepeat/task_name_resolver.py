@@ -34,6 +34,8 @@ TASK_NAME_ALIASES = {
     'FindJade': ['寻找协作任务'],
     'MemoryScrolls': ['绘卷'],
     'MultiAccountRepeat': ['多账号循环任务'],
+    'MultiAccountRepeatDay': ['多账号循环任务每日'],
+    'MultiAccountRepeatWeek': ['多账号循环任务每周'],
     'KekkaiUtilize': ['结界蹭卡'],
     'KekkaiActivation': ['结界挂卡'],
     'RealmRaid': ['个人突破'],
