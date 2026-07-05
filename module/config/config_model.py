@@ -29,7 +29,9 @@ from tasks.ExperienceYoukai.config import ExperienceYoukai
 from tasks.GoldYoukai.config import GoldYoukai
 from tasks.Nian.config import Nian
 from tasks.KekkaiUtilize.config import KekkaiUtilize
+from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
 from tasks.KekkaiActivation.config import KekkaiActivation
+from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
 from tasks.DemonEncounter.config import DemonEncounter
 from tasks.DailyTrifles.config import DailyTrifles
 from tasks.DailyTriflesSpecial.config import DailyTriflesSpecial
@@ -76,7 +78,6 @@ from tasks.MemoryScrolls.config import MemoryScrolls
 from tasks.MultiAccountRepeat.config import MultiAccountRepeat
 from tasks.MultiAccountRepeatDay.config import MultiAccountRepeatDay
 from tasks.MultiAccountRepeatWeek.config import MultiAccountRepeatWeek
-from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
 # ----------------------------------------------------------------------------------------------------------------------
 
 # 每周任务---------------------------------------------------------------------------------------------------------------
@@ -103,7 +104,9 @@ class ConfigModel(ConfigBase):
     realm_raid: RealmRaid = Field(default_factory=RealmRaid)
     ryou_toppa: RyouToppa = Field(default_factory=RyouToppa)
     kekkai_utilize: KekkaiUtilize = Field(default_factory=KekkaiUtilize)
+    multi_account_kekkai_utilize: MultiAccountKekkaiUtilize = Field(default_factory=MultiAccountKekkaiUtilize)
     kekkai_activation: KekkaiActivation = Field(default_factory=KekkaiActivation)
+    multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
     demon_encounter: DemonEncounter = Field(default_factory=DemonEncounter)
     daily_trifles: DailyTrifles = Field(default_factory=DailyTrifles)
     daily_trifles_special: DailyTriflesSpecial = Field(default_factory=DailyTriflesSpecial)
@@ -146,7 +149,6 @@ class ConfigModel(ConfigBase):
     multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
     multi_account_repeat_day: MultiAccountRepeatDay = Field(default_factory=MultiAccountRepeatDay)
     multi_account_repeat_week: MultiAccountRepeatWeek = Field(default_factory=MultiAccountRepeatWeek)
-    multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
 
     # 这些是每周任务
     true_orochi: TrueOrochi = Field(default_factory=TrueOrochi)

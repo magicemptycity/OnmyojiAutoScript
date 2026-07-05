@@ -39,7 +39,7 @@ class ConfigMenu:
             "MultiAccountRepeatWeek",
         ]
         # 阴阳寮
-        self.menu["Guild"] = ['KekkaiUtilize', 'MultiAccountKekkaiActivation', 'KekkaiActivation', 'RealmRaid', 'RyouToppa', 'Dokan', 'CollectiveMissions',
+        self.menu["Guild"] = ['MultiAccountKekkaiUtilize', 'KekkaiUtilize', 'MultiAccountKekkaiActivation', 'KekkaiActivation', 'RealmRaid', 'RyouToppa', 'Dokan', 'CollectiveMissions',
                               'Hunt' , 'AbyssShadows', 'GuildBanquet', 'DemonRetreat', 'GuildActivityMonitor']
         # 每周任务
         self.menu["Weekly Task"] = ['TrueOrochi', 'RichMan', 'Secret', 'WeeklyTrifles', 'MysteryShop', 'Duel']
