@@ -1,4 +1,5 @@
 import importlib
+from datetime import datetime
 from pathlib import Path
 
 from module.exception import RequestHumanTakeover, TaskEnd
@@ -6,7 +7,7 @@ from module.logger import logger
 from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main
-from tasks.MultiAccountRepeat.config import MultiAccountRepeat
+from tasks.MultiAccountRepeat.config import MultiAccountRepeat, MultiAccountRepeatAccount
 from tasks.MultiAccountRepeat.assets import MultiAccountRepeatAssets
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 
@@ -19,6 +20,13 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
 
         for account_info in self.fade_conf.account_list:
             logger.info('start account %s-%s', account_info.character, account_info.svr)
+
+            if self.fade_conf.multi_account_repeat_config.skip_if_logged_today:
+                last_complete_time = account_info.last_complete_time
+                now = datetime.now()
+                if last_complete_time.date() == now.date():
+                    logger.warning('%s-%s skipped because last_complete_time is today: %s', account_info.character, account_info.svr, last_complete_time)
+                    continue
 
             suc = SwitchAccount(self.config, self.device, account_info).switchAccount()
             if not suc:
@@ -45,6 +53,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     break
 
             self.fade_conf.update_account_login_history(account_info)
+            self.config.model.multi_account_repeat = self.fade_conf
             self.config.save()
 
         self.set_next_run('MultiAccountRepeat', success=True)

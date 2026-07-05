@@ -12,6 +12,7 @@ from tasks.Component.config_scheduler import Scheduler
 
 class MultiAccountRepeatConfig(ConfigBase, extra='allow'):
     account_count: int = Field(default=1, ge=1, description='账号数量，决定下面会生成几组账号配置')
+    skip_if_logged_today: bool = Field(default=True, description='如果上次登录时间为今天，则跳过该账号的登录与任务执行')
 
 class MultiAccountRepeatAccount(AccountInfo):
     repeat_task_list: MultiLine = Field(default='', description='需要重复执行的任务名称，多个任务请换行填写。例如：悬赏封印\n契灵之境')
