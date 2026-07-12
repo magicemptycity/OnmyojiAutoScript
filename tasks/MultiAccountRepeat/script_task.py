@@ -38,6 +38,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                 logger.warning('no repeat tasks configured for %s-%s', account_info.character, account_info.svr)
                 continue
 
+            task_failed = False
             for task_name in task_names:
                 logger.info('run repeated task %s for %s-%s', task_name, account_info.character, account_info.svr)
                 try:
@@ -50,11 +51,13 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                 except Exception as e:
                     logger.error('run %s failed for %s-%s: %s', task_name, account_info.character, account_info.svr, e)
                     self.set_next_run('MultiAccountRepeat', success=False)
+                    task_failed = True
                     break
 
-            self.fade_conf.update_account_login_history(account_info)
-            self.config.model.multi_account_repeat = self.fade_conf
-            self.config.save()
+            if not task_failed:
+                self.fade_conf.update_account_login_history(account_info)
+                self.config.model.multi_account_repeat = self.fade_conf
+                self.config.save()
 
         self.set_next_run('MultiAccountRepeat', success=True)
         raise TaskEnd('MultiAccountRepeat')

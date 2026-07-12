@@ -27,6 +27,7 @@ class MultiAccountKekkaiUtilizeAccount(AccountInfo):
     )
     utilize_rule: UtilizeRule = Field(default=UtilizeRule.DEFAULT, description='utilize_rule_help')
     select_friend_list: SelectFriendList = Field(default=SelectFriendList.SAME_SERVER, description='select_friend_list_help')
+    auto_fill: bool = Field(default=False, description='auto_fill_help')
     shikigami_class: ShikigamiClass = Field(default=ShikigamiClass.N, description='shikigami_class_help')
     shikigami_order: int = Field(default=4, description='shikigami_order_help')
     utilize_harvest: bool = Field(default=True, description='是否领取寄养的收获')
@@ -39,7 +40,6 @@ class MultiAccountKekkaiUtilizeConfig(ConfigBase, extra='allow'):
     这里把账号数量和所有“共享”的蹭卡策略配置放在一起，和 MultiAccountKekkaiActivation 的结构保持一致。
     """
     account_count: int = Field(default=1, ge=1, description='账号数量，决定下面会生成几组账号配置')
-    auto_fill: bool = Field(default=False, description='auto_fill_help')
     box_exp_waste: bool = Field(default=True, description='box_exp_waste_help')
     box_exp_enable: bool = Field(default=True, description='box_exp_enable_help')
     box_ap_enable: bool = Field(default=True, description='box_ap_enable_help')

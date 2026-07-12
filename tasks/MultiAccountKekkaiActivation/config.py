@@ -8,6 +8,7 @@ from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
 from tasks.Component.config_base import ConfigBase, DateTime
 from tasks.Component.config_scheduler import Scheduler
 from tasks.KekkaiActivation.config import CardType, CardStar
+from tasks.Utils.config_enum import ShikigamiClass
 
 
 class MultiAccountKekkaiActivationAccount(AccountInfo):
@@ -27,6 +28,8 @@ class MultiAccountKekkaiActivationAccount(AccountInfo):
     swipe_retry_limit: int = Field(default=10, description='最多滑动X次后触发未找到符合条件的卡')
     min_taiko_num: int = Field(default=8, description='挂卡太鼓每小时最少收益,低于则不挂卡')
     min_fish_num: int = Field(default=16, description='挂卡斗鱼每小时最少收益,低于则不挂卡')
+    auto_fill: bool = Field(default=False, description='auto_fill_help')
+    shikigami_class: ShikigamiClass = Field(default=ShikigamiClass.N, description='shikigami_class_help')
     card_not_found_count: int = Field(default=0, description='未发现卡次数')
 
 
@@ -36,18 +39,11 @@ class MultiAccountKekkaiActivationConfig(ConfigBase, extra='allow'):
 
     这里的字段主要控制：
     - 账号数量：到底要生成几组账号配置
-    - 是否跳过今日已执行过登录/挂卡的账号
-    - 哪些挂卡参数是“共享”的，哪些是“按账号独立”的
+    - 影响挂卡流程的公共行为，如是否先换满级式神、是否自动补满等
     """
     account_count: int = Field(default=1, ge=1, description='账号数量，决定下面会生成几组账号配置')
-    skip_if_logged_today: bool = Field(default=True, description='如果上次登录时间为今天，则跳过该账号的登录与任务执行')
-    shared_activation_config: bool = Field(default=True, description='是否共享结界挂卡公共配置')
-    shared_card_type: bool = Field(default=True, description='是否共享卡类型')
-    shared_card_star: bool = Field(default=True, description='是否共享卡星级')
-    shared_swipe_retry_limit: bool = Field(default=True, description='是否共享滑动次数')
-    shared_min_taiko_num: bool = Field(default=True, description='是否共享太鼓最低收益')
-    shared_min_fish_num: bool = Field(default=True, description='是否共享斗鱼最低收益')
-    shared_card_not_found_count: bool = Field(default=False, description='是否共享卡未检出计数')
+    exchange_before: bool = Field(default=True, description='执行挂卡前是否先替换满级式神')
+    exchange_max: bool = Field(default=True, description='执行挂卡后是否再替换满级式神')
 
 
 class MultiAccountKekkaiActivation(ConfigBase):

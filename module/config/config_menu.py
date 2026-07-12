@@ -22,7 +22,7 @@ class ConfigMenu:
         self.menu["Soul Zones"] = ['Orochi', 'Sougenbi', 'FallenSun', 'EternitySea', 'SixRealms', 'OtherWorldTwilight']
         # 日常的任务
         self.menu["Daily Task"] = ['DailyTrifles','DailyTriflesSpecial', 'AreaBoss', 'GoldYoukai', 'ExperienceYoukai', 'Nian',
-                                   'TalismanPass', 'DemonEncounter', 'Pets', 'SoulsTidy', 'Delegation', 'WantedQuests',
+                                   'TalismanPass', 'DemonEncounter', 'Pets', 'SoulsTidy', "MultiAccountDelegation", 'Delegation', 'WantedQuests',
                                    'Tako', 'AutoCheckinBigGod']
         # 很肝的任务
         self.menu["Liver Emperor Exclusive"] = [

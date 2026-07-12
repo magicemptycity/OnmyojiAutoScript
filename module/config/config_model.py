@@ -38,6 +38,7 @@ from tasks.DailyTriflesSpecial.config import DailyTriflesSpecial
 from tasks.TalismanPass.config import TalismanPass
 from tasks.Pets.config import Pets
 from tasks.SoulsTidy.config import SoulsTidy
+from tasks.MultiAccountDelegation.config import MultiAccountDelegation
 from tasks.Delegation.config import Delegation
 from tasks.WantedQuests.config import WantedQuests
 from tasks.Tako.config import Tako
@@ -113,6 +114,7 @@ class ConfigModel(ConfigBase):
     talisman_pass: TalismanPass = Field(default_factory=TalismanPass)
     pets: Pets = Field(default_factory=Pets)
     souls_tidy: SoulsTidy = Field(default_factory=SoulsTidy)
+    multi_account_delegation: MultiAccountDelegation = Field(default_factory=MultiAccountDelegation)
     delegation: Delegation = Field(default_factory=Delegation)
     exploration: Exploration = Field(default_factory=Exploration)
     wanted_quests: WantedQuests = Field(default_factory=WantedQuests)
