@@ -161,5 +161,13 @@
   "custom_courtyard_affair_1": "龙仪星引",
   "custom_courtyard_affair": "庭院事务",
   "collect_placement_reward": "收取放置奖励",
-  "collect_exp": "收取经验"
+  "collect_exp": "收取经验",
+  "card_star": "星级",
+  "MultiAccountRepeat": "多账号循环任务",
+  "MultiAccountRepeatDay": "多账号循环任务每日",
+  "MultiAccountRepeatWeek": "多账号循环任务每周",
+  "MultiAccountKekkaiActivation": "多账号挂卡",
+  "MultiAccountKekkaiUtilize": "多账号蹭卡",
+  "DailyTriflesSpecial": "每日琐事特殊任务",
+  "MultiAccountDelegation": "多账号式神委派"
 }
