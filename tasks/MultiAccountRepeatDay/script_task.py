@@ -17,9 +17,11 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
     def run(self):
         self.fade_conf = self.config.multi_account_repeat_day
 
+        overall_failed = False
+
         for account_info in self.fade_conf.account_list:
             logger.info('start account %s-%s', account_info.character, account_info.svr)
-            
+
             if self.fade_conf.multi_account_repeat_config.skip_if_logged_today:
                 last_complete_time = account_info.last_complete_time
                 now = datetime.now()
@@ -49,16 +51,16 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     raise
                 except Exception as e:
                     logger.error('run %s failed for %s-%s: %s', task_name, account_info.character, account_info.svr, e)
-                    self.set_next_run('MultiAccountRepeatDay', success=False)
                     task_failed = True
-                    break
+                    overall_failed = True
+                    continue
 
             if not task_failed:
                 self.fade_conf.update_account_login_history(account_info)
                 self.config.model.multi_account_repeat_day = self.fade_conf
                 self.config.save()
 
-        self.set_next_run('MultiAccountRepeatDay', success=True)
+        self.set_next_run('MultiAccountRepeatDay', success=not overall_failed)
         raise TaskEnd('MultiAccountRepeatDay')
 
     def create_task_object(self, task_name: str, **kwargs):

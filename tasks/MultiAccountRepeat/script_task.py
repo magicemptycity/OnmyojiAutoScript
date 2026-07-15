@@ -18,6 +18,8 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
     def run(self):
         self.fade_conf = self.config.multi_account_repeat
 
+        overall_failed = False
+
         for account_info in self.fade_conf.account_list:
             logger.info('start account %s-%s', account_info.character, account_info.svr)
 
@@ -32,7 +34,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
             if not suc:
                 logger.warning('switch to %s-%s failed', account_info.character, account_info.svr)
                 continue
-            
+
             task_names = account_info.repeat_task_names
             if not task_names:
                 logger.warning('no repeat tasks configured for %s-%s', account_info.character, account_info.svr)
@@ -50,16 +52,16 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     raise
                 except Exception as e:
                     logger.error('run %s failed for %s-%s: %s', task_name, account_info.character, account_info.svr, e)
-                    self.set_next_run('MultiAccountRepeat', success=False)
                     task_failed = True
-                    break
+                    overall_failed = True
+                    continue
 
             if not task_failed:
                 self.fade_conf.update_account_login_history(account_info)
                 self.config.model.multi_account_repeat = self.fade_conf
                 self.config.save()
 
-        self.set_next_run('MultiAccountRepeat', success=True)
+        self.set_next_run('MultiAccountRepeat', success=not overall_failed)
         raise TaskEnd('MultiAccountRepeat')
 
     def create_task_object(self, task_name: str, **kwargs):
