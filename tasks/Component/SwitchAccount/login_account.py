@@ -47,7 +47,7 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
         # ------------------------------------------------------
 
         # 点击“切换服务器”按钮，进入选择区域界面
-        self.ui_click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN, self.I_SA_CHECK_SELECT_SVR_4)
+        self.ui_click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN, self.I_SA_CHECK_SELECT_SVR_4, interval=3)
 
         # ---------- 辅助匹配函数 ----------
         def exact_match(target, candidates):
