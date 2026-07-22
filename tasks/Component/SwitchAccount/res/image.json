@@ -21,7 +21,7 @@
     "itemName": "sa_user_center_profile",
     "imageName": "sa_user_center_profile.png",
     "roiFront": "590,60,90,55",
-    "roiBack":  "590,60,90,55",
+    "roiBack": "590,60,90,55",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "游戏内-点击头像弹出的设置界面-顶部设置字样"
@@ -83,8 +83,8 @@
   {
     "itemName": "sa_login_form_apple",
     "imageName": "sa_login_form_apple.png",
-    "roiFront": "490,350,100,100",
-    "roiBack": "490,350,100,100",
+    "roiFront": "513,359,92,93",
+    "roiBack": "443,320,200,200",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "登录界面-选择手机类型为苹果."
@@ -92,8 +92,8 @@
   {
     "itemName": "sa_login_form_android",
     "imageName": "sa_login_form_android.png",
-    "roiFront": "690,350,100,100",
-    "roiBack": "690,350,100,100",
+    "roiFront": "677,359,91,90",
+    "roiBack": "643,320,200,200",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "登录界面-选择手机类型为android"
@@ -115,5 +115,23 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "判断是否在 选择服务器 界面的标志物 角色的服务器图标已经显示时"
+  },
+  {
+    "itemName": "sa_check_select_svr_3",
+    "imageName": "res_sa_check_select_svr_3.png",
+    "roiFront": "242,143,120,40",
+    "roiBack": "210,127,187,69",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "判断是否 离开 选择服务器 出现则代表未离开 消失则代表离开了"
+  },
+  {
+    "itemName": "sa_check_select_svr_4",
+    "imageName": "res_sa_check_select_svr_4.png",
+    "roiFront": "527,38,225,61",
+    "roiBack": "491,0,317,132",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "判断是否在 选择服务器 界面的标志物 选择区域图标"
   }
 ]

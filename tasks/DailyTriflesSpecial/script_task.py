@@ -7,26 +7,26 @@ from datetime import time, datetime, timedelta
 
 from exceptiongroup import catch
 from tasks.Component.config_base import Time
-from tasks.DailyTrifles.page import page_store_gift_room, page_friends_luck
+from tasks.DailyTriflesSpecial.page import page_store_gift_room, page_friends_luck
 from winerror import NOERROR
 
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_summon, page_guild, page_mall, page_friends, page_courtyard_affairs
-from tasks.DailyTrifles.config import DailyTriflesConfig
+from tasks.DailyTriflesSpecial.config import DailyTriflesSpecialConfig
 from tasks.DailyTrifles.assets import DailyTriflesAssets
 from tasks.Component.Summon.summon import Summon
 
 from module.logger import logger
 from module.exception import TaskEnd
 from module.base.timer import Timer
-from tasks.DailyTrifles.config import SummonType
+from tasks.DailyTriflesSpecial.config import SummonType
 import re
 
 
 class ScriptTask(GameUi, Summon, DailyTriflesAssets):
 
     def run(self):
-        con = self.config.daily_trifles.trifles_config
+        con = self.config.daily_trifles_special.trifles_config
         # 每日召唤
         if con.one_summon:
             self.run_one_summon()
@@ -44,27 +44,24 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             self.run_store()
         self.config.save()
         self.plan_next_dt()
-        raise TaskEnd('DailyTrifles')
+        raise TaskEnd('DailyTriflesSpecial')
 
     def run_one_summon(self):
         logger.hr('daily summon', 2)
-        if self.config.daily_trifles.today_is_done('summon'):
-            logger.info('Today is done, skip')
-            return
         self.goto_page(page_summon)
-        config = self.config.daily_trifles.trifles_config
+        config = self.config.daily_trifles_special.trifles_config
         if config.summon_type == SummonType.default:
             self.summon_one(draw_mystery_pattern=config.draw_mystery_pattern)
             self.check_time()
         elif config.summon_type == SummonType.recall:
             self.summon_recall()
         self.back_summon_main()
-        self.config.daily_trifles.done_record.summon_dt = datetime.now()
+        self.config.daily_trifles_special.done_record.summon_dt = datetime.now()
 
     def check_time(self):
-        config = self.config.daily_trifles.trifles_config
+        config = self.config.daily_trifles_special.trifles_config
         now = datetime.now()
-        next_run = now + self.config.daily_trifles.scheduler.success_interval
+        next_run = now + self.config.daily_trifles_special.scheduler.success_interval
         # 检查是否跨月（next_run的月份与当前月份不同）
         if next_run.month != now.month:
             # 跨月重置神秘图案触发状态
@@ -160,9 +157,6 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
 
     def run_luck_msg(self):
         logger.hr('luck msg', 2)
-        if self.config.daily_trifles.today_is_done('luck_msg'):
-            logger.info('Today is done, skip')
-            return
         self.goto_page(page_friends_luck)
         logger.info('Start luck msg')
         check_timer = Timer(2)
@@ -182,25 +176,18 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
                 break
 
         self.goto_page(page_main)
-        self.config.daily_trifles.done_record.luck_msg_dt = datetime.now()
 
     def run_store(self):
-        if self.check_store_all_done():
-            logger.info('Store all done, skip')
-            return
         self.goto_page(page_mall, confirm_wait=3)
-        if self.config.daily_trifles.trifles_config.store_sign:
+        if self.config.daily_trifles_special.trifles_config.store_sign:
             self.run_store_sign()
-        if self.config.daily_trifles.trifles_config.buy_sushi_count > 0:
+        if self.config.daily_trifles_special.trifles_config.buy_sushi_count > 0:
             self.run_buy_sushi()
         self.goto_page(page_main)
 
     def run_store_sign(self):
         logger.hr('store sign', 2)
-        if self.config.daily_trifles.today_is_done('store_sign'):
-            logger.info('Today is done, skip')
-            return
-        self.config.daily_trifles.done_record.store_sign_dt = datetime.now()
+        self.config.daily_trifles_special.done_record.store_sign_dt = datetime.now()
         self.goto_page(page_store_gift_room)
         self.screenshot()
         self.appear_then_click(self.I_GIFT_RECOMMEND, interval=1)
@@ -216,9 +203,6 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
 
     def run_buy_sushi(self):
         logger.hr('store sushi', 2)
-        if self.config.daily_trifles.today_is_done('sushi'):
-            logger.info('Today is done, skip')
-            return
         # 进入Special
         while 1:
             from tasks.RichMan.assets import RichManAssets
@@ -261,7 +245,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             #     break
             if self.appear(self.I_STORE_COST_TYPE_JADE):
                 count, price = detect_buy_count(self.I_STORE_COST_TYPE_JADE)
-                if count >= self.config.daily_trifles.trifles_config.buy_sushi_count:
+                if count >= self.config.daily_trifles_special.trifles_config.buy_sushi_count:
                     break
                 self.ui_click_until_disappear(self.I_STORE_COST_TYPE_JADE, interval=2)
                 logger.info(f"Buy Sushi With {price} Jade")
@@ -270,11 +254,11 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             if self.appear(self.I_SPECIAL_SUSHI):
                 # 此处确定当前购买体力所需勾玉数量的位置,用于后续识别
                 count, price = detect_buy_count(self.I_SPECIAL_SUSHI)
-                if count >= self.config.daily_trifles.trifles_config.buy_sushi_count:
+                if count >= self.config.daily_trifles_special.trifles_config.buy_sushi_count:
                     break
                 self.ui_click(self.I_SPECIAL_SUSHI, stop=self.I_STORE_COST_TYPE_JADE, interval=2)
                 continue
-        self.config.daily_trifles.done_record.sushi_dt = datetime.now()
+        self.config.daily_trifles_special.done_record.sushi_dt = datetime.now()
 
     def run_courtyard_affairs(self):
         """庭院事务"""
@@ -298,7 +282,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
                 continue
         self.appear_then_click(self.I_ONE_COMPLETE, interval=1)
         self.goto_page(page_main)
-        self.config.daily_trifles.done_record.courtyard_affairs_dt = datetime.now()
+        self.config.daily_trifles_special.done_record.courtyard_affairs_dt = datetime.now()
 
     def run_pickup_email(self):
         """领取邮件"""
@@ -319,28 +303,21 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             if self.appear_then_click(self.I_READ_ALL_MAIL, interval=3):
                 continue
         self.goto_page(page_main)
-        self.config.daily_trifles.done_record.pickup_email_dt = datetime.now()
+        self.config.daily_trifles_special.done_record.pickup_email_dt = datetime.now()
 
     def plan_next_dt(self):
         # 定时领体力（每天 12-14、20-22 时内各有 20 体力）
         now = datetime.now()
         # 如果时间在00:00-12:00之间则设定时间为当日 12 时
         if now.time() < time(12, 0):
-            self.custom_next_run(task='DailyTrifles', custom_time=Time(12, 0), time_delta=0)
+            self.custom_next_run(task='DailyTriflesSpecial', custom_time=Time(12, 0), time_delta=0)
         # 如果时间在12:00-20:00之间则设定时间为当日 20 时
         elif time(12, 0) <= now.time() < time(20, 0):
-            self.custom_next_run(task='DailyTrifles', custom_time=Time(20, 0), time_delta=0)
+            self.custom_next_run(task='DailyTriflesSpecial', custom_time=Time(20, 0), time_delta=0)
         # 如果时间在20:00-23:59之间则设定时间为次日 12 时
         else:
-            self.custom_next_run(task='DailyTrifles', custom_time=Time(12, 0), time_delta=1)
+            self.custom_next_run(task='DailyTriflesSpecial', custom_time=Time(12, 0), time_delta=1)
 
-    def check_store_all_done(self) -> bool:
-        """判断商店任务是否都做完了, 做完了则不再进入商店"""
-        if self.config.daily_trifles.trifles_config.store_sign and not self.config.daily_trifles.today_is_done('store_sign'):
-            return False
-        if self.config.daily_trifles.trifles_config.buy_sushi_count > 0 and not self.config.daily_trifles.today_is_done('sushi'):
-            return False
-        return True
 
 
 if __name__ == '__main__':
