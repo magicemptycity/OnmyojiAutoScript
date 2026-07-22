@@ -169,13 +169,13 @@ class MuMu12Handler(EmulatorHandler):
 
         player_info = self.query_player_info(instance, state._platform)
         current_state = 'unknown'
-        if player_info:
-            if not player_info.get('is_process_started', False):
-                current_state = 'stopped'
-            else:
-                current_state = player_info.get('player_state') or (
-                    'start_finished' if player_info.get('is_android_started', False) else 'starting'
-                )
+        process_state = self._parse_process_state(player_info)
+        if process_state == 'stopped':
+            current_state = 'stopped'
+        elif process_state == 'running':
+            current_state = player_info.get('player_state') or (
+                'start_finished' if player_info.get('is_android_started', False) else 'starting'
+            )
         if current_state == 'stopped':
             if state.launch_confirm.reached():
                 logger.warning(f'[emu-start] launch not started: serial={state.serial}')
