@@ -10,8 +10,8 @@
   },
   {
     "itemName": "sa_select_svr_svr_list",
-    "roiFront": "205,540,815,25",
-    "roiBack": "205,540,815,25",
+    "roiFront": "422,131,654,495",
+    "roiBack": "422,131,654,495",
     "mode": "FULL",
     "method": "Default",
     "keyword": "",
@@ -19,8 +19,8 @@
   },
   {
     "itemName": "sa_select_svr_character_list",
-    "roiFront": "205,570,815,40",
-    "roiBack": "205,570,815,40",
+    "roiFront": "422,131,654,495",
+    "roiBack": "422,131,654,495",
     "mode": "FULL",
     "method": "Default",
     "keyword": "",
