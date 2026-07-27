@@ -225,10 +225,8 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                     #     index = [ocrResItem.ocr_text for ocrResItem in ocrRes].index(accountInfo.account)
                     ocrResBoxList = [ocrResItem.box for ocrResItem in ocrRes]
                     self.O_SA_ACCOUNT_ACCOUNT_LIST.area = [
-                        self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[0] + ocrResBoxList[index][0][
-                            0],
-                        self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[1] + ocrResBoxList[index][0][
-                            1],
+                        self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[0] + ocrResBoxList[index][0][0],
+                        self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[1] + ocrResBoxList[index][0][1],
                         ocrResBoxList[index][1][0] - ocrResBoxList[index][0][0],
                         ocrResBoxList[index][2][1] - ocrResBoxList[index][1][1]]
                     time.sleep(1)
@@ -291,16 +289,23 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
             # 处于 选择服务器界面 直接点击空白区域退出该界面 进入切换账号流程
             if self.appear(self.I_SA_CHECK_SELECT_SVR_4) or self.appear(self.I_SA_CHECK_SELECT_SVR_3):
                 self.click(self.C_SA_LOGIN_FORM_CANCEL_SVR_SELECT)
+                time.sleep(1)  # 等待界面关闭
                 continue
 
             # 处于选择 苹果安卓界面
             if self.appear(self.I_SA_LOGIN_FORM_APPLE):
                 btn = self.I_SA_LOGIN_FORM_ANDROID if accountInfo.apple_or_android else self.I_SA_LOGIN_FORM_APPLE
                 self.ui_click_until_disappear(btn)
+                time.sleep(2)  # 等待平台选择生效
                 isAccountLogon = True
                 continue
+
             # 处于选择账号界面
             if self.appear(self.I_SA_NETEASE_GAME_LOGO) and not self.appear(self.I_SA_LOGIN_FORM_APPLE):
+                # 如果账号已登录，不再处理账号选择（避免重复执行 selectAccount）
+                if isAccountLogon:
+                    time.sleep(0.5)  # 稍作等待，让界面稳定
+                    continue
                 if not accountInfo.account:
                     logger.error("param account is None,cannot switch account")
                     return False
@@ -313,8 +318,11 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                         return False
                     # selectAccount 后更新图片
                     self.screenshot()
+                    time.sleep(1)  # 等待账号选中状态稳定
                 self.ui_click(self.I_SA_ACCOUNT_LOGIN_BTN, stop=self.I_SA_LOGIN_FORM_APPLE, interval=1)
+                time.sleep(1.5)  # 等待登录弹窗出现
                 continue
+
             # 在用户中心界面
             if self.appear(self.I_SA_SWITCH_ACCOUNT_BTN):
                 # 如果当前已登录用户就是account
@@ -325,22 +333,27 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                     isAccountLogon = True
                     self.ui_click_until_disappear(self.C_SA_LOGIN_FORM_USER_CENTER_CLOSE_BTN, interval=1,
                                                   stop=self.I_SA_SWITCH_ACCOUNT_BTN)
+                    time.sleep(1)  # 等待用户中心关闭
                     continue
                 #
                 if self.ui_click(self.I_SA_SWITCH_ACCOUNT_BTN, self.I_SA_NETEASE_GAME_LOGO):
                     isAccountLogon = False
+                    time.sleep(1)  # 等待切换账号界面出现
                     continue
                 continue
+
             # 在游戏登录界面 不在用户中心 不在切换账号界面
             if not (self.appear(self.I_SA_NETEASE_GAME_LOGO) or self.appear(self.I_SA_SWITCH_ACCOUNT_BTN)):
                 # 判断是否已经账号登录
                 if not isAccountLogon:
                     self.click(self.C_SA_LOGIN_FORM_USER_CENTER)
+                    time.sleep(1)  # 等待用户中心弹出
                     continue
 
                 # 已登录 调用统一的选择方法，传入角色名和服务器名 查找对应角色和服务器区名
                 if not isCharacterSelected and self.select_target(accountInfo.character, accountInfo.svr):
                     isCharacterSelected = True
+                    time.sleep(1)  # 等待角色选中生效
                     continue
                 break
             continue

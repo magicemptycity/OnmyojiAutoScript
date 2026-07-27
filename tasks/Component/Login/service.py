@@ -29,7 +29,15 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
         orientation_timer = Timer(10)
         login_success = False
 
+        # === 新增：总超时计时器（10分钟） ===
+        total_timeout = Timer(600).start()
+
         while 1:
+            # === 新增：检查总超时 ===
+            if total_timeout.reached():
+                logger.critical('Login total timeout (10 min) reached, giving up')
+                raise GameStuckError('Login timeout')
+
             if not login_success and orientation_timer.reached():
                 self.device.get_orientation()
                 orientation_timer.reset()
