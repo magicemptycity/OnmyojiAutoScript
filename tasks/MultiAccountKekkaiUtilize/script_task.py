@@ -1,6 +1,6 @@
 import copy
 import importlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from pathlib import Path
 
 from module.exception import RequestHumanTakeover, TaskEnd
@@ -45,6 +45,22 @@ class ScriptTask(GameUi, SwitchAccountAssets):
                 continue
 
             next_utilize_time = account_info.next_utilize_time
+            # 先判断是否处于禁止蹭卡时间段内，如果是，就直接跳过当前执行并重新计划
+            if self._is_in_forbidden_period(account_info, next_utilize_time):
+                next_forbidden_time = self._get_end_forbidden_time(next_utilize_time, account_info)
+                logger.info(
+                    '%s-%s utilize time %s is inside forbidden period, reschedule to %s',
+                    account_info.character,
+                    account_info.svr,
+                    next_utilize_time,
+                    next_forbidden_time,
+                )
+                # 将当前账号的 next_utilize_time 改为禁止时段结束后 10 分钟，避免本次轮次继续执行
+                self.fade_conf.update_account_next_utilize_time(account_info, next_forbidden_time)
+                self.config.model.multi_account_kekkai_utilize = self.fade_conf
+                self.config.save()
+                continue
+
             if next_utilize_time and next_utilize_time > now:
                 logger.info('%s-%s next utilize is %s, skip', account_info.character, account_info.svr, next_utilize_time)
                 continue
@@ -217,6 +233,70 @@ class ScriptTask(GameUi, SwitchAccountAssets):
         if not next_times:
             return datetime.now() + timedelta(hours=1)
         return min(next_times)
+
+    def _get_active_forbid_window(self, account_info):
+        """
+        获取当前账号应当使用的禁止蹭卡时间段。
+
+        规则：如果公共禁止时间段启用，则优先使用公共时间段；
+        否则如果当前账号启用了账号级禁止时间段，则使用账号自己的时间段；
+        否则返回 None，表示当前账号没有禁止时间段。
+        """
+        shared_config = getattr(self.fade_conf, 'multi_account_kekkai_utilize_config', None)
+        if shared_config and shared_config.public_forbid_time_enable:
+            return shared_config.public_forbid_time_start, shared_config.public_forbid_time_end
+
+        if account_info.utilize_forbidden_time_enable:
+            return account_info.utilize_forbidden_time_start, account_info.utilize_forbidden_time_end
+
+        return None, None
+
+    def _is_in_forbidden_period(self, account_info, next_utilize_time):
+        """
+        判断给定时间是否落在当前账号的禁止蹭卡时段内。
+
+        采用“左闭右开”区间判断：start <= time < end。
+        对于跨天区间（例如 21:00~02:00），只要当前时间 >= start 或当前时间 < end 即视为在区间内。
+        """
+        if not next_utilize_time:
+            return False
+
+        start, end = self._get_active_forbid_window(account_info)
+        if start is None or end is None:
+            return False
+        if start == end:
+            return False
+
+        current_time = next_utilize_time.time()
+        if start < end:
+            return start <= current_time < end
+        return current_time >= start or current_time < end
+
+    def _get_end_forbidden_time(self, next_utilize_time, account_info):
+        """
+        计算禁止时间段结束后的下次可执行时间。
+
+        逻辑：当当前计划蹭卡时间位于禁止时段内时，
+        取本次禁止时段的结束时间，并在此基础上加 10 分钟。
+        对于跨天禁止时段，结束时间可能落在次日。
+        """
+        start, end = self._get_active_forbid_window(account_info)
+        if start is None or end is None:
+            return next_utilize_time
+
+        if start < end:
+            end_dt = datetime.combine(next_utilize_time.date(), end)
+            if end_dt <= next_utilize_time:
+                # 当当前时间已经超过了当天结束时间，说明应当推到次日
+                end_dt += timedelta(days=1)
+        else:
+            # 跨天区间，例如 21:00~02:00
+            if next_utilize_time.time() >= start:
+                end_dt = datetime.combine(next_utilize_time.date() + timedelta(days=1), end)
+            else:
+                end_dt = datetime.combine(next_utilize_time.date(), end)
+
+        return end_dt + timedelta(minutes=10)
 
     def _get_kekkai_utilize_next_run_time(self):
         """

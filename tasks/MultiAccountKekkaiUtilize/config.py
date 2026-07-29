@@ -1,11 +1,11 @@
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any, Dict
 
 from pydantic import Field, model_serializer, model_validator
 
 from deploy.logger import logger
 from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
-from tasks.Component.config_base import ConfigBase, DateTime
+from tasks.Component.config_base import ConfigBase, DateTime, Time
 from tasks.Component.config_scheduler import Scheduler
 from tasks.KekkaiUtilize.config import UtilizeRule, SelectFriendList
 from tasks.Utils.config_enum import ShikigamiClass
@@ -31,6 +31,9 @@ class MultiAccountKekkaiUtilizeAccount(AccountInfo):
     shikigami_class: ShikigamiClass = Field(default=ShikigamiClass.N, description='shikigami_class_help')
     shikigami_order: int = Field(default=4, description='shikigami_order_help')
     utilize_harvest: bool = Field(default=True, description='是否领取寄养的收获')
+    utilize_forbidden_time_enable: bool = Field(default=False, description='是否启用该账号的禁止蹭卡时间段')
+    utilize_forbidden_time_start: Time = Field(default=time.fromisoformat('00:00:00'), description='账号禁止蹭卡时间段开始时间')
+    utilize_forbidden_time_end: Time = Field(default=time.fromisoformat('00:00:00'), description='账号禁止蹭卡时间段结束时间')
 
 
 class MultiAccountKekkaiUtilizeConfig(ConfigBase, extra='allow'):
@@ -47,6 +50,9 @@ class MultiAccountKekkaiUtilizeConfig(ConfigBase, extra='allow'):
     guild_ap_enable: bool = Field(default=True, description='guild_ap_enable_help')
     harvest_guild_max_times: int = Field(default=3, description='收取寮资金或体力失败的最大尝试次数')
     utilize_enable: bool = Field(default=True, description='是否蹭卡，小号可以选择不蹭卡')
+    public_forbid_time_enable: bool = Field(default=False, description='是否启用公共禁止蹭卡时间段')
+    public_forbid_time_start: Time = Field(default=time.fromisoformat('00:00:00'), description='公共禁止蹭卡时间段开始时间')
+    public_forbid_time_end: Time = Field(default=time.fromisoformat('00:00:00'), description='公共禁止蹭卡时间段结束时间')
 
 
 class MultiAccountKekkaiUtilize(ConfigBase, extra='allow'):
