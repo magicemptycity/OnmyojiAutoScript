@@ -37,6 +37,7 @@ class ConfigMenu:
             "MultiAccountRepeat",
             "MultiAccountRepeatDay",
             "MultiAccountRepeatWeek",
+            "MultiAccountRepeatMonth",
         ]
         # 阴阳寮
         self.menu["Guild"] = ['MultiAccountKekkaiUtilize', 'KekkaiUtilize', 'MultiAccountKekkaiActivation', 'KekkaiActivation', 'RealmRaid', 'RyouToppa', 'Dokan', 'CollectiveMissions',

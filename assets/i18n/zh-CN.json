@@ -176,8 +176,10 @@
   "MultiAccountRepeat": "多账号循环任务",
   "MultiAccountRepeatDay": "多账号循环任务每日",
   "MultiAccountRepeatWeek": "多账号循环任务每周",
+  "MultiAccountRepeatMonth": "多账号循环任务每月",
   "MultiAccountKekkaiActivation": "多账号挂卡",
   "MultiAccountKekkaiUtilize": "多账号蹭卡",
   "DailyTriflesSpecial": "每日琐事特殊任务",
-  "MultiAccountDelegation": "多账号式神委派"
+  "MultiAccountDelegation": "多账号式神委派",
+  "SameHeartTeam": "同心队"
 }
