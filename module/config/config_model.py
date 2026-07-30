@@ -35,6 +35,7 @@ from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivati
 from tasks.DemonEncounter.config import DemonEncounter
 from tasks.DailyTrifles.config import DailyTrifles
 from tasks.DailyTriflesSpecial.config import DailyTriflesSpecial
+from tasks.SameHeartTeam.config import SameHeartTeam
 from tasks.TalismanPass.config import TalismanPass
 from tasks.Pets.config import Pets
 from tasks.SoulsTidy.config import SoulsTidy
@@ -111,6 +112,7 @@ class ConfigModel(ConfigBase):
     demon_encounter: DemonEncounter = Field(default_factory=DemonEncounter)
     daily_trifles: DailyTrifles = Field(default_factory=DailyTrifles)
     daily_trifles_special: DailyTriflesSpecial = Field(default_factory=DailyTriflesSpecial)
+    same_heart_team: SameHeartTeam = Field(default_factory=SameHeartTeam)
     talisman_pass: TalismanPass = Field(default_factory=TalismanPass)
     pets: Pets = Field(default_factory=Pets)
     souls_tidy: SoulsTidy = Field(default_factory=SoulsTidy)
@@ -310,7 +312,58 @@ class ConfigModel(ConfigBase):
         except (AttributeError, KeyError):
             return False
 
-    # ----------------------------------- fastapi -----------------------------------
+    @staticmethod
+    def _resolve_schema(schema: dict, definitions: dict) -> dict:
+        if '$ref' not in schema:
+            return schema
+        ref_name = re.search(r"/([^/]+)$", schema['$ref']).group(1)
+        return definitions.get(ref_name, schema)
+
+    @classmethod
+    def _build_argument_groups(cls, group_name: str, schema: dict, value: Any, definitions: dict) -> dict[str, list[dict]]:
+        groups: dict[str, list[dict]] = {}
+        items: list[dict] = []
+        if not isinstance(schema, dict):
+            return groups
+
+        for key, property_schema in schema.get('properties', {}).items():
+            raw_value = None
+            if isinstance(value, dict):
+                raw_value = value.get(key, property_schema.get('default'))
+            elif isinstance(value, list):
+                raw_value = value[0] if value else property_schema.get('default')
+            else:
+                raw_value = property_schema.get('default')
+
+            if raw_value == 0xABCDEF:
+                continue
+
+            resolved_schema = cls._resolve_schema(property_schema, definitions)
+            if resolved_schema.get('type') == 'object':
+                child_group_name = f'{group_name}.{key}' if group_name else key
+                child_value = raw_value if isinstance(raw_value, dict) else {}
+                child_groups = cls._build_argument_groups(child_group_name, resolved_schema, child_value, definitions)
+                groups.update(child_groups)
+                continue
+
+            item = {}
+            item['name'] = key
+            item['title'] = property_schema['title'] if 'title' in property_schema else inflection.underscore(key)
+            if 'description' in property_schema:
+                item['description'] = property_schema['description']
+            item['default'] = property_schema.get('default')
+            item['value'] = raw_value
+            item['type'] = property_schema['type'] if 'type' in property_schema else 'enum'
+            if '$ref' in property_schema:
+                enum_key = re.search(r"/([^/]+)$", property_schema['$ref']).group(1)
+                if enum_key in definitions:
+                    item['enumEnum'] = definitions[enum_key]['enum']
+            items.append(item)
+
+        if items:
+            groups[group_name] = items
+        return groups
+
     def script_task(self, task: str) -> dict:
         """
 
@@ -323,61 +376,30 @@ class ConfigModel(ConfigBase):
             logger.warning(f'{task} is no inexistence')
             return {}
 
-        def extract_groups(sch):
-            # 从schema 中提取未解析的group的数据
-            # properties = properties_groups(sch)
-            results = {}
-            properties = {}
-            for key, value in sch["properties"].items():
-                if 'items' in value:
-                    properties[key] = re.search(r"/([^/]+)$", value['items']['$ref']).group(1)
-                else:
-                    properties[key] = re.search(r"/([^/]+)$", value['$ref']).group(1)
-
-            for key, value in properties.items():
-                results[key] = sch["$defs"][value]
-            return results
-
-        def merge_value(groups, jsons, definitions) -> list[dict]:
-            # 将 groups的参数，同导出的json一起合并, 用于前端显示
-            result = []
-            for key, value in groups["properties"].items():
-                # deal with exclude 
-                if key in jsons and jsons[key] == 0xABCDEF:
-                    continue
-
-                item = {}
-                item["name"] = key
-                item["title"] = value["title"] if "title" in value else inflection.underscore(key)
-                if "description" in value:
-                    item["description"] = value["description"]
-                item["default"] = value["default"]
-                item["value"] = jsons[key] if key in jsons else value["default"]
-                item["type"] = value["type"] if "type" in value else "enum"
-                if '$ref' in value:  # list
-                    enum_key = re.search(r"/([^/]+)$", value['$ref']).group(1)
-                    item["enumEnum"] = definitions[enum_key]["enum"]
-                # if 'allOf' in value:
-                #     enum_key = re.search(r"/([^/]+)$", value['allOf'][0]['$ref']).group(1)
-                #     item["enumEnum"] = definitions[enum_key]["enum"]
-                result.append(item)
-            return result
-
         schema = task.model_json_schema()
-        groups = extract_groups(schema)
-        groups_value = groups.copy()
+        payload = task.model_dump(context={'hide': True})
+        return self._build_argument_groups('', schema, payload, schema['$defs'])
 
-        result: dict[str, list] = {}
-        for key, value in task.model_dump(context={'hide': True}).items():
-            if value == 0xABCDEF:
+    @staticmethod
+    def _resolve_group_object(task_object: Any, group: str) -> Any:
+        if task_object is None:
+            return None
+        current_obj = task_object
+        for part in convert_to_underscore(group).split('.'):
+            if current_obj is None:
+                return None
+            if isinstance(current_obj, dict):
+                current_obj = current_obj.get(part)
                 continue
-            if key not in groups:
-                for group_name in groups.keys():
-                    if group_name in key:
-                        groups_value[key] = groups[group_name]
-            result[key] = merge_value(groups_value[key], value, schema["$defs"])
-
-        return result
+            if isinstance(current_obj, list):
+                matches = re.findall(r'\d+', part)
+                index = int(matches[-1]) - 1 if matches else None
+                if index is None or index < 0 or index >= len(current_obj):
+                    return None
+                current_obj = current_obj[index]
+                continue
+            current_obj = getattr(current_obj, part, None)
+        return current_obj
 
     def script_set_arg(self, task: str, group: str, argument: str, value) -> bool:
         # 验证参数
@@ -408,15 +430,7 @@ class ConfigModel(ConfigBase):
             value = False
 
         task_object = getattr(self, task, None)
-        group_object = getattr(task_object, group, None)
-        if group_object is None:  # deal list
-            matchs = re.findall(r'\d+', group)
-            index = int(matchs[-1]) - 1 if matchs else None
-            task_object_list = list(dict(task_object))
-            for k, v in dict(task_object).items():
-                if k not in group:
-                    continue
-                group_object = v[index] if group_object is None else None
+        group_object = self._resolve_group_object(task_object, group)
         argument_object = getattr(group_object, argument, None)
 
         if argument_object is None:
