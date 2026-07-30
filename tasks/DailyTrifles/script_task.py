@@ -16,8 +16,6 @@ from tasks.SameHeartTeam.assets import SameHeartTeamAssets
 from tasks.DailyTrifles.config import DailyTriflesConfig
 from tasks.DailyTrifles.assets import DailyTriflesAssets
 from tasks.Component.Summon.summon import Summon
-from tasks.GlobalGame.assets import GlobalGameAssets
-
 from module.logger import logger
 from module.exception import TaskEnd
 from module.base.timer import Timer
@@ -89,9 +87,8 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             return
 
         self.goto_page(page_main)
-        if not self._enter_team_page():
-            logger.warning('未进入组队页面，预存功能无法执行')
-            return
+
+        self.goto_page(page_team, confirm_wait=2)
 
         if not self._enter_same_heart_team_page():
             logger.warning('未进入同心队页面，预存功能无法执行')
@@ -190,17 +187,6 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
     def run_guild_wish(self):
         pass
 
-    def _enter_team_page(self) -> bool:
-        # 进入组队页面。如果已经在组队页面则直接返回
-        if self.appear(self.I_CHECK_TEAM):
-            return True
-        for _ in range(5):
-            if self.appear_then_click(self.I_MAIN_GOTO_TEAM, interval=1):
-                self.screenshot()
-                if self.appear(self.I_CHECK_TEAM):
-                    return True
-            sleep(0.5)
-        return False
 
     def _enter_same_heart_team_page(self) -> bool:
         # 从组队页点击进入同心队页，并等待同心队页面识别成功
@@ -220,7 +206,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
 
     def _open_pre_deposit_page(self) -> bool:
         # 点击预存入口按钮，进入预存页面后通过一键预存图标确认页面已切换
-        if self.appear_then_click(self.I_I_PRE_DEPOSIT_NEED, interval=1) or self.appear_then_click(self.I_I_PRE_DEPOSIT, interval=1):
+        if self.appear_then_click(self.I_I_PRE_DEPOSIT, interval=1) or self.appear_then_click(self.I_I_PRE_DEPOSIT_NEED, interval=1):
             for _ in range(10):
                 self.screenshot()
                 if self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
@@ -236,10 +222,22 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
 
         for _ in range(10):
             self.screenshot()
+
             if self.appear(self.I_UI_CONFIRM):
+                sleep(1)
                 self.appear_then_click(self.I_UI_CONFIRM, interval=1)
-                return True
-            sleep(0.5)
+                sleep(1)
+                self.screenshot()
+                if not self.appear(self.I_UI_CONFIRM):
+                    logger.info('一键预存成功')
+                    return True
+                else:
+                    logger.info('一键预存失败，尝试再次点击确认')
+                    self.appear_then_click(self.I_UI_CONFIRM, interval=1)
+                    logger.info('一键预存成功')
+                    return True
+
+            sleep(1)
         return False
 
     def _return_to_courtyard(self) -> None:

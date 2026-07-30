@@ -13,7 +13,6 @@ from tasks.Component.GeneralRoom.general_room import GeneralRoom
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_shikigami_records, page_awake_zones, page_soul_zones
-from tasks.GlobalGame.assets import GlobalGameAssets
 from tasks.SameHeartTeam.assets import SameHeartTeamAssets
 from tasks.SameHeartTeam.config import SameHeartTeamMode, SameHeartTeamTeamNum
 from tasks.Orochi.assets import OrochiAssets
@@ -23,7 +22,7 @@ from tasks.EvoZone.config import KirinType
 from tasks.Orochi.page import page_orochi
 
 
-class ScriptTask(GameUi, GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchSoul,
+class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchSoul,
                  SameHeartTeamAssets, OrochiAssets, EvoZoneAssets):
     """
     同心队独立任务（仅队长模式，无邀请）。
@@ -187,7 +186,6 @@ class ScriptTask(GameUi, GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom,
                 config=active_config.general_battle_config,
                 exit_matcher=lambda: (self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW))
             )
-            #self.current_count += 1
 
         # 15. 退出房间和队伍
         if self.exit_room():
@@ -208,8 +206,6 @@ class ScriptTask(GameUi, GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom,
             self.close_buff()
 
         # 18. 记录完成状态
-        self.config.same_heart_team.done_record.same_heart_team_dt = datetime.now()
-        self.config.save()
         if success:
             self.set_next_run('SameHeartTeam', finish=True, success=True)
         else:
@@ -343,9 +339,9 @@ class ScriptTask(GameUi, GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom,
                 for _ in range(10):
                     self.screenshot()
                     # 点击确认
-                    if self.appear(self.I_GI_SURE):
+                    if self.appear(self.I_UI_CONFIRM):
                         logger.info('确认解散')
-                        self.appear_then_click(self.I_GI_SURE, interval=1)
+                        self.appear_then_click(self.I_UI_CONFIRM, interval=1)
                         sleep(0.5)
                         break
                     sleep(0.5)
