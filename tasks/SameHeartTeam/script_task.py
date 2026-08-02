@@ -256,7 +256,9 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         return False
 
     def _set_team_member_count(self, team_num: SameHeartTeamTeamNum):
-        target = int(team_num)
+        raw = team_num.value
+        digits = ''.join(filter(str.isdigit, raw))
+        target = int(digits) if digits else 1
         logger.info(f'设置队员数量为 {target}')
         for _ in range(10):
             self.screenshot()
@@ -334,11 +336,11 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         logger.info('开始处理解散同心队')
         for attempt in range(3):
             self.screenshot()
+            sleep(1)
             if self.appear(self.I_I_SAME_HEART_TEAM_CLOSE):
                 logger.info('发现关闭集结按钮，点击关闭')
-                self.appear_then_click(self.I_I_SAME_HEART_TEAM_CLOSE, interval=1)
                 sleep(1)
-
+                self.appear_then_click(self.I_I_SAME_HEART_TEAM_CLOSE, interval=1)
                 # 等待确认弹窗并点击确认
                 for _ in range(10):
                     self.screenshot()
@@ -350,8 +352,6 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
                         break
                     sleep(0.5)
 
-                # 返回庭院
-                #self.goto_page(page_main)
                 self.click(self.I_UI_BACK_YELLOW)
                 return
             else:

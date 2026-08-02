@@ -36,6 +36,8 @@ from tasks.DemonEncounter.config import DemonEncounter
 from tasks.DailyTrifles.config import DailyTrifles
 from tasks.DailyTriflesSpecial.config import DailyTriflesSpecial
 from tasks.SameHeartTeam.config import SameHeartTeam
+from tasks.SameHeartTeamOrochi.config import SameHeartTeamOrochi
+from tasks.SameHeartTeamAwaken.config import SameHeartTeamAwaken
 from tasks.TalismanPass.config import TalismanPass
 from tasks.Pets.config import Pets
 from tasks.SoulsTidy.config import SoulsTidy
@@ -114,6 +116,8 @@ class ConfigModel(ConfigBase):
     daily_trifles: DailyTrifles = Field(default_factory=DailyTrifles)
     daily_trifles_special: DailyTriflesSpecial = Field(default_factory=DailyTriflesSpecial)
     same_heart_team: SameHeartTeam = Field(default_factory=SameHeartTeam)
+    same_heart_team_orochi: SameHeartTeamOrochi = Field(default_factory=SameHeartTeamOrochi)
+    same_heart_team_awaken: SameHeartTeamAwaken = Field(default_factory=SameHeartTeamAwaken)
     talisman_pass: TalismanPass = Field(default_factory=TalismanPass)
     pets: Pets = Field(default_factory=Pets)
     souls_tidy: SoulsTidy = Field(default_factory=SoulsTidy)

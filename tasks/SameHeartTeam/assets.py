@@ -38,6 +38,6 @@ class SameHeartTeamAssets:
 
 	# Ocr Rule Assets
 	# 同心队页面左上角同心队 
-	O_O_SAMEHEARTTEAM = RuleOcr(roi=(0,0,240,70), area=(0,0,240,70), mode="Full", method="Default", keyword="", name="o_sameheartteam")
+	O_O_SAMEHEARTTEAM = RuleOcr(roi=(0,0,240,70), area=(0,0,240,70), mode="Full", method="Default", keyword="同心队", name="o_sameheartteam")
 
 
