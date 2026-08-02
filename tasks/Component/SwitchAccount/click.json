@@ -31,14 +31,14 @@
   },
   {
     "itemName": "sa_login_form_character_area",
-    "roiFront": "413,124,660,509",
-    "roiBack": "413,124,660,509",
+    "roiFront": "260,450,760,160",
+    "roiBack": "260,450,760,160",
     "description": "登录界面-选择服务器-底部账号信息展开后的区域"
   },
   {
     "itemName": "sa_login_form_cancel_svr_select",
-    "roiFront": "1063,90,45,45",
-    "roiBack": "1063,90,45,45",
+    "roiFront": "50,70,60,360",
+    "roiBack": "50,70,60,360",
     "description": "登录界面-选择服务器-点击关闭选择服务器界面的空白区域"
   },
   {
@@ -61,8 +61,8 @@
   },
   {
     "itemName": "sa_select_svr_character_list",
-    "roiFront": "422,131,654,495",
-    "roiBack": "422,131,654,495",
+    "roiFront": "205,570,815,40",
+    "roiBack": "205,570,815,40",
     "description": "选择服务器界面 底部角色名 列表---与ocr.json中同名对象区域一致"
   }
 ]

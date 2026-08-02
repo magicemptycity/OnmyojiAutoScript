@@ -82,56 +82,38 @@
   },
   {
     "itemName": "sa_login_form_apple",
-    "imageName": "sa_login_form_apple.png",
-    "roiFront": "513,359,92,93",
-    "roiBack": "443,320,200,200",
+    "imageName": "res_sa_login_form_apple.png",
+    "roiFront": "508,354,100,100",
+    "roiBack": "508,355,100,100",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "登录界面-选择手机类型为苹果."
   },
   {
     "itemName": "sa_login_form_android",
-    "imageName": "sa_login_form_android.png",
-    "roiFront": "677,359,91,90",
-    "roiBack": "643,320,200,200",
+    "imageName": "res_sa_login_form_android.png",
+    "roiFront": "671,353,100,100",
+    "roiBack": "670,352,100,100",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "登录界面-选择手机类型为android"
   },
   {
     "itemName": "sa_check_select_svr_1",
-    "imageName": "sa_check_select_svr.png",
-    "roiFront": "240,530,120,40",
-    "roiBack": "240,530,120,40",
+    "imageName": "res_sa_check_select_svr_1.png",
+    "roiFront": "213,133,181,60",
+    "roiBack": "210,128,185,68",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "判断是否在 选择服务器 界面的标志物 角色的服务器图标还未显示时"
   },
   {
     "itemName": "sa_check_select_svr_2",
-    "imageName": "sa_check_select_svr.png",
-    "roiFront": "240,410,120,40",
-    "roiBack": "240,410,120,40",
+    "imageName": "res_sa_check_select_svr_2.png",
+    "roiFront": "209,131,184,64",
+    "roiBack": "207,127,187,70",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "判断是否在 选择服务器 界面的标志物 角色的服务器图标已经显示时"
-  },
-  {
-    "itemName": "sa_check_select_svr_3",
-    "imageName": "res_sa_check_select_svr_3.png",
-    "roiFront": "242,143,120,40",
-    "roiBack": "210,127,187,69",
-    "method": "Template matching",
-    "threshold": 0.8,
-    "description": "判断是否 离开 选择服务器 出现则代表未离开 消失则代表离开了"
-  },
-  {
-    "itemName": "sa_check_select_svr_4",
-    "imageName": "res_sa_check_select_svr_4.png",
-    "roiFront": "527,38,225,61",
-    "roiBack": "491,0,317,132",
-    "method": "Template matching",
-    "threshold": 0.8,
-    "description": "判断是否在 选择服务器 界面的标志物 选择区域图标"
   }
 ]
