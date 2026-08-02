@@ -283,11 +283,11 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         while 1:
             from tasks.RichMan.assets import RichManAssets
             self.screenshot()
-            if self.appear(RichManAssets.I_SIDE_CHECK_SPECIAL):
+            if self.appear(RichManAssets.I_SIDE_CHECK_SPECIAL) and self.appear(self.I_SPECIAL_SUSHI):
                 break
             if self.appear_then_click(RichManAssets.I_MALL_SUNDRY, interval=1):
                 continue
-            if self.appear_then_click(RichManAssets.I_SIDE_SURE_SPECIAL, interval=1):
+            if self.appear_then_click(RichManAssets.I_SIDE_CHECK_SPECIAL, interval=1):
                 continue
 
         def detect_buy_count(base_element) -> (int, int):
@@ -324,6 +324,10 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                 if count >= self.config.daily_trifles_special.trifles_config.buy_sushi_count:
                     break
                 self.ui_click_until_disappear(self.I_STORE_COST_TYPE_JADE, interval=2)
+                if not self.ui_reward_appear_click(screenshot=True):
+                    logger.info('没有检测到购买成功弹窗，尝试再次点击购买')
+                    sleep(1)
+                    self.ui_reward_appear_click(screenshot=True)
                 logger.info(f"Buy Sushi With {price} Jade")
                 continue
 
@@ -331,6 +335,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                 # 此处确定当前购买体力所需勾玉数量的位置,用于后续识别
                 count, price = detect_buy_count(self.I_SPECIAL_SUSHI)
                 if count >= self.config.daily_trifles_special.trifles_config.buy_sushi_count:
+                    logger.info(f"已经购买 {count} 次, 退出购买")
                     break
                 self.ui_click(self.I_SPECIAL_SUSHI, stop=self.I_STORE_COST_TYPE_JADE, interval=2)
                 continue

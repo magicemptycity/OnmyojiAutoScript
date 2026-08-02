@@ -44,7 +44,12 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
             for task_name in task_names:
                 logger.info('run repeated task %s for %s-%s', task_name, account_info.character, account_info.svr)
                 try:
-                    task_obj = self.create_task_object(task_name, config=self.config, device=self.device)
+                    task_obj = self.create_task_object(
+                        task_name,
+                        config=self.config,
+                        device=self.device,
+                        current_account_info=account_info,
+                    )
                     task_obj.run()
                 except TaskEnd:
                     logger.warning('%s-%s task ended for %s', account_info.character, account_info.svr, task_name)
@@ -65,9 +70,13 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
         raise TaskEnd('MultiAccountRepeat')
 
     def create_task_object(self, task_name: str, **kwargs):
+        current_account_info = kwargs.pop('current_account_info', None)
         module_path = str(Path.cwd() / 'tasks' / task_name / 'script_task.py')
         spec = importlib.util.spec_from_file_location('script_task', module_path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        return module.ScriptTask(**kwargs)
+        task_obj = module.ScriptTask(**kwargs)
+        if current_account_info is not None:
+            task_obj.current_account_info = current_account_info
+        return task_obj
 

@@ -30,9 +30,21 @@ class ScriptTask(GameUi, MultiAccountDelegationAssets, SwitchAccountAssets):
         self.fade_conf = self.config.multi_account_delegation
         now = datetime.now()
 
+        current_account_info = getattr(self, 'current_account_info', None)
+        matching_accounts = None
+        if current_account_info is not None:
+            matching_accounts = [
+                account_info
+                for account_info in self.fade_conf.account_list
+                if self._account_matches_current(account_info, current_account_info)
+            ]
+
         pending_accounts = []
         for account_info in self.fade_conf.account_list:
             if not account_info.is_valid():
+                continue
+            if matching_accounts is not None and matching_accounts and account_info not in matching_accounts:
+                logger.info('skip account %s-%s because it does not match current account %s-%s', account_info.character, account_info.svr, getattr(current_account_info, 'character', ''), getattr(current_account_info, 'svr', ''))
                 continue
 
             next_delegation_time = account_info.next_delegation_time
@@ -77,6 +89,27 @@ class ScriptTask(GameUi, MultiAccountDelegationAssets, SwitchAccountAssets):
         next_run = self._get_next_run_time()
         self.set_next_run('MultiAccountDelegation', target=next_run)
         raise TaskEnd('MultiAccountDelegation')
+
+    def _account_matches_current(self, account_info, current_account_info) -> bool:
+        if current_account_info is None:
+            return True
+
+        current_character = getattr(current_account_info, 'character', '') or ''
+        current_svr = getattr(current_account_info, 'svr', '') or ''
+        current_account = getattr(current_account_info, 'account', '') or ''
+
+        if current_account:
+            account_value = getattr(account_info, 'account', '') or ''
+            if account_value and account_value == current_account:
+                return True
+
+        if current_character and current_svr:
+            return account_info.character == current_character and account_info.svr == current_svr
+
+        if current_character:
+            return account_info.character == current_character
+
+        return False
 
     def _run_delegation_for_account(self, account_info):
         """

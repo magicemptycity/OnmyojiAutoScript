@@ -266,6 +266,10 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
             current_unselected = len(unselected_matches)
             logger.info(f'当前选中数量: {current_selected}, 未选中数量: {current_unselected}')
 
+            if current_selected <= target and current_unselected == 0:
+                logger.info('当前选中数量小于等于目标人数，且没有未选中图标可点击，视为满足要求')
+                return True
+
             if current_selected == target:
                 logger.info('队员数量已符合要求')
                 return True
