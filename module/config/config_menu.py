@@ -21,8 +21,8 @@ class ConfigMenu:
         # 刷御魂
         self.menu["Soul Zones"] = ['Orochi', 'Sougenbi', 'FallenSun', 'EternitySea', 'SixRealms', 'OtherWorldTwilight']
         # 日常的任务
-        self.menu["Daily Task"] = ['DailyTrifles', 'AreaBoss', 'GoldYoukai', 'ExperienceYoukai', 'Nian',
-                                   'TalismanPass', 'DemonEncounter', 'Pets', 'SoulsTidy', 'Delegation', 'WantedQuests',
+        self.menu["Daily Task"] = ['DailyTrifles','DailyTriflesSpecial', 'SameHeartTeam', 'SameHeartTeamOrochi', 'SameHeartTeamAwaken', 'AreaBoss', 'GoldYoukai', 'ExperienceYoukai', 'Nian',
+                                   'TalismanPass', 'DemonEncounter', 'Pets', 'SoulsTidy', "MultiAccountDelegation", 'Delegation', 'WantedQuests',
                                    'Tako', 'AutoCheckinBigGod']
         # 很肝的任务
         self.menu["Liver Emperor Exclusive"] = [
@@ -33,10 +33,14 @@ class ConfigMenu:
             "Hyakkiyakou",
             "HeroTest",
             "FindJade",
-            "MemoryScrolls"
+            "MemoryScrolls",
+            "MultiAccountRepeat",
+            "MultiAccountRepeatDay",
+            "MultiAccountRepeatWeek",
+            "MultiAccountRepeatMonth",
         ]
         # 阴阳寮
-        self.menu["Guild"] = ['KekkaiUtilize', 'KekkaiActivation', 'RealmRaid', 'RyouToppa', 'Dokan', 'CollectiveMissions',
+        self.menu["Guild"] = ['MultiAccountKekkaiUtilize', 'KekkaiUtilize', 'MultiAccountKekkaiActivation', 'KekkaiActivation', 'RealmRaid', 'RyouToppa', 'Dokan', 'CollectiveMissions',
                               'Hunt' , 'AbyssShadows', 'GuildBanquet', 'DemonRetreat', 'GuildActivityMonitor']
         # 每周任务
         self.menu["Weekly Task"] = ['TrueOrochi', 'RichMan', 'Secret', 'WeeklyTrifles', 'MysteryShop', 'Duel']

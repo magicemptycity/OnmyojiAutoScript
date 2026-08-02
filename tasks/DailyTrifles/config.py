@@ -22,6 +22,7 @@ class DoneRecord(ConfigBase):
     luck_msg_dt: DateTime = Field(default=DateTime.fromisoformat("2023-01-01 00:00:00"))
     store_sign_dt: DateTime = Field(default=DateTime.fromisoformat("2023-01-01 00:00:00"))
     sushi_dt: DateTime = Field(default=DateTime.fromisoformat("2023-01-01 00:00:00"))
+    one_click_pre_deposit_dt: DateTime = Field(default=DateTime.fromisoformat("2023-01-01 00:00:00"))
     guild_donate_finish: bool = Field(default=False)
 
 
@@ -46,11 +47,15 @@ class DailyGuildDonate(ConfigBase):
         return [line.strip() for line in self.friend_list.split('\n') if line.strip() != '']
 
 
+
 class DailyTriflesConfig(BaseModel):
     # 庭院事务
     courtyard_affairs: bool = Field(default=True)
     # 收取邮件
     pickup_email: bool = Field(default=True)
+    # 一键预存
+    one_click_pre_deposit: bool = Field(default=False, description='同心队一键预存')
+    # 每日召唤
     one_summon: bool = Field(title='One Summon', default=False)
     # 召唤类型
     summon_type: SummonType = Field(default=SummonType.default, description='召唤类型')

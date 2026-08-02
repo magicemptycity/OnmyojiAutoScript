@@ -127,10 +127,19 @@ class DailyTriflesAssets:
 
 
 	# Image Rule Assets
+	# 预存（带感叹号） 
+	I_I_PRE_DEPOSIT_NEED = RuleImage(roi_front=(923,253,63,60), roi_back=(900,196,110,482), threshold=0.8, method="Template matching", file="./tasks/DailyTrifles/sameheartteam/sameheartteam_i_pre_deposit_need.png")
+	# 预存 
+	I_I_PRE_DEPOSIT = RuleImage(roi_front=(925,263,49,49), roi_back=(900,196,110,482), threshold=0.8, method="Template matching", file="./tasks/DailyTrifles/sameheartteam/sameheartteam_i_pre_deposit.png")
+	# 一键预存 
+	I_I_ONE_CLICK_PRE_DEPOSIT = RuleImage(roi_front=(1190,531,42,74), roi_back=(1124,451,156,269), threshold=0.8, method="Template matching", file="./tasks/DailyTrifles/sameheartteam/sameheartteam_i_one_click_pre_deposit.png")
+
+
+	# Image Rule Assets
 	# 礼包屋 
 	I_ROOM_GIFT = RuleImage(roi_front=(1138,658,52,40), roi_back=(1119,621,103,94), threshold=0.8, method="Template matching", file="./tasks/DailyTrifles/store/store_room_gift.png")
 	# description 
-	I_GIFT_RECOMMEND = RuleImage(roi_front=(1183,454,53,64), roi_back=(1162,77,98,457), threshold=0.7, method="Template matching", file="./tasks/DailyTrifles/store/store_gift_recommend.png")
+	I_GIFT_RECOMMEND = RuleImage(roi_front=(1183,454,53,64), roi_back=(1162,77,98,480), threshold=0.7, method="Template matching", file="./tasks/DailyTrifles/store/store_gift_recommend.png")
 	# 免费一抽领黑蛋 
 	I_GIFT_SIGN = RuleImage(roi_front=(186,191,115,83), roi_back=(130,129,891,473), threshold=0.8, method="Template matching", file="./tasks/DailyTrifles/store/store_gift_sign.png")
 	# 体力 

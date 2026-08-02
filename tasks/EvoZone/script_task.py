@@ -129,7 +129,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         logger.info('Create team')
         while 1:
             self.screenshot()
-            if self.appear(self.I_CHECK_TEAM):
+            if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
                 break
             if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                 continue
@@ -168,7 +168,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 if self.run_invite(config=self.config.evo_zone.invite_config):
                     self.run_general_battle(
                         config=self.config.evo_zone.general_battle_config,
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
                 else:
                     # 邀请失败，退出任务
@@ -185,7 +185,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     is_first = False
                     self.run_general_battle(
                         config=self.config.evo_zone.general_battle_config,
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
 
         # 当结束或者是失败退出循环的时候只有两个UI的可能，在房间或者是在组队界面
@@ -218,7 +218,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 if self.wait_battle(wait_time=self.config.evo_zone.invite_config.wait_time):
                     self.run_general_battle(
                         config=self.config.evo_zone.general_battle_config,
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
                 else:
                     break
@@ -226,7 +226,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
             if self.is_in_battle(False):
                 self.run_general_battle(
                     config=self.config.evo_zone.general_battle_config,
-                    exit_matcher=self.I_CHECK_TEAM,
+                    exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                 )
 
         while 1:
