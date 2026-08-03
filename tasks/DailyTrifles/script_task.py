@@ -90,6 +90,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
     def one_click_pre_deposit(self):
         # 一键预存入口：从主界面进入组队页，再转到同心队并执行预存
         logger.hr('one click pre deposit', 2)
+        if self.config.daily_trifles.today_is_done('one_click_pre_deposit'):
+            logger.info('Today is done, skip')
+            return
 
         self.goto_page(page_main)
 
@@ -405,8 +408,6 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             if self.appear(RichManAssets.I_SIDE_CHECK_SPECIAL) and self.appear(self.I_SPECIAL_SUSHI):
                 break
             if self.appear_then_click(RichManAssets.I_MALL_SUNDRY, interval=1):
-                continue
-            if self.appear_then_click(RichManAssets.I_SIDE_CHECK_SPECIAL, interval=1):
                 continue
 
         def detect_buy_count(base_element) -> (int, int):

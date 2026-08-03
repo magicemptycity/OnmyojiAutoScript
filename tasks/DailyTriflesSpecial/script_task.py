@@ -379,8 +379,6 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                 break
             if self.appear_then_click(RichManAssets.I_MALL_SUNDRY, interval=1):
                 continue
-            if self.appear_then_click(RichManAssets.I_SIDE_CHECK_SPECIAL, interval=1):
-                continue
 
         def detect_buy_count(base_element) -> (int, int):
             # 返回count,price
