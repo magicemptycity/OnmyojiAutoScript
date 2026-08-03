@@ -501,10 +501,15 @@
       "one_summon": false,
       "summon_type": "普通召唤",
       "draw_mystery_pattern": false,
-      "guild_wish": false,
       "luck_msg": false,
       "store_sign": false,
       "buy_sushi_count": -1
+    },
+    "guild_donate": {
+      "enable": false,
+      "guild_member_list": "",
+      "friend_list": "",
+      "name_check": true
     }
   },
   "same_heart_team": {

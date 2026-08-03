@@ -41,7 +41,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         if con.pickup_email:
             self.run_pickup_email()
         # 寮祈愿
-        if self.config.daily_trifles.guild_donate.enable:
+        if self.config.daily_trifles_special.guild_donate.enable:
             self.run_guild_donate()
         # 一键预存
         if con.one_click_pre_deposit:
