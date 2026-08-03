@@ -192,5 +192,17 @@
   "utilize_harvest": "是否领取寄养奖励",
   "utilize_enable": "是否蹭卡",
   "utilize_enable_help": "关闭则不会蹭卡, 但是其他操作会执行(例如收取寮奖励等)",
-  "utilize_harvest_help": "关闭则不领取, 可以屯奖励"
+  "utilize_harvest_help": "关闭则不领取, 可以屯奖励",
+  "card_star": "星级",
+  "MultiAccountRepeat": "多账号循环任务",
+  "MultiAccountRepeatDay": "多账号循环任务每日",
+  "MultiAccountRepeatWeek": "多账号循环任务每周",
+  "MultiAccountRepeatMonth": "多账号循环任务每月",
+  "MultiAccountKekkaiActivation": "多账号挂卡",
+  "MultiAccountKekkaiUtilize": "多账号蹭卡",
+  "DailyTriflesSpecial": "每日琐事特殊任务",
+  "MultiAccountDelegation": "多账号式神委派",
+  "SameHeartTeam": "同心队",
+  "SameHeartTeamOrochi": "同心队御魂",
+  "SameHeartTeamAwaken": "同心队觉醒"
 }
