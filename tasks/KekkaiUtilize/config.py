@@ -43,6 +43,3 @@ class UtilizeConfig(BaseModel):
 class KekkaiUtilize(ConfigBase):
     scheduler: UtilizeScheduler = Field(default_factory=UtilizeScheduler)
     utilize_config: UtilizeConfig = Field(default_factory=UtilizeConfig)
-
-
-

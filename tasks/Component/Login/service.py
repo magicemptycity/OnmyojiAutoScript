@@ -5,11 +5,17 @@ from module.base.timer import Timer
 from module.exception import RequestHumanTakeover, GameTooManyClickError, GameStuckError
 from module.logger import logger
 from tasks.GameUi.assets import GameUiAssets
+from tasks.GameUi.chess_battle import ChessBattleNavigationMixin
 from tasks.Restart.assets import RestartAssets
 from tasks.base_task import BaseTask
 
 
-class LoginService(BaseTask, RestartAssets, GameUiAssets):
+class LoginService(
+    ChessBattleNavigationMixin,
+    BaseTask,
+    RestartAssets,
+    GameUiAssets,
+):
     character: str
 
     def __init__(self, *wargs, **kwargs):
@@ -35,6 +41,27 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
                 orientation_timer.reset()
 
             self.screenshot()
+            if self.appear_then_click(
+                self.I_RETURN_CHESS_CANCEL,
+                interval=0.8,
+            ):
+                logger.info(
+                    'Cancel returning to interrupted Chess battle; '
+                    'wait for result flow'
+                )
+                continue
+            if self.appear(self.I_CHECK_CHESS):
+                logger.info(
+                    'Login recovery reached Chess lobby; '
+                    'finish recovery without returning to courtyard'
+                )
+                return True
+            if self.chess_result_flow_visible():
+                logger.info(
+                    'Login recovery detected unfinished Chess result flow'
+                )
+                self.return_to_chess_lobby()
+                return True
             if self.appear_then_click(self.I_CANCEL_BATTLE, interval=0.8):
                 logger.info('Cancel continue battle')
                 continue
@@ -115,8 +142,8 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
             if self.ocr_appear_click(self.O_LOGIN_ENTER_GAME, interval=3):
                 self.wait_until_appear(self.I_LOGIN_SPECIFIC_SERVE, True, wait_time=5)
                 continue
-
-        return login_success
+            if self.appear(self.I_LOGIN_SCROOLL_CLOSE) or self.appear(self.I_LOGIN_SCROOLL_OPEN):
+                return login_success
 
     def app_handle_login(self) -> bool:
         self.device.stuck_record_clear()

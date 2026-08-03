@@ -856,7 +856,7 @@ Java.perform(function() {
                     device_id = line.split('GL_DEVICEID:')[1].strip()
                     if device_id and device_id != 'unknown' and not device_id.startswith('Java.Field'):
                         return device_id
-        
+
         try:
             udid = self._adb_shell(['settings', 'get', 'secure', 'android_id'])
             if udid and udid != 'unknown':
@@ -864,7 +864,7 @@ Java.perform(function() {
                 return udid
         except Exception:
             pass
-        
+
         return None
 
     def _login_by_urs_token(self, pid, urs_creds):

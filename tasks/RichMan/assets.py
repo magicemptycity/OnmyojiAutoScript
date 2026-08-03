@@ -189,8 +189,8 @@ class RichManAssets:
 
 
 	# List Rule Assets
-	# 杂货铺侧边导航 
-	L_RM_NAVBAR = RuleList(folder="./tasks/RichMan/mall/navbar", direction="vertical", mode="image", roi_back=(1178,88,60,531), size=(45, 76), 
+	# 杂货铺侧边导航
+	L_RM_NAVBAR = RuleList(folder="./tasks/RichMan/mall/navbar", direction="vertical", mode="image", roi_back=(1178,88,60,531), size=(45, 76),
 					 array=["special", "duel", "friendship", "medal", "charm", "honor"])
 
 
@@ -377,5 +377,4 @@ class RichManAssets:
 	O_TT_BUY = RuleOcr(roi=(602,509,104,61), area=(602,509,104,61), mode="Full", method="Default", keyword="", name="tt_buy")
 	# Ocr-description 
 	O_TT_NUMBER = RuleOcr(roi=(576,415,58,49), area=(576,415,58,49), mode="Digit", method="Default", keyword="", name="tt_number")
-
 
