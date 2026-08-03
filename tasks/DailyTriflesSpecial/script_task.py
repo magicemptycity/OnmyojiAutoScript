@@ -10,7 +10,7 @@ from module.atom.image import RuleImage
 from ppocronnx.predict_system import BoxedResult
 
 from tasks.Component.config_base import Time
-from tasks.DailyTriflesSpecial.page import page_store_gift_room, page_friends_luck, page_guild_wish, page_one_click_pre_deposit
+from tasks.DailyTriflesSpecial.page import page_store_gift_room, page_friends_luck, page_guild_wish, page_one_click_pre_deposit, page_same_heart_team
 
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_team, page_summon, page_guild, page_mall, page_friends, page_courtyard_affairs
@@ -89,11 +89,18 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
 
         self.goto_page(page_main)
 
-        self.goto_page(page_one_click_pre_deposit, confirm_wait=2)
+        self.goto_page(page_same_heart_team, confirm_wait=2)
 
-        if not self._do_one_click_pre_deposit():
-            logger.warning('一键预存失败')
+        if self.appear(self.O_O_SAMEHEARTTEAM) and not self.appear(self.I_I_PRE_DEPOSIT):
+            logger.warning('当前角色没有同心队，跳过一键预存')
             return
+        else:
+            logger.info('当前角色有同心队，执行一键预存')
+            self.goto_page(page_one_click_pre_deposit, confirm_wait=2)
+
+            if not self._do_one_click_pre_deposit():
+                logger.warning('一键预存失败')
+                return
 
         self.goto_page(page_main)
 
