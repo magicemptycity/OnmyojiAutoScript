@@ -1,5 +1,6 @@
 from tasks.DailyTrifles.assets import DailyTriflesAssets
-from tasks.GameUi.default_pages import page_friends, page_guild
+from tasks.SameHeartTeam.assets import SameHeartTeamAssets
+from tasks.GameUi.default_pages import page_friends, page_guild, page_team
 from tasks.GameUi.page import Page, page_mall
 from tasks.GlobalGame.assets import GlobalGameAssets
 
@@ -16,3 +17,11 @@ page_friends_luck.add_enter_failure_hooks(DailyTriflesAssets.I_FRIENDSHIP_UP)
 page_guild_wish = Page(DailyTriflesAssets.I_DT_CHECK_GUILD_WISH)
 page_guild_wish.connect(page_guild, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_guild_wish->page_guild")
 page_guild.connect(page_guild_wish, DailyTriflesAssets.I_GUILD_TO_WISH, key="page_guild->page_guild_wish")
+# 同心队页面
+page_same_heart_team = Page(SameHeartTeamAssets.O_O_SAMEHEARTTEAM)
+page_same_heart_team.connect(page_team, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_same_heart_team->page_team")
+page_team.connect(page_same_heart_team, SameHeartTeamAssets.I_I_SAME_HEART_TEAM_ENTER, key="page_team->page_same_heart_team")
+# 一键预存页面
+page_one_click_pre_deposit = Page(DailyTriflesAssets.I_I_ONE_CLICK_PRE_DEPOSIT)
+page_one_click_pre_deposit.connect(page_same_heart_team, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_one_click_pre_deposit->page_same_heart_team")
+page_same_heart_team.connect(page_one_click_pre_deposit, DailyTriflesAssets.I_I_PRE_DEPOSIT, key="page_same_heart_team->page_one_click_pre_deposit")

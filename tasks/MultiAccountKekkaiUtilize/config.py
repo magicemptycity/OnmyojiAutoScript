@@ -98,7 +98,9 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra='allow'):
         if not isinstance(v, dict):
             return v
 
-        shared_config = v.get('multi_account_kekkai_utilize_config', {})
+        shared_config = v.get('multi_account_kekkai_utilize_config')
+        if not isinstance(shared_config, dict):
+            shared_config = v.get('config') or v.get('shared_config') or {}
         if not isinstance(shared_config, dict):
             shared_config = {}
 
@@ -111,11 +113,14 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra='allow'):
         data = dict(v)
         data.setdefault('account_list', [])
         if 'multi_account_kekkai_utilize_config' not in data:
-            data['multi_account_kekkai_utilize_config'] = {'account_count': account_count_value}
+            data['multi_account_kekkai_utilize_config'] = dict(shared_config, account_count=account_count_value)
         elif isinstance(data['multi_account_kekkai_utilize_config'], dict):
             data['multi_account_kekkai_utilize_config'] = MultiAccountKekkaiUtilizeConfig(
                 **data['multi_account_kekkai_utilize_config']
             )
+
+        for alias in ('config', 'shared_config'):
+            data.pop(alias, None)
 
         remove_keys = []
         for key, value in data.items():

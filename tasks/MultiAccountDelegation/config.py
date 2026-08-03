@@ -96,7 +96,9 @@ class MultiAccountDelegation(ConfigBase, extra='allow'):
         if not isinstance(v, dict):
             return v
 
-        shared_config = v.get('multi_account_delegation_config', {})
+        shared_config = v.get('multi_account_delegation_config')
+        if not isinstance(shared_config, dict):
+            shared_config = v.get('config') or v.get('shared_config') or {}
         if not isinstance(shared_config, dict):
             shared_config = {}
 
@@ -109,11 +111,14 @@ class MultiAccountDelegation(ConfigBase, extra='allow'):
         data = dict(v)
         data.setdefault('account_list', [])
         if 'multi_account_delegation_config' not in data:
-            data['multi_account_delegation_config'] = {'account_count': account_count_value}
+            data['multi_account_delegation_config'] = dict(shared_config, account_count=account_count_value)
         elif isinstance(data['multi_account_delegation_config'], dict):
             data['multi_account_delegation_config'] = MultiAccountDelegationConfig(
                 **data['multi_account_delegation_config']
             )
+
+        for alias in ('config', 'shared_config'):
+            data.pop(alias, None)
 
         remove_keys = []
         for key, value in data.items():

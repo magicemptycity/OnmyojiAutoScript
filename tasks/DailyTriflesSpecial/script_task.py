@@ -3,12 +3,14 @@
 # github https://github.com/runhey
 import copy
 from time import sleep
-from datetime import time, datetime, timedelta
 
-from exceptiongroup import catch
+import difflib
+from datetime import time, datetime, timedelta
+from module.atom.image import RuleImage
+from ppocronnx.predict_system import BoxedResult
+
 from tasks.Component.config_base import Time
-from tasks.DailyTriflesSpecial.page import page_store_gift_room, page_friends_luck
-from winerror import NOERROR
+from tasks.DailyTriflesSpecial.page import page_store_gift_room, page_friends_luck, page_guild_wish, page_one_click_pre_deposit
 
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_team, page_summon, page_guild, page_mall, page_friends, page_courtyard_affairs
@@ -22,6 +24,7 @@ from module.exception import TaskEnd
 from module.base.timer import Timer
 from tasks.DailyTriflesSpecial.config import SummonType
 import re
+from typing import Callable, List
 
 
 class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
@@ -31,14 +34,18 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         # 每日召唤
         if con.one_summon:
             self.run_one_summon()
+        # 庭院事务
         if con.courtyard_affairs:
             self.run_courtyard_affairs()
+        # 收取邮件
         if con.pickup_email:
             self.run_pickup_email()
+        # 寮祈愿
+        if self.config.daily_trifles.guild_donate.enable:
+            self.run_guild_donate()
+        # 一键预存
         if con.one_click_pre_deposit:
             self.one_click_pre_deposit()
-        if con.guild_wish:
-            pass
         # 吉闻
         if con.luck_msg:
             self.run_luck_msg()
@@ -75,6 +82,45 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             # 如果还是在同一月份，则没必要再绘制神秘图案
             config.draw_mystery_pattern = False
         self.config.save()
+
+    def one_click_pre_deposit(self):
+        # 一键预存入口：从主界面进入组队页，再转到同心队并执行预存
+        logger.hr('one click pre deposit', 2)
+
+        self.goto_page(page_main)
+
+        self.goto_page(page_one_click_pre_deposit, confirm_wait=2)
+
+        if not self._do_one_click_pre_deposit():
+            logger.warning('一键预存失败')
+            return
+
+        self.goto_page(page_main)
+
+    def _do_one_click_pre_deposit(self) -> bool:
+        if not self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
+            return False
+        self.appear_then_click(self.I_I_ONE_CLICK_PRE_DEPOSIT, interval=1)
+
+        for _ in range(10):
+            self.screenshot()
+
+            if self.appear(self.I_UI_CONFIRM):
+                sleep(1)
+                self.appear_then_click(self.I_UI_CONFIRM, interval=1)
+                sleep(1)
+                self.screenshot()
+                if not self.appear(self.I_UI_CONFIRM):
+                    logger.info('一键预存成功')
+                    return True
+                else:
+                    logger.info('一键预存失败，尝试再次点击确认')
+                    self.appear_then_click(self.I_UI_CONFIRM, interval=1)
+                    logger.info('一键预存成功')
+                    return True
+
+            sleep(1)
+        return False
 
     def summon_recall(self):
         """
@@ -154,83 +200,129 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                     continue
             logger.info('Summon one success')
 
-    def run_guild_wish(self):
-        pass
+    def run_guild_donate(self):
+        logger.hr('guild donate', 2)
+        self.goto_page(page_guild_wish)
+        timeout_timer = Timer(2).start()
+        while not timeout_timer.reached():
+            self.screenshot()
+            if self.appear(self.I_DT_GW_THANKS):
+                self.ui_click(self.I_DT_GW_THANKS, self.I_DT_GW_THANKED, interval=0.8)
+                continue
+        self.appear_then_click(self.I_UI_BACK_RED)
 
-    def one_click_pre_deposit(self):
-        logger.hr('one click pre deposit', 2)
-
+        donate_datas: list = [
+            (self.config.daily_trifles_special.guild_donate.guild_member_list_v,
+             lambda: self.switch_select(self.I_DT_GW_GUILD_MEMBER_SELECTED, self.I_DT_GW_FRIEND_SELECTED, self.I_DT_GW_SELECT_GUILD_MEMBER),
+             self.config.daily_trifles_special.guild_donate.name_check),
+            (self.config.daily_trifles_special.guild_donate.friend_list_v,
+             lambda: self.switch_select(self.I_DT_GW_FRIEND_SELECTED, self.I_DT_GW_GUILD_MEMBER_SELECTED, self.I_DT_GW_SELECT_FRIEND),
+             self.config.daily_trifles_special.guild_donate.name_check)
+        ]
+        all_done = True
+        for name_list, switch_func, name_check in donate_datas:
+            all_done = all_done and self.process_donate(name_list, switch_func, name_check)
         self.goto_page(page_main)
 
-        self.goto_page(page_team, confirm_wait=2)
+    def process_donate(self, name_list: List[str], switch_func: Callable, name_check: bool) -> bool:
+        """执行碎片捐赠流程
 
-        if not self._enter_same_heart_team_page():
-            logger.warning('未进入同心队页面，预存功能无法执行')
-            return
+        :param name_list: 待捐赠碎皮的名称列表
+        :param switch_func: 切换好友/阴阳寮/...的方法
+        :param name_check: 是否使用ocr检查用户名
+        :return: 是否全部捐赠成功 (出现检索名称后为空或者碎皮不足都是False, 仅有已捐满才是True)
+        """
+        all_done = True
+        for name in name_list:
+            switch_func()
+            self.swipe(self.S_DT_GW_OPEN_SEARCH, interval=1.2)
+            self.switch_select(self.I_DT_GW_SEARCH_BY_NAME, self.I_DT_GW_SEARCH_BY_SWAP, self.I_DT_GW_SELECT_BY_NAME)
+            self.appear_then_click(self.I_DT_GW_CLEAR_SEARCH)
+            self.ui_click(self.C_DT_GW_INPUT_SEARCH, self.I_DT_GW_CONFIRM, interval=1.5)
+            self.click(self.C_DT_GW_CLICK_INPUT)
+            self.device.adb.send_keys(name)
+            self.ui_click_until_disappear(self.I_DT_GW_CONFIRM, interval=1.5)
+            donate_btn = self.I_DT_GW_DONATE
+            if name_check:
+                name_roi = self.find_target_name(name)
+                if name_roi is None:
+                    logger.warning(f'{name} check failed, maybe not wish or not find')
+                    all_done = False
+                    continue
+                donate_btn.roi_back = [name_roi[0], name_roi[1] - 15, max(name_roi[2] + 700, 1280),
+                                       max(name_roi[3] + 60, 720)]
+            self.I_DT_GW_FULL.roi_back = donate_btn.roi_back
+            self.I_DT_GW_INSUFFICIENT.roi_back = donate_btn.roi_back
+            donate_ret = self.donate(donate_btn)
+            all_done = all_done and donate_ret
+        return all_done
 
-        if not self._open_pre_deposit_page():
-            logger.warning('未找到预存入口，预存功能无法执行')
-            return
+    def donate(self, donate_btn: RuleImage) -> bool:
+        """捐赠式神碎片
 
-        if not self._do_one_click_pre_deposit():
-            logger.warning('一键预存失败')
-            return
-
-        self._return_to_courtyard()
-
-    def _enter_same_heart_team_page(self) -> bool:
-        if self._is_in_same_heart_team_page():
-            return True
-        if self.appear_then_click(self.I_I_SAME_HEART_TEAM_ENTER, interval=1):
-            for _ in range(10):
-                self.screenshot()
-                if self._is_in_same_heart_team_page():
-                    return True
-                sleep(0.5)
-        return False
-
-    def _is_in_same_heart_team_page(self) -> bool:
-        text = self.O_O_SAMEHEARTTEAM.detect_text(self.device.image)
-        return '同心队' in text
-
-    def _open_pre_deposit_page(self) -> bool:
-        if self.appear_then_click(self.I_I_PRE_DEPOSIT, interval=1) or self.appear_then_click(self.I_I_PRE_DEPOSIT_NEED, interval=1):
-            for _ in range(10):
-                self.screenshot()
-                if self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
-                    return True
-                sleep(0.5)
-        return False
-
-    def _do_one_click_pre_deposit(self) -> bool:
-        if not self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
-            return False
-        self.appear_then_click(self.I_I_ONE_CLICK_PRE_DEPOSIT, interval=1)
-
-        for _ in range(10):
+        :param donate_btn: 赠与按钮
+        :return: 捐赠是否成功
+        """
+        timeout_timer = Timer(3).start()
+        while not timeout_timer.reached():
             self.screenshot()
-
-            if self.appear(self.I_UI_CONFIRM):
-                sleep(1)
-                self.appear_then_click(self.I_UI_CONFIRM, interval=1)
-                sleep(1)
-                self.screenshot()
-                if not self.appear(self.I_UI_CONFIRM):
-                    logger.info('一键预存成功')
-                    return True
-                else:
-                    logger.info('一键预存失败，尝试再次点击确认')
-                    self.appear_then_click(self.I_UI_CONFIRM, interval=1)
-                    logger.info('一键预存成功')
-                    return True
-
-            sleep(1)
+            if self.appear_then_click(self.I_UI_CONFIRM, interval=0.6):
+                continue
+            if self.appear(self.I_DT_GW_SEARCH_EMPTY):
+                logger.warning('Maybe not wish or not find, skip')
+                return False
+            if self.appear_then_click(donate_btn, interval=0.6):
+                continue
+            if self.appear(self.I_DT_GW_INSUFFICIENT, interval=0.6):
+                logger.warning('Not enough fragment to donate, skip')
+                return False
+            if self.appear(self.I_DT_GW_FULL, interval=1.2):
+                logger.info('Donate success!')
+                return True
         return False
 
-    def _return_to_courtyard(self) -> None:
-        for _ in range(3):
-            self.appear_then_click(self.I_UI_BACK_YELLOW, interval=1)
-            sleep(1)
+    def find_target_name(self, name) -> List[int]:
+        """寻找目标名称
+        :param name: 名称
+        :return: [x, y, w, h]
+        """
+        timeout_timer = Timer(3).start()
+        name_roi: List[int] = None
+        while not timeout_timer.reached():
+            self.screenshot()
+            if self.appear(self.I_DT_GW_SEARCH_EMPTY):
+                return None
+            text_results = self.O_DT_GW_NAME.detect_and_ocr(self.device.image)
+            mx_similarity = 0.5
+            for result in text_results:
+                if result.ocr_text == name:
+                    return self.extract_roi(result)
+                similarity = difflib.SequenceMatcher(None, result.ocr_text, name).ratio()
+                if similarity > mx_similarity:
+                    mx_similarity = similarity
+                    name_roi = self.extract_roi(result)
+            if name_roi is None:
+                continue
+            return name_roi
+        return name_roi
+
+    def extract_roi(self, result: BoxedResult) -> list[int]:
+        """从ocr结果提取对应的roi坐标"""
+        x = self.O_DT_GW_NAME.roi[0] + result.box[0, 0]
+        y = self.O_DT_GW_NAME.roi[1] + result.box[0, 1]
+        w, h = result.box[1, 0] - result.box[0, 0], result.box[2, 1] - result.box[0, 1]
+        return [x, y, w, h]
+
+    def switch_select(self, target: RuleImage, other: RuleImage, select: RuleImage):
+        """切换选中的元素"""
+        while True:
+            self.screenshot()
+            if self.appear(target):
+                break
+            if self.appear_then_click(select, interval=0.6):
+                continue
+            if self.appear_then_click(other, interval=1.8):
+                continue
 
     def run_luck_msg(self):
         logger.hr('luck msg', 2)
@@ -402,9 +494,8 @@ if __name__ == '__main__':
     from module.config.config import Config
     from module.device.device import Device
 
-    c = Config('oas1')
+    c = Config('oas2')
     d = Device(c)
     t = ScriptTask(c, d)
 
-    t.run_courtyard_affairs()
-
+    t.run_guild_donate()

@@ -9,17 +9,16 @@ from datetime import time, datetime, timedelta
 from module.atom.image import RuleImage
 from ppocronnx.predict_system import BoxedResult
 
-from exceptiongroup import catch
 from tasks.Component.config_base import Time
-from tasks.DailyTrifles.page import page_store_gift_room, page_friends_luck, page_guild_wish
-from winerror import NOERROR
+from tasks.DailyTrifles.page import page_store_gift_room, page_friends_luck, page_guild_wish, page_one_click_pre_deposit
 
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_team, page_summon, page_guild, page_mall, page_friends, page_courtyard_affairs
-from tasks.SameHeartTeam.assets import SameHeartTeamAssets
 from tasks.DailyTrifles.config import DailyTriflesConfig
 from tasks.DailyTrifles.assets import DailyTriflesAssets
+from tasks.SameHeartTeam.assets import SameHeartTeamAssets
 from tasks.Component.Summon.summon import Summon
+
 from module.logger import logger
 from module.exception import TaskEnd
 from module.base.timer import Timer
@@ -35,16 +34,18 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         # 每日召唤
         if con.one_summon:
             self.run_one_summon()
+        # 庭院事务
         if con.courtyard_affairs:
             self.run_courtyard_affairs()
+        # 收取邮件
         if con.pickup_email:
             self.run_pickup_email()
+        # 寮祈愿
         if self.config.daily_trifles.guild_donate.enable:
             self.run_guild_donate()
+        # 一键预存
         if con.one_click_pre_deposit:
             self.one_click_pre_deposit()
-        if con.guild_wish:
-            pass
         # 吉闻
         if con.luck_msg:
             self.run_luck_msg()
@@ -89,29 +90,43 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
     def one_click_pre_deposit(self):
         # 一键预存入口：从主界面进入组队页，再转到同心队并执行预存
         logger.hr('one click pre deposit', 2)
-        if self.config.daily_trifles.today_is_done('one_click_pre_deposit'):
-            logger.info('Today is done, skip')
-            return
 
         self.goto_page(page_main)
 
-        self.goto_page(page_team, confirm_wait=2)
-
-        if not self._enter_same_heart_team_page():
-            logger.warning('未进入同心队页面，预存功能无法执行')
-            return
-
-        if not self._open_pre_deposit_page():
-            logger.warning('未找到预存入口，预存功能无法执行')
-            return
+        self.goto_page(page_one_click_pre_deposit, confirm_wait=2)
 
         if not self._do_one_click_pre_deposit():
             logger.warning('一键预存失败')
             return
 
-        self._return_to_courtyard()
+        self.goto_page(page_main)
         self.config.daily_trifles.done_record.one_click_pre_deposit_dt = datetime.now()
 
+    def _do_one_click_pre_deposit(self) -> bool:
+        # 当前已确认处于预存页面，执行一键预存并确认弹窗
+        if not self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
+            return False
+        self.appear_then_click(self.I_I_ONE_CLICK_PRE_DEPOSIT, interval=1)
+
+        for _ in range(10):
+            self.screenshot()
+
+            if self.appear(self.I_UI_CONFIRM):
+                sleep(1)
+                self.appear_then_click(self.I_UI_CONFIRM, interval=1)
+                sleep(1)
+                self.screenshot()
+                if not self.appear(self.I_UI_CONFIRM):
+                    logger.info('一键预存成功')
+                    return True
+                else:
+                    logger.info('一键预存失败，尝试再次点击确认')
+                    self.appear_then_click(self.I_UI_CONFIRM, interval=1)
+                    logger.info('一键预存成功')
+                    return True
+
+            sleep(1)
+        return False
 
     def summon_recall(self):
         """
@@ -322,64 +337,6 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             if self.appear_then_click(other, interval=1.8):
                 continue
 
-
-    def _enter_same_heart_team_page(self) -> bool:
-        # 从组队页点击进入同心队页，并等待同心队页面识别成功
-        if self._is_in_same_heart_team_page():
-            return True
-        if self.appear_then_click(self.I_I_SAME_HEART_TEAM_ENTER, interval=1):
-            for _ in range(10):
-                self.screenshot()
-                if self._is_in_same_heart_team_page():
-                    return True
-                sleep(0.5)
-        return False
-
-    def _is_in_same_heart_team_page(self) -> bool:
-        text = self.O_O_SAMEHEARTTEAM.detect_text(self.device.image)
-        return '同心队' in text
-
-    def _open_pre_deposit_page(self) -> bool:
-        # 点击预存入口按钮，进入预存页面后通过一键预存图标确认页面已切换
-        if self.appear_then_click(self.I_I_PRE_DEPOSIT, interval=1) or self.appear_then_click(self.I_I_PRE_DEPOSIT_NEED, interval=1):
-            for _ in range(10):
-                self.screenshot()
-                if self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
-                    return True
-                sleep(0.5)
-        return False
-
-    def _do_one_click_pre_deposit(self) -> bool:
-        # 当前已确认处于预存页面，执行一键预存并确认弹窗
-        if not self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
-            return False
-        self.appear_then_click(self.I_I_ONE_CLICK_PRE_DEPOSIT, interval=1)
-
-        for _ in range(10):
-            self.screenshot()
-
-            if self.appear(self.I_UI_CONFIRM):
-                sleep(1)
-                self.appear_then_click(self.I_UI_CONFIRM, interval=1)
-                sleep(1)
-                self.screenshot()
-                if not self.appear(self.I_UI_CONFIRM):
-                    logger.info('一键预存成功')
-                    return True
-                else:
-                    logger.info('一键预存失败，尝试再次点击确认')
-                    self.appear_then_click(self.I_UI_CONFIRM, interval=1)
-                    logger.info('一键预存成功')
-                    return True
-
-            sleep(1)
-        return False
-
-    def _return_to_courtyard(self) -> None:
-        for _ in range(3):
-            self.appear_then_click(self.I_UI_BACK_YELLOW, interval=1)
-            sleep(1)
-
     def run_luck_msg(self):
         logger.hr('luck msg', 2)
         if self.config.daily_trifles.today_is_done('luck_msg'):
@@ -579,4 +536,3 @@ if __name__ == '__main__':
     t = ScriptTask(c, d)
 
     t.run_guild_donate()
-

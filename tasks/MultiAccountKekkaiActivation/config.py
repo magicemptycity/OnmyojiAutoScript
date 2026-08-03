@@ -78,9 +78,29 @@ class MultiAccountKekkaiActivation(ConfigBase):
         if not isinstance(v, dict):
             return v
 
-        account_count = v.get('multi_account_kekkai_activation_config', {}).get('account_count', 1)
+        shared_config = v.get('multi_account_kekkai_activation_config')
+        if not isinstance(shared_config, dict):
+            shared_config = v.get('config') or v.get('shared_config') or v.get('shared_activation_config') or {}
+        if not isinstance(shared_config, dict):
+            shared_config = {}
+
+        account_count = shared_config.get('account_count', v.get('account_count', 1))
+        try:
+            account_count = int(account_count)
+        except Exception:
+            account_count = 1
+
         data = dict(v)
         data.setdefault('account_list', [])
+        if 'multi_account_kekkai_activation_config' not in data:
+            data['multi_account_kekkai_activation_config'] = dict(shared_config, account_count=account_count)
+        elif isinstance(data['multi_account_kekkai_activation_config'], dict):
+            data['multi_account_kekkai_activation_config'] = MultiAccountKekkaiActivationConfig(
+                **data['multi_account_kekkai_activation_config']
+            )
+
+        for alias in ('config', 'shared_config', 'shared_activation_config'):
+            data.pop(alias, None)
 
         remove_keys = []
         for key, value in data.items():

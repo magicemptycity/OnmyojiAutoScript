@@ -458,6 +458,7 @@
     "trifles_config": {
       "courtyard_affairs": true,
       "pickup_email": true,
+      "one_click_pre_deposit": false,
       "one_summon": false,
       "summon_type": "普通召唤",
       "draw_mystery_pattern": false,
