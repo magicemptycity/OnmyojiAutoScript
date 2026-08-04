@@ -134,7 +134,7 @@ class ScriptTask(GameUi, SwitchAccountAssets):
         临时覆盖到内层 KekkaiUtilize 任务上，让内层任务在本次执行中使用当前账号的策略。
         具体做法是：
         - 账号自己的字段，如 utilize_rule、select_friend_list、auto_fill 等，直接使用当前账号的配置；
-        - 共享字段，如 harvest_guild_max_times、utilize_enable、guild_ap_enable 等，从多账号蹭卡任务的公共配置中读取；
+        - 共享字段，如 harvest_guild_max_times、utilize_enable 等，从多账号蹭卡任务的公共配置中读取；
         - 先把原来的配置和 scheduler 状态完整备份下来，避免后续恢复时丢失上下文；
         - 执行完内层任务后，在 finally 中把这些临时改动恢复，确保下一个账号不会继承前一个账号的状态。
         """
@@ -154,8 +154,6 @@ class ScriptTask(GameUi, SwitchAccountAssets):
             'harvest_guild_max_times': util_config.harvest_guild_max_times,
             'utilize_harvest': util_config.utilize_harvest,
             'utilize_enable': util_config.utilize_enable,
-            'guild_ap_enable': util_config.guild_ap_enable,
-            'guild_assets_enable': util_config.guild_assets_enable,
             'box_ap_enable': util_config.box_ap_enable,
             'box_exp_enable': util_config.box_exp_enable,
             'box_exp_waste': util_config.box_exp_waste,
@@ -177,8 +175,6 @@ class ScriptTask(GameUi, SwitchAccountAssets):
         util_config.harvest_guild_max_times = shared_config.harvest_guild_max_times
         util_config.utilize_harvest = account_info.utilize_harvest
         util_config.utilize_enable = shared_config.utilize_enable
-        util_config.guild_ap_enable = shared_config.guild_ap_enable
-        util_config.guild_assets_enable = shared_config.guild_assets_enable
         util_config.box_ap_enable = shared_config.box_ap_enable
         util_config.box_exp_enable = shared_config.box_exp_enable
         util_config.box_exp_waste = shared_config.box_exp_waste
@@ -205,8 +201,6 @@ class ScriptTask(GameUi, SwitchAccountAssets):
         util_config.harvest_guild_max_times = self._utilize_config_backup['harvest_guild_max_times']
         util_config.utilize_harvest = self._utilize_config_backup['utilize_harvest']
         util_config.utilize_enable = self._utilize_config_backup['utilize_enable']
-        util_config.guild_ap_enable = self._utilize_config_backup['guild_ap_enable']
-        util_config.guild_assets_enable = self._utilize_config_backup['guild_assets_enable']
         util_config.box_ap_enable = self._utilize_config_backup['box_ap_enable']
         util_config.box_exp_enable = self._utilize_config_backup['box_exp_enable']
         util_config.box_exp_waste = self._utilize_config_backup['box_exp_waste']

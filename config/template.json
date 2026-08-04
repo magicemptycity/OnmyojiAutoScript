@@ -321,8 +321,7 @@
       "box_exp_waste": true,
       "box_exp_enable": true,
       "box_ap_enable": true,
-      "guild_assets_enable": true,
-      "guild_ap_enable": true,
+      "harvest_guild_max_times": 3,
       "utilize_enable": true,
       "public_forbid_time_enable": false,
       "public_forbid_time_start": "00:00:00",
@@ -507,6 +506,8 @@
     },
     "guild_donate": {
       "enable": false,
+      "auto_get_rewards": true,
+      "notify_enable": false,
       "guild_member_list": "",
       "friend_list": "",
       "name_check": true

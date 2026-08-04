@@ -46,8 +46,6 @@ class MultiAccountKekkaiUtilizeConfig(ConfigBase, extra='allow'):
     box_exp_waste: bool = Field(default=True, description='box_exp_waste_help')
     box_exp_enable: bool = Field(default=True, description='box_exp_enable_help')
     box_ap_enable: bool = Field(default=True, description='box_ap_enable_help')
-    guild_assets_enable: bool = Field(default=True, description='guild_assets_enable_help')
-    guild_ap_enable: bool = Field(default=True, description='guild_ap_enable_help')
     harvest_guild_max_times: int = Field(default=3, description='收取寮资金或体力失败的最大尝试次数')
     utilize_enable: bool = Field(default=True, description='是否蹭卡，小号可以选择不蹭卡')
     public_forbid_time_enable: bool = Field(default=False, description='是否启用公共禁止蹭卡时间段')
