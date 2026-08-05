@@ -7,6 +7,7 @@ from tasks.Component.config_scheduler import Scheduler
 from tasks.Component.config_base import ConfigBase, Time
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
 from tasks.Orochi.config import Layer as OrochiLayer
+from tasks.SameHeartTeam.config import resolve_preset
 
 
 class SameHeartTeamOrochiSwitchSoulConfig(SwitchSoulConfig):
@@ -27,26 +28,17 @@ class SameHeartTeamOrochiConfig(ConfigBase):
     # 是否开启加成
     soul_buff_enable: bool = Field(default=False, description='是否开启御魂加成')
     # 是否锁定阵容
-    lock_team_enable: bool = Field(default=False, description='是否锁定阵容')
+    lock_team_enable: bool = Field(default=False, description='lock_team_enable_help')
     # 是否启动切换预设
-    preset_enable: bool = Field(default=False, description='是否启动切换队伍预设')
+    preset_enable: bool = Field(default=False, description='preset_enable_help')
     # 是否启用切换御魂
-    switch_soul_enable: bool = Field(default=False, description='是否启用切换御魂')
+    switch_soul_enable: bool = Field(default=False, description='switch_soul_config')
     # 御魂&预设分组，格式示例 6,1
     switch_group_team: str = Field(default='-1,-1', description='御魂切换和队伍切换通用分组，例如 6,1')
 
     @property
     def general_battle_config(self) -> GeneralBattleConfig:
-        preset_group = 1
-        preset_team = 1
-        try:
-            group, team = [int(x) for x in self.switch_group_team.split(',')]
-            if group > 0:
-                preset_group = group
-            if team > 0:
-                preset_team = team
-        except ValueError:
-            pass
+        preset_group, preset_team = resolve_preset(self.switch_group_team)
         return GeneralBattleConfig(
             lock_team_enable=self.lock_team_enable,
             preset_enable=self.preset_enable,

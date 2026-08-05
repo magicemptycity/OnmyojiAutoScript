@@ -45,7 +45,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
         # 如果配置启用了换灵魂功能，则进入式神记录页面执行灵魂切换
         if active_config.switch_soul_config.enable:
             self.goto_page(page_shikigami_records)
-            self.run_switch_soul(active_config.switch_soul_config)
+            self.run_switch_soul(active_config.switch_soul_config.switch_group_team)
 
         # 如果开启了加成功能，进入主页面打开觉醒加成，并关闭加成窗口
         self.goto_page(page_main)
