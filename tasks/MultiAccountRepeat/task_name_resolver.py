@@ -40,6 +40,7 @@ TASK_NAME_ALIASES = {
     'MultiAccountDelegation': ['多账号委派', '多账号式神委派', '委派任务'],
     'MultiAccountKekkaiActivation': ['多账号挂卡', '多账号结界挂卡'],
     'MultiAccountKekkaiUtilize': ['多账号蹭卡', '多账号结界蹭卡'],
+    'MultiAccountAreaBoss': ['多账号地域鬼王', '多账号鬼王'],
     'KekkaiUtilize': ['结界蹭卡'],
     'KekkaiActivation': ['结界挂卡'],
     'RealmRaid': ['个人突破'],

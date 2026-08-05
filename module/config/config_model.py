@@ -83,6 +83,7 @@ from tasks.MultiAccountRepeat.config import MultiAccountRepeat
 from tasks.MultiAccountRepeatDay.config import MultiAccountRepeatDay
 from tasks.MultiAccountRepeatWeek.config import MultiAccountRepeatWeek
 from tasks.MultiAccountRepeatMonth.config import MultiAccountRepeatMonth
+from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
 # ----------------------------------------------------------------------------------------------------------------------
 
 # 每周任务---------------------------------------------------------------------------------------------------------------
@@ -159,6 +160,7 @@ class ConfigModel(ConfigBase):
     multi_account_repeat_day: MultiAccountRepeatDay = Field(default_factory=MultiAccountRepeatDay)
     multi_account_repeat_week: MultiAccountRepeatWeek = Field(default_factory=MultiAccountRepeatWeek)
     multi_account_repeat_month: MultiAccountRepeatMonth = Field(default_factory=MultiAccountRepeatMonth)
+    multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)
 
     # 这些是每周任务
     true_orochi: TrueOrochi = Field(default_factory=TrueOrochi)

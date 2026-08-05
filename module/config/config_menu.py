@@ -35,6 +35,7 @@ class ConfigMenu:
             "FindJade",
             "MemoryScrolls",
             "MultiAccountRepeat",
+            "MultiAccountAreaBoss",
             "MultiAccountRepeatDay",
             "MultiAccountRepeatWeek",
             "MultiAccountRepeatMonth",
