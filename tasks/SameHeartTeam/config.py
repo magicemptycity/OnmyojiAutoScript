@@ -113,7 +113,7 @@ class SameHeartTeamAwakenConfig(ConfigBase):
     # 是否开启加成
     soul_buff_enable: bool = Field(default=False, description='是否开启觉醒加成')
     # 是否锁定阵容
-    lock_team_enable: bool = Field(default=False, description='same_heart_team_awaken_lock_help')
+    lock_team_enable: bool = Field(default=False, description='lock_team_enable_help')
     # 只保留三个核心项：御魂切换开关、预设队伍切换开关、分组输入
     switch_soul_enable: bool = Field(default=False, description='是否启用御魂切换')
     preset_enable: bool = Field(default=False, description='是否启用队伍切换')

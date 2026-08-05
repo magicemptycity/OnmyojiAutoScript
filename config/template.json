@@ -316,17 +316,61 @@
       "delay_date": 1,
       "float_time": "00:00:00"
     },
-    "multi_account_kekkai_utilize_config": {
-      "account_count": 1,
-      "box_exp_waste": true,
-      "box_exp_enable": true,
-      "box_ap_enable": true,
-      "harvest_guild_max_times": 3,
-      "utilize_enable": true,
+    "multi_account_kekkai_count_config": {
+      "account_count": 1
+    },
+    "multi_account_kekkai_forbid_config": {
       "public_forbid_time_enable": false,
       "public_forbid_time_start": "00:00:00",
       "public_forbid_time_end": "00:00:00"
-    }
+    },
+    "multi_account_kekkai_utilize_config": {
+      "utilize_rule": "default",
+      "select_friend_list": "same_server",
+      "auto_fill": false,
+      "shikigami_class": "N",
+      "shikigami_order": 4,
+      "harvest_guild_max_times": 3,
+      "utilize_harvest": true,
+      "utilize_enable": true,
+      "box_ap_enable": true,
+      "box_exp_enable": true,
+      "box_exp_waste": true
+    },
+    "account_list": [
+      {
+        "character": "",
+        "svr": "",
+        "account": "",
+        "account_alias": "",
+        "apple_or_android": true,
+        "last_complete_time": "2023-01-01 00:00:00",
+        "enable_private_utilize_config": false,
+        "enable_private_forbid_time": false
+      }
+    ],
+    "private_utilize_config": [
+      {
+        "utilize_rule": "default",
+        "select_friend_list": "same_server",
+        "auto_fill": false,
+        "shikigami_class": "N",
+        "shikigami_order": 4,
+        "harvest_guild_max_times": 3,
+        "utilize_harvest": true,
+        "utilize_enable": true,
+        "box_ap_enable": true,
+        "box_exp_enable": true,
+        "box_exp_waste": true
+      }
+    ],
+    "private_forbid_config": [
+      {
+        "utilize_forbidden_time_enable": false,
+        "utilize_forbidden_time_start": "00:00:00",
+        "utilize_forbidden_time_end": "00:00:00"
+      }
+    ]
   },
   "multi_account_area_boss": {
     "scheduler": {

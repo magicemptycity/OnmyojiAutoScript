@@ -8,7 +8,11 @@ from module.logger import logger
 from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.GameUi.game_ui import GameUi
-from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
+from tasks.MultiAccountKekkaiUtilize.config import (
+    MultiAccountKekkaiUtilize,
+    MultiAccountKekkaiUtilizePrivateUtilizeConfig,
+    MultiAccountKekkaiUtilizePrivateForbidConfig,
+)
 
 
 class ScriptTask(GameUi, SwitchAccountAssets):
@@ -164,20 +168,36 @@ class ScriptTask(GameUi, SwitchAccountAssets):
         # 否则下一个账号会拿到被污染后的调度状态。
         self._kekkai_scheduler_backup = copy.deepcopy(self.config.kekkai_utilize.scheduler)
 
-        # 将当前账号的配置项写入全局配置中。这里的字段分成两类：
-        # - 当前账号独占的字段：使用 account_info 中的值；
-        # - 共享字段：使用多账号蹭卡任务层面的 shared_config。
-        util_config.utilize_rule = account_info.utilize_rule
-        util_config.select_friend_list = account_info.select_friend_list
-        util_config.auto_fill = account_info.auto_fill
-        util_config.shikigami_class = account_info.shikigami_class
-        util_config.shikigami_order = account_info.shikigami_order
-        util_config.harvest_guild_max_times = shared_config.harvest_guild_max_times
-        util_config.utilize_harvest = account_info.utilize_harvest
-        util_config.utilize_enable = shared_config.utilize_enable
-        util_config.box_ap_enable = shared_config.box_ap_enable
-        util_config.box_exp_enable = shared_config.box_exp_enable
-        util_config.box_exp_waste = shared_config.box_exp_waste
+        # 将当前账号的配置项写入全局配置中。
+        # - 公共配置放在 shared_config 中；
+        # - 私有账号配置放在 private_utilize_config 中，仅在 enable_private_utilize_config 启用时才会使用。
+        private_config = self._get_account_private_utilize_config(account_info)
+
+        if account_info.enable_private_utilize_config:
+            util_config.utilize_rule = private_config.utilize_rule
+            util_config.select_friend_list = private_config.select_friend_list
+            util_config.auto_fill = private_config.auto_fill
+            util_config.shikigami_class = private_config.shikigami_class
+            util_config.shikigami_order = private_config.shikigami_order
+            util_config.harvest_guild_max_times = private_config.harvest_guild_max_times
+            util_config.utilize_harvest = private_config.utilize_harvest
+            util_config.utilize_enable = private_config.utilize_enable
+            util_config.box_ap_enable = private_config.box_ap_enable
+            util_config.box_exp_enable = private_config.box_exp_enable
+            util_config.box_exp_waste = private_config.box_exp_waste
+        else:
+            util_config.utilize_rule = shared_config.utilize_rule
+            util_config.select_friend_list = shared_config.select_friend_list
+            util_config.auto_fill = shared_config.auto_fill
+            util_config.shikigami_class = shared_config.shikigami_class
+            util_config.shikigami_order = shared_config.shikigami_order
+            util_config.harvest_guild_max_times = shared_config.harvest_guild_max_times
+            util_config.utilize_harvest = shared_config.utilize_harvest
+            util_config.utilize_enable = shared_config.utilize_enable
+            util_config.box_ap_enable = shared_config.box_ap_enable
+            util_config.box_exp_enable = shared_config.box_exp_enable
+            util_config.box_exp_waste = shared_config.box_exp_waste
+
         self.config.save()
 
     def _restore_utilize_config(self):
@@ -232,16 +252,19 @@ class ScriptTask(GameUi, SwitchAccountAssets):
         """
         获取当前账号应当使用的禁止蹭卡时间段。
 
-        规则：如果公共禁止时间段启用，则优先使用公共时间段；
-        否则如果当前账号启用了账号级禁止时间段，则使用账号自己的时间段；
+        规则：若该账号启用了私有禁止时段并且私有配置开启，则使用账号私有配置；
+        否则如果公共禁止时间段启用，则使用公共配置；
         否则返回 None，表示当前账号没有禁止时间段。
         """
-        shared_config = getattr(self.fade_conf, 'multi_account_kekkai_utilize_config', None)
-        if shared_config and shared_config.public_forbid_time_enable:
-            return shared_config.public_forbid_time_start, shared_config.public_forbid_time_end
+        # 优先使用账号私有禁止时间段（如果账号开启了私有禁止并且配置启用），
+        # 否则回退到公共禁止时间段（如果公共配置启用）。
+        private_config = self._get_account_private_forbid_config(account_info)
+        if account_info.enable_private_forbid_time and getattr(private_config, 'utilize_forbidden_time_enable', False):
+            return private_config.utilize_forbidden_time_start, private_config.utilize_forbidden_time_end
 
-        if account_info.utilize_forbidden_time_enable:
-            return account_info.utilize_forbidden_time_start, account_info.utilize_forbidden_time_end
+        forbid_config = getattr(self.fade_conf, 'multi_account_kekkai_forbid_config', None)
+        if forbid_config and forbid_config.public_forbid_time_enable:
+            return forbid_config.public_forbid_time_start, forbid_config.public_forbid_time_end
 
         return None, None
 
@@ -291,6 +314,30 @@ class ScriptTask(GameUi, SwitchAccountAssets):
                 end_dt = datetime.combine(next_utilize_time.date(), end)
 
         return end_dt + timedelta(minutes=10)
+
+    def _get_account_private_utilize_config(self, account_info):
+        """获取当前账号对应的私有结界蹭卡配置。"""
+        if not self.fade_conf or not isinstance(self.fade_conf.private_utilize_config, list):
+            return MultiAccountKekkaiUtilizePrivateUtilizeConfig()
+
+        for index, info in enumerate(self.fade_conf.account_list):
+            if info.character == account_info.character and info.svr == account_info.svr:
+                if index < len(self.fade_conf.private_utilize_config):
+                    return self.fade_conf.private_utilize_config[index]
+                break
+        return MultiAccountKekkaiUtilizePrivateUtilizeConfig()
+
+    def _get_account_private_forbid_config(self, account_info):
+        """获取当前账号对应的私有禁止蹭卡时段配置。"""
+        if not self.fade_conf or not isinstance(self.fade_conf.private_forbid_config, list):
+            return MultiAccountKekkaiUtilizePrivateForbidConfig()
+
+        for index, info in enumerate(self.fade_conf.account_list):
+            if info.character == account_info.character and info.svr == account_info.svr:
+                if index < len(self.fade_conf.private_forbid_config):
+                    return self.fade_conf.private_forbid_config[index]
+                break
+        return MultiAccountKekkaiUtilizePrivateForbidConfig()
 
     def _get_kekkai_utilize_next_run_time(self):
         """
