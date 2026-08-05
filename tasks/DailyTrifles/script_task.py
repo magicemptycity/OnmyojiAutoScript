@@ -464,9 +464,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             MAX_COUNT = 9999
             roi = copy.deepcopy(base_element.roi_front)
             roi[0] = roi[0] + roi[2]
-            roi[1] = roi[1] + roi[3] - 30
-            roi[2] = 60
-            roi[3] = 30
+            roi[1] = roi[1] + roi[3] - 45
+            roi[2] = 75
+            roi[3] = 45
             self.O_STORE_SUSHI_PRICE.roi = roi
             _price = self.O_STORE_SUSHI_PRICE.detect_text(self.device.image)
             # 保守策略，避免OCR错误购买
