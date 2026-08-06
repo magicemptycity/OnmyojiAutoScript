@@ -305,6 +305,111 @@
       "box_exp_waste": true
     }
   },
+  "multi_account_kekkai_utilize": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 2,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_kekkai_count_config": {
+      "account_count": 1
+    },
+    "multi_account_kekkai_forbid_config": {
+      "public_forbid_time_enable": false,
+      "public_forbid_time_start": "00:00:00",
+      "public_forbid_time_end": "00:00:00"
+    },
+    "multi_account_kekkai_utilize_config": {
+      "utilize_rule": "default",
+      "select_friend_list": "same_server",
+      "auto_fill": false,
+      "shikigami_class": "N",
+      "shikigami_order": 4,
+      "harvest_guild_max_times": 3,
+      "utilize_harvest": true,
+      "utilize_enable": true,
+      "box_ap_enable": true,
+      "box_exp_enable": true,
+      "box_exp_waste": true
+    },
+    "account_list": [
+      {
+        "character": "",
+        "svr": "",
+        "account": "",
+        "account_alias": "",
+        "apple_or_android": true,
+        "last_complete_time": "2023-01-01 00:00:00",
+        "enable_private_utilize_config": false,
+        "enable_private_forbid_time": false
+      }
+    ],
+    "private_utilize_config": [
+      {
+        "utilize_rule": "default",
+        "select_friend_list": "same_server",
+        "auto_fill": false,
+        "shikigami_class": "N",
+        "shikigami_order": 4,
+        "harvest_guild_max_times": 3,
+        "utilize_harvest": true,
+        "utilize_enable": true,
+        "box_ap_enable": true,
+        "box_exp_enable": true,
+        "box_exp_waste": true
+      }
+    ],
+    "private_forbid_config": [
+      {
+        "utilize_forbidden_time_enable": false,
+        "utilize_forbidden_time_start": "00:00:00",
+        "utilize_forbidden_time_end": "00:00:00"
+      }
+    ]
+  },
+  "multi_account_area_boss": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_area_boss_config": {
+      "account_count": 1
+    },
+    "common_config": {
+      "boss_number": 3,
+      "boss_reward": false,
+      "reward_floor": "一星",
+      "use_collect": false,
+      "attack_60": false,
+      "lock_team": false,
+      "switch_team_enable": false,
+      "switch_soul_enable": false,
+      "preset_public_enable": "-1,-1"
+    },
+    "account_list": [
+      {
+        "character": "",
+        "svr": "",
+        "account": "",
+        "account_alias": "",
+        "apple_or_android": true,
+        "last_complete_time": "2023-01-01 00:00:00",
+        "enable_private_config": false
+      }
+    ],
+    "private_config": []
+  },
   "kekkai_activation": {
     "scheduler": {
       "enable": false,
@@ -325,6 +430,23 @@
       "auto_fill": false,
       "shikigami_class": "N",
       "card_not_found_count": 0
+    }
+  },
+  "multi_account_kekkai_activation": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 2,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_kekkai_activation_config": {
+      "account_count": 1,
+      "exchange_before": true,
+      "exchange_max": true
     }
   },
   "demon_encounter": {
@@ -415,6 +537,7 @@
     "trifles_config": {
       "courtyard_affairs": true,
       "pickup_email": true,
+      "one_click_pre_deposit": false,
       "one_summon": false,
       "summon_type": "普通召唤",
       "draw_mystery_pattern": false,
@@ -439,6 +562,119 @@
       "store_sign_dt": "2023-01-01 00:00:00",
       "sushi_dt": "2023-01-01 00:00:00",
       "guild_donate_finish": false
+    }
+  },
+  "daily_trifles_special": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "trifles_config": {
+      "courtyard_affairs": true,
+      "pickup_email": true,
+      "one_click_pre_deposit": false,
+      "one_summon": false,
+      "summon_type": "普通召唤",
+      "draw_mystery_pattern": false,
+      "luck_msg": false,
+      "store_sign": false,
+      "buy_sushi_count": -1
+    },
+    "guild_donate": {
+      "enable": false,
+      "auto_get_rewards": true,
+      "notify_enable": false,
+      "guild_member_list": "",
+      "friend_list": "",
+      "name_check": true
+    }
+  },
+  "same_heart_team": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "common_config": {
+      "same_heart_team_mode": "御魂",
+      "team_num": "2人"
+    },
+    "orochi_config": {
+      "layer": "壹层",
+      "limit_time": "00:30:00",
+      "limit_count": 1,
+      "soul_buff_enable": false,
+      "lock_team_enable": false,
+      "switch_team_enable": false,
+      "switch_soul_enable": false,
+      "preset_public_enable": "-1,-1"
+    },
+    "awaken_config": {
+      "kirin_type": "雷麒麟",
+      "layer": "拾层",
+      "limit_time": "00:30:00",
+      "limit_count": 1,
+      "soul_buff_enable": false,
+      "lock_team_enable": false,
+      "switch_team_enable": false,
+      "switch_soul_enable": false,
+      "preset_public_enable": "-1,-1"
+    }
+  },
+  "same_heart_team_orochi": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "same_heart_team_orochi_config": {
+      "layer": "壹层",
+      "limit_time": "00:30:00",
+      "limit_count": 1,
+      "soul_buff_enable": false,
+      "lock_team_enable": false,
+      "switch_team_enable": false,
+      "switch_soul_enable": false,
+      "preset_public_enable": "-1,-1"
+    }
+  },
+  "same_heart_team_awaken": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "same_heart_team_awaken_config": {
+      "kirin_type": "雷麒麟",
+      "layer": "拾层",
+      "limit_time": "00:30:00",
+      "limit_count": 1,
+      "soul_buff_enable": false,
+      "lock_team_enable": false,
+      "switch_team_enable": false,
+      "switch_soul_enable": false,
+      "preset_public_enable": "-1,-1"
     }
   },
   "talisman_pass": {
@@ -489,6 +725,37 @@
     "simple_tidy": {
       "enable_greed": true,
       "enable_maneki": true
+    }
+  },
+  "multi_account_delegation": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_delegation_config": {
+      "account_count": 1,
+      "delegation_interval": "六小时循环"
+    },
+    "account_list_1": {
+      "character": "",
+      "svr": "",
+      "account": "",
+      "account_alias": "",
+      "apple_or_android": true,
+      "last_complete_time": "2023-01-01 00:00:00",
+      "next_delegation_time": "2023-01-01 00:00:00",
+      "miyoshino_painting": false,
+      "bird_feather": false,
+      "find_earring": false,
+      "cat_boss": false,
+      "miyoshino": false,
+      "strange_trace": false
     }
   },
   "delegation": {
@@ -1465,6 +1732,106 @@
     "memory_scrolls_finish": {
       "auto_finish_exploration": false,
       "next_exploration_time": "07:00:00"
+    }
+  },
+  "multi_account_repeat": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_repeat_config": {
+      "account_count": 1,
+      "skip_if_logged_today": true
+    },
+    "account_list_1": {
+      "character": "",
+      "svr": "",
+      "account": "",
+      "account_alias": "",
+      "apple_or_android": true,
+      "last_complete_time": "2023-01-01 00:00:00",
+      "repeat_task_list": ""
+    }
+  },
+  "multi_account_repeat_day": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_repeat_config": {
+      "account_count": 1,
+      "skip_if_logged_today": true
+    },
+    "account_list_1": {
+      "character": "",
+      "svr": "",
+      "account": "",
+      "account_alias": "",
+      "apple_or_android": true,
+      "last_complete_time": "2023-01-01 00:00:00",
+      "repeat_task_list": ""
+    }
+  },
+  "multi_account_repeat_week": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_repeat_config": {
+      "account_count": 1,
+      "skip_if_logged_today": true
+    },
+    "account_list_1": {
+      "character": "",
+      "svr": "",
+      "account": "",
+      "account_alias": "",
+      "apple_or_android": true,
+      "last_complete_time": "2023-01-01 00:00:00",
+      "repeat_task_list": ""
+    }
+  },
+  "multi_account_repeat_month": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_repeat_config": {
+      "account_count": 1,
+      "skip_if_logged_today": true
+    },
+    "account_list_1": {
+      "character": "",
+      "svr": "",
+      "account": "",
+      "account_alias": "",
+      "apple_or_android": true,
+      "last_complete_time": "2023-01-01 00:00:00",
+      "repeat_task_list": ""
     }
   },
   "true_orochi": {
