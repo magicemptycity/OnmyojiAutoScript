@@ -25,23 +25,25 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, MultiAccountAreaBossAssets):
         return self.I_AB_CLOSE_RED
 
     def _get_active_area_boss_config(self):
+        # 返回当前账号的私有配置；若未启用则返回全局 common_config
         info = getattr(self, 'current_account_info', None)
         if info and getattr(info, 'enable_private_config', False):
             return info
         return self.config.multi_account_area_boss.common_config
 
     def _get_boss_conf(self):
+        # 从活跃配置中读取简单的 boss 运行时参数
         config = self._get_active_area_boss_config()
         c = SimpleNamespace()
         c.boss_number = getattr(config, 'boss_number', 3)
         c.boss_reward = getattr(config, 'boss_reward', False)
         c.reward_floor = getattr(config, 'reward_floor', AreaBossFloor.ONE)
         c.use_collect = getattr(config, 'use_collect', False)
-        c.Attack_60 = getattr(config, 'attack_60', False)
-        c.lock_team = getattr(config, 'lock_team', False)
-        c.enable_switch_team = getattr(config, 'enable_switch_team', False)
-        c.enable_switch_soul = getattr(config, 'enable_switch_soul', False)
-        c.soul_team_group = getattr(config, 'soul_team_group', '-1,-1')
+        c.Attack_60 = getattr(config, 'Attack_60', False)
+        c.lock_team_enable = getattr(config, 'lock_team_enable', False)
+        c.switch_team_enable = getattr(config, 'switch_team_enable', False)
+        c.switch_soul_enable = getattr(config, 'switch_soul_enable', False)
+        c.preset_public_enable = getattr(config, 'preset_public_enable', '-1,-1')
         return c
 
     def open_filter(self):
@@ -80,10 +82,11 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, MultiAccountAreaBossAssets):
     def run(self) -> bool:
         self.check_can_run()
         active_conf = self._get_active_area_boss_config()
-        self.config.area_boss.general_battle.lock_team_enable = getattr(active_conf, 'lock_team', False)
-        self.config.area_boss.general_battle.preset_enable = getattr(active_conf, 'enable_switch_team', False)
-        self.config.area_boss.switch_soul.enable = getattr(active_conf, 'enable_switch_soul', False)
-        self.config.area_boss.switch_soul.switch_group_team = getattr(active_conf, 'soul_team_group', '-1,-1')
+        self.config.area_boss.general_battle.lock_team_enable = getattr(active_conf, 'lock_team_enable', False)
+        # 将 active_conf 的 standard 配置映射到 area_boss 内部通用配置对象
+        self.config.area_boss.general_battle.preset_enable = getattr(active_conf, 'switch_team_enable', False)
+        self.config.area_boss.switch_soul.enable = getattr(active_conf, 'switch_soul_enable', False)
+        self.config.area_boss.switch_soul.switch_group_team = getattr(active_conf, 'preset_public_enable', '-1,-1')
         self.config.area_boss.switch_soul.enable_switch_by_name = False
         self.config.area_boss.switch_soul.group_name = ''
         self.config.area_boss.switch_soul.team_name = ''
@@ -91,6 +94,7 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, MultiAccountAreaBossAssets):
 
         if self.config.area_boss.switch_soul.enable:
             self.goto_page(page_shikigami_records)
+            # 使用 area_boss switch_soul 的 switch_group_team 参数进行御魂切换
             self.run_switch_soul(self.config.area_boss.switch_soul.switch_group_team)
 
         if self.config.area_boss.switch_soul.enable_switch_by_name:

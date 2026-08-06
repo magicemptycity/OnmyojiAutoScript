@@ -487,17 +487,14 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             # count, price = detect_buy_count(roi)
             # if count >= self.config.model.daily_trifles.trifles_config.buy_sushi_count:
             #     break
+            logger.info(f"购买次数为: {self.config.daily_trifles_special.trifles_config.buy_sushi_count} 次")
             if self.appear(self.I_STORE_COST_TYPE_JADE):
                 count, price = detect_buy_count(self.I_STORE_COST_TYPE_JADE)
                 if count >= self.config.daily_trifles.trifles_config.buy_sushi_count:
                     break
-                self.ui_click_until_disappear(self.I_STORE_COST_TYPE_JADE, interval=2)
-                if not self.ui_reward_appear_click(screenshot=True):
-                    logger.info('没有检测到购买成功弹窗，尝试再次点击购买')
-                    sleep(1)
-                    self.ui_reward_appear_click(screenshot=True)
-                logger.info(f"Buy Sushi With {price} Jade")
-                continue
+                if self.ui_get_reward(self.I_STORE_COST_TYPE_JADE, click_interval=2.5):
+                    logger.info(f"Buy Sushi With {price} Jade")
+                    continue
 
             if self.appear(self.I_SPECIAL_SUSHI):
                 # 此处确定当前购买体力所需勾玉数量的位置,用于后续识别

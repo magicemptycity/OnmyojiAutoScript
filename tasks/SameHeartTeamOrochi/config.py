@@ -26,31 +26,33 @@ class SameHeartTeamOrochiConfig(ConfigBase):
     # 限制运行次数
     limit_count: int = Field(default=1, description='limit_count_help')
     # 是否开启加成
-    soul_buff_enable: bool = Field(default=False, description='是否开启御魂加成')
+    soul_buff_enable: bool = Field(default=False, description='soul_buff_enable_help')
     # 是否锁定阵容
     lock_team_enable: bool = Field(default=False, description='lock_team_enable_help')
-    # 是否启动切换预设
-    preset_enable: bool = Field(default=False, description='preset_enable_help')
-    # 是否启用切换御魂
-    switch_soul_enable: bool = Field(default=False, description='switch_soul_config')
-    # 御魂&预设分组，格式示例 6,1
-    switch_group_team: str = Field(default='-1,-1', description='御魂切换和队伍切换通用分组，例如 6,1')
+    # 预设队伍切换开关
+    switch_team_enable: bool = Field(default=False, description='switch_team_enable_help')
+    # 御魂切换开关
+    switch_soul_enable: bool = Field(default=False, description='switch_soul_enable_help')
+    # 预设队伍和御魂通用分组，例如 "6,1"，用于队伍预设和御魂切换共用分组配置
+    preset_public_enable: str = Field(default='-1,-1', description='preset_public_enable_help')
 
     @property
     def general_battle_config(self) -> GeneralBattleConfig:
-        preset_group, preset_team = resolve_preset(self.switch_group_team)
+        # 解析 preset_public_enable 字符串为通用预设组和队伍编号
+        preset_group, preset_team = resolve_preset(self.preset_public_enable)
         return GeneralBattleConfig(
             lock_team_enable=self.lock_team_enable,
-            preset_enable=self.preset_enable,
+            preset_enable=self.switch_team_enable,
             preset_group=preset_group,
             preset_team=preset_team,
         )
 
     @property
     def switch_soul_config(self) -> SameHeartTeamOrochiSwitchSoulConfig:
+        # 将 preset_public_enable 传递给 SwitchSoulConfig 的 switch_group_team 字段
         return SameHeartTeamOrochiSwitchSoulConfig(
             enable=self.switch_soul_enable,
-            switch_group_team=self.switch_group_team,
+            switch_group_team=self.preset_public_enable,
             enable_switch_by_name=False,
             group_name='',
             team_name='',

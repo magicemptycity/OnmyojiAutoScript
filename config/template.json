@@ -393,9 +393,9 @@
       "use_collect": false,
       "attack_60": false,
       "lock_team": false,
-      "enable_switch_team": false,
-      "enable_switch_soul": false,
-      "soul_team_group": "-1,-1"
+      "switch_team_enable": false,
+      "switch_soul_enable": false,
+      "preset_public_enable": "-1,-1"
     },
     "account_list": [
       {
@@ -616,9 +616,9 @@
       "limit_count": 1,
       "soul_buff_enable": false,
       "lock_team_enable": false,
+      "switch_team_enable": false,
       "switch_soul_enable": false,
-      "preset_enable": false,
-      "switch_group_team": "-1,-1"
+      "preset_public_enable": "-1,-1"
     },
     "awaken_config": {
       "kirin_type": "雷麒麟",
@@ -627,9 +627,9 @@
       "limit_count": 1,
       "soul_buff_enable": false,
       "lock_team_enable": false,
-      "preset_enable": false,
+      "switch_team_enable": false,
       "switch_soul_enable": false,
-      "switch_group_team": "-1,-1"
+      "preset_public_enable": "-1,-1"
     }
   },
   "same_heart_team_orochi": {
@@ -649,9 +649,9 @@
       "limit_count": 1,
       "soul_buff_enable": false,
       "lock_team_enable": false,
-      "preset_enable": false,
+      "switch_team_enable": false,
       "switch_soul_enable": false,
-      "switch_group_team": "-1,-1"
+      "preset_public_enable": "-1,-1"
     }
   },
   "same_heart_team_awaken": {
@@ -672,9 +672,9 @@
       "limit_count": 1,
       "soul_buff_enable": false,
       "lock_team_enable": false,
-      "preset_enable": false,
+      "switch_team_enable": false,
       "switch_soul_enable": false,
-      "switch_group_team": "-1,-1"
+      "preset_public_enable": "-1,-1"
     }
   },
   "talisman_pass": {

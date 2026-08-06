@@ -9,7 +9,7 @@ from tasks.Component.config_base import ConfigBase, DateTime, Time
 from tasks.Component.SwitchSoul.switch_soul_config import SwitchSoulConfig
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
 from tasks.Orochi.config import Layer as OrochiLayer
-from tasks.EvoZone.config import Layer as EvoZoneLayer, KirinType as EvoZoneKirinType
+from tasks.EvoZone.config import Layer as EvoZoneLayer, KirinType
 
 
 def resolve_preset(raw_value: str | None, default_group: int = 1, default_team: int = 1) -> tuple[int, int]:
@@ -75,26 +75,30 @@ class SameHeartTeamOrochiConfig(ConfigBase):
     soul_buff_enable: bool = Field(default=False, description='soul_buff_enable_help')
     # 是否锁定阵容
     lock_team_enable: bool = Field(default=False, description='lock_team_enable_help')
-    # 只保留三个核心项：御魂切换开关、预设队伍切换开关、分组输入
-    switch_soul_enable: bool = Field(default=False, description='switch_soul_config')
-    preset_enable: bool = Field(default=False, description='preset_enable_help')
-    switch_group_team: str = Field(default='-1,-1', description='御魂切换和队伍切换通用')
+    # 预设队伍切换开关
+    switch_team_enable: bool = Field(default=False, description='switch_team_enable_help')
+    # 御魂切换开关
+    switch_soul_enable: bool = Field(default=False, description='switch_soul_enable_help')
+    # 预设队伍和御魂通用分组
+    preset_public_enable: str = Field(default='-1,-1', description='preset_public_enable_help')
 
     @property
     def general_battle_config(self) -> GeneralBattleConfig:
-        preset_group, preset_team = _resolve_preset_group_team(self.switch_group_team)
+        preset_group, preset_team = _resolve_preset_group_team(self.preset_public_enable)
         return GeneralBattleConfig(
             lock_team_enable=self.lock_team_enable,
-            preset_enable=self.preset_enable,
+            preset_enable=self.switch_team_enable,
             preset_group=preset_group,
             preset_team=preset_team,
         )
 
     @property
     def switch_soul_config(self) -> SameHeartTeamSwitchSoulConfig:
+        # 将 preset_public_enable 传递给 SwitchSoulConfig 的 switch_group_team 字段
+        # 这样队伍预设和御魂切换可以共用同一组分组字符串
         return SameHeartTeamSwitchSoulConfig(
             enable=self.switch_soul_enable,
-            switch_group_team=self.switch_group_team,
+            switch_group_team=self.preset_public_enable,
             enable_switch_by_name=False,
             group_name='',
             team_name='',
@@ -103,7 +107,7 @@ class SameHeartTeamOrochiConfig(ConfigBase):
 
 class SameHeartTeamAwakenConfig(ConfigBase):
     # 麒麟选择
-    kirin_type: EvoZoneKirinType = Field(default=EvoZoneKirinType.LIGHTNINGKIRIN, description='kirin_type_help')
+    kirin_type: KirinType = Field(default=KirinType.LIGHTNINGKIRIN, description='kirin_type_help')
     # 挑战层数
     layer: EvoZoneLayer = Field(default=EvoZoneLayer.TEN, description='layer_help')
     # 限制运行时间
@@ -114,17 +118,19 @@ class SameHeartTeamAwakenConfig(ConfigBase):
     soul_buff_enable: bool = Field(default=False, description='是否开启觉醒加成')
     # 是否锁定阵容
     lock_team_enable: bool = Field(default=False, description='lock_team_enable_help')
-    # 只保留三个核心项：御魂切换开关、预设队伍切换开关、分组输入
-    switch_soul_enable: bool = Field(default=False, description='是否启用御魂切换')
-    preset_enable: bool = Field(default=False, description='是否启用队伍切换')
-    switch_group_team: str = Field(default='-1,-1', description='御魂切换和队伍切换通用')
+    # 预设队伍切换开关
+    switch_team_enable: bool = Field(default=False, description='switch_team_enable_help')
+    # 御魂切换开关
+    switch_soul_enable: bool = Field(default=False, description='switch_soul_enable_help')
+    # 预设队伍和御魂通用分组
+    preset_public_enable: str = Field(default='-1,-1', description='preset_public_enable_help')
 
     @property
     def general_battle_config(self) -> GeneralBattleConfig:
-        preset_group, preset_team = _resolve_preset_group_team(self.switch_group_team)
+        preset_group, preset_team = _resolve_preset_group_team(self.preset_public_enable)
         return GeneralBattleConfig(
             lock_team_enable=self.lock_team_enable,
-            preset_enable=self.preset_enable,
+            preset_enable=self.switch_team_enable,
             preset_group=preset_group,
             preset_team=preset_team,
         )
@@ -133,7 +139,7 @@ class SameHeartTeamAwakenConfig(ConfigBase):
     def switch_soul_config(self) -> SameHeartTeamSwitchSoulConfig:
         return SameHeartTeamSwitchSoulConfig(
             enable=self.switch_soul_enable,
-            switch_group_team=self.switch_group_team,
+            switch_group_team=self.preset_public_enable,
             enable_switch_by_name=False,
             group_name='',
             team_name='',

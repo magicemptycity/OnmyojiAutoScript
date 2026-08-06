@@ -20,11 +20,11 @@ class MultiAccountAreaBossPrivateConfig(ConfigBase):
     boss_reward: bool = Field(default=False, description='boss_reward_help')
     reward_floor: AreaBossFloor = Field(default=AreaBossFloor.ONE, description='reward_floor_help')
     use_collect: bool = Field(default=False, description='use_collect_help')
-    attack_60: bool = Field(default=False, description='没有开启极是否拉到60级进行攻打')
-    lock_team: bool = Field(default=False, description='lock_team_enable_help')
-    enable_switch_team: bool = Field(default=False, description='preset_enable_help')
-    enable_switch_soul: bool = Field(default=False, description='switch_soul_config')
-    soul_team_group: str = Field(default='-1,-1', description='soul_team_group_help')
+    Attack_60: bool = Field(default=False, description='没有开启极是否拉到60级进行攻打')
+    lock_team_enable: bool = Field(default=False, description='lock_team_enable_help')
+    switch_team_enable: bool = Field(default=False, description='switch_team_enable_help')
+    switch_soul_enable: bool = Field(default=False, description='switch_soul_enable_help')
+    preset_public_enable: str = Field(default='-1,-1', description='preset_public_enable_help')
 
 
 class MultiAccountAreaBossCommonConfig(MultiAccountAreaBossPrivateConfig):
@@ -52,6 +52,8 @@ class MultiAccountAreaBoss(ConfigBase):
     @model_validator(mode='before')
     @classmethod
     def validator_all(cls, v: dict) -> Any:
+        # 规范 multi_account_area_boss 的 account_list 与 private_config 结构
+        # 并根据 account_count 填充默认账号与私有配置
         if not isinstance(v, dict):
             return v
 
@@ -107,6 +109,7 @@ class MultiAccountAreaBoss(ConfigBase):
 
     @model_serializer()
     def serializer_model(self, value: Any) -> Dict[str, Any]:
+        # 将 account_list/private_config 序列化成 account_list_1/private_config_1 的扁平结构
         properties = self.__dict__
         data = {}
 

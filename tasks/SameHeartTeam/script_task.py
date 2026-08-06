@@ -61,8 +61,8 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         # 1. 切换御魂（如果需要）
         if active_config.switch_soul_enable:
             self.goto_page(page_shikigami_records)
-            # 注意：这里简化处理，实际可能需要根据 preset_enable 决定调用哪个方法
-            self.run_switch_soul(active_config.switch_group_team)
+            # 直接从 active_config 的 switch_soul_config 获取用于切换御魂的组队参数
+            self.run_switch_soul(active_config.switch_soul_config.switch_group_team)
 
         # 2. 打开加成（如果需要）
         if active_config.soul_buff_enable:

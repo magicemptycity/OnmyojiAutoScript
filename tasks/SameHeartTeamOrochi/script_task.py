@@ -45,7 +45,8 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
         # 如果需要切换灵魂，先进入式神记录页面执行切换操作
         if active_config.switch_soul_enable:
             self.goto_page(page_shikigami_records)
-            self.run_switch_soul(active_config.switch_group_team)
+            # 使用 active_config.switch_soul_config 中最终计算出的 switch_group_team 参数
+            self.run_switch_soul(active_config.switch_soul_config.switch_group_team)
 
         logger.info('同心队御魂任务开始')
         # 如果需要加成，则进入主页面打开御魂加成，再关闭加成窗口

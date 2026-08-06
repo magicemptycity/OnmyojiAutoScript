@@ -218,5 +218,11 @@
   "DailyTriflesSpecial": "每日琐事特殊任务",
   "SameHeartTeam": "同心队",
   "SameHeartTeamOrochi": "同心队御魂",
-  "SameHeartTeamAwaken": "同心队觉醒"
+  "SameHeartTeamAwaken": "同心队觉醒",
+  "switch_team_enable": "启用切换预设队伍",
+  "switch_team_enable_help": "将会在第一次战斗的时候切换队伍预设",
+  "switch_soul_enable": "启用切换预设御魂",
+  "switch_soul_enable_help": "执行任务前切换御魂",
+  "preset_public_enable": "队伍和御魂预设通用分组",
+  "preset_public_enable_help": "御魂切换和队伍切换通用分组，例如 6,1 表示第6组的第1个队伍, 组号[1-7],队伍号[1-4]"
 }
