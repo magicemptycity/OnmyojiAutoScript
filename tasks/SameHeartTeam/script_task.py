@@ -148,6 +148,10 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
 
         while 1:
             self.screenshot()
+            
+            # 检查猫咪奖励
+            if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
+                continue
 
             # 检查次数/时间上限
             if self.current_count >= self.limit_count:

@@ -115,6 +115,11 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
         success = True
         while True:
             self.screenshot()
+            
+            # 检查猫咪奖励
+            if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
+                continue
+
             # 如果达到次数限制或时间限制，则结束任务
             if self.current_count >= self.limit_count:
                 if self.is_in_room():
