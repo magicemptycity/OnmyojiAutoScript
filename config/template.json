@@ -740,23 +740,27 @@
     },
     "multi_account_delegation_config": {
       "account_count": 1,
-      "delegation_interval": "六小时循环"
-    },
-    "account_list_1": {
-      "character": "",
-      "svr": "",
-      "account": "",
-      "account_alias": "",
-      "apple_or_android": true,
-      "last_complete_time": "2023-01-01 00:00:00",
-      "next_delegation_time": "2023-01-01 00:00:00",
+      "delegation_interval": "六小时循环",
       "miyoshino_painting": false,
       "bird_feather": false,
       "find_earring": false,
       "cat_boss": false,
       "miyoshino": false,
       "strange_trace": false
-    }
+    },
+    "account_list": [
+      {
+        "character": "",
+        "svr": "",
+        "account": "",
+        "account_alias": "",
+        "apple_or_android": true,
+        "last_complete_time": "2023-01-01 00:00:00",
+        "next_delegation_time": "2023-01-01 00:00:00",
+        "enable_private_config": false
+      }
+    ],
+    "private_config": []
   },
   "delegation": {
     "scheduler": {

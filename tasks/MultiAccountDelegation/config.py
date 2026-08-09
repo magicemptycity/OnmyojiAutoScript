@@ -1,165 +1,302 @@
+import re
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
-from pydantic import Field, ValidationError, model_serializer, model_validator
+from pydantic import Field, PrivateAttr, model_serializer, model_validator
 
-from deploy.logger import logger
+from tasks.Component.MultiAccount.multi_account_config import (
+    as_dict,
+    dump_model,
+    load_indexed_models,
+    pad_parallel_models,
+    serialize_account_list,
+    serialize_indexed_models,
+)
 from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
 from tasks.Component.config_base import ConfigBase, DateTime
 from tasks.Component.config_scheduler import Scheduler
-from tasks.MultiAccountDelegation.task_name_resolver import TaskNameResolver
 
 
 class DelegationInterval(str, Enum):
-    SIX_HOURS = '六小时循环'
-    COMPLETION_TIME = '完成时间循环'
+    SIX_HOURS = "六小时循环"
+    COMPLETION_TIME = "完成时间循环"
 
 
 class MultiAccountDelegationAccount(AccountInfo):
-    """
-    每个账号在“多账号式神委派”任务里的独立配置。
-
-    这里保留了账号切换所需的基础信息，并额外增加了：
-    - next_delegation_time：决定当前账号下一次是否需要委派
-    - 各个委派任务的开关：每个账号都可以单独决定自己是否执行对应委派
-    """
+    """多账号式神委派中的账号信息和运行状态。"""
 
     next_delegation_time: DateTime = Field(
-        default=DateTime.fromisoformat('2023-01-01 00:00:00'),
-        description='每个账号下一次委派时间'
+        default=DateTime.fromisoformat("2023-01-01 00:00:00"),
+        description="每个账号下一次委派时间",
     )
-    # 弥助的画-300-六星变异卡   15小时
-    miyoshino_painting: bool = Field(default=False, description='miyoshino_painting_help')
-    # 鸟之羽-50-20片大蛇的逆鳞      24小时
-    bird_feather: bool = Field(default=False, description='bird_feather_help')
-    # 寻找耳环-300-金币28万     15小时
-    find_earring: bool = Field(default=False, description='find_earring_help')
-    # 猫老大-300-四星白蛋       12小时
-    cat_boss: bool = Field(default=False, description='cat_boss_help')
-    # 接送弥助-100-三星结界卡   8小时
-    miyoshino: bool = Field(default=False, description='miyoshino_help')
-    # 奇怪的痕迹-100-金币九万八     15小时
-    strange_trace: bool = Field(default=False, description='strange_trace_help')
+    enable_private_config: bool = Field(
+        default=False,
+        description="是否启用该账号的私有式神委派配置",
+    )
+    _legacy_config: Any = PrivateAttr(default=None)
+
+    def _get_legacy_flag(self, name: str) -> bool:
+        """兼容旧代码读取账号上的委派开关。"""
+        config = self._legacy_config
+        return bool(getattr(config, name, False))
+
+    @property
+    def miyoshino_painting(self) -> bool:
+        return self._get_legacy_flag("miyoshino_painting")
+
+    @property
+    def bird_feather(self) -> bool:
+        return self._get_legacy_flag("bird_feather")
+
+    @property
+    def find_earring(self) -> bool:
+        return self._get_legacy_flag("find_earring")
+
+    @property
+    def cat_boss(self) -> bool:
+        return self._get_legacy_flag("cat_boss")
+
+    @property
+    def miyoshino(self) -> bool:
+        return self._get_legacy_flag("miyoshino")
+
+    @property
+    def strange_trace(self) -> bool:
+        return self._get_legacy_flag("strange_trace")
 
 
+class MultiAccountDelegationPrivateConfig(ConfigBase):
+    """账号私有的式神委派开关配置。"""
 
-class MultiAccountDelegationConfig(ConfigBase, extra='allow'):
-    """
-    多账号委派任务的公共配置。
+    # 弥助的画-300-六星变异卡，15小时
+    miyoshino_painting: bool = Field(default=False, description="miyoshino_painting_help")
+    # 鸟之羽-50-20片大蛇的逆鳞，24小时
+    bird_feather: bool = Field(default=False, description="bird_feather_help")
+    # 寻找耳环-300-金币28万，15小时
+    find_earring: bool = Field(default=False, description="find_earring_help")
+    # 猫老大-300-四星白蛋，12小时
+    cat_boss: bool = Field(default=False, description="cat_boss_help")
+    # 接送弥助-100-三星结界卡，8小时
+    miyoshino: bool = Field(default=False, description="miyoshino_help")
+    # 奇怪的痕迹-100-金币九万八，15小时
+    strange_trace: bool = Field(default=False, description="strange_trace_help")
 
-    这里目前只保留和调度相关的公共字段：
-    - account_count：生成多少个账号配置
-    - delegation_interval：委派间隔策略
-    """
 
-    account_count: int = Field(default=1, ge=1, description='账号数量，决定下面会生成几组账号配置')
+class MultiAccountDelegationConfig(
+    MultiAccountDelegationPrivateConfig,
+    extra="allow",
+):
+    """多账号式神委派的公共配置。"""
+
+    account_count: int = Field(
+        default=1,
+        ge=1,
+        description="账号数量，决定下面生成几组账号配置",
+    )
     delegation_interval: DelegationInterval = Field(
         default=DelegationInterval.SIX_HOURS,
-        description='委派间隔：六小时循环|完成时间循环'
+        description="委派间隔：六小时循环|完成时间循环",
     )
 
 
-class MultiAccountDelegation(ConfigBase, extra='allow'):
-    """
-    多账号式神委派任务的总配置对象。
+_PRIVATE_CONFIG_FIELDS = frozenset(
+    MultiAccountDelegationPrivateConfig.model_fields.keys()
+)
 
-    它负责保存：
-    - 任务级调度信息
-    - 公共委派策略
-    - 每个账号自己的委派开关与下一次委派时间
-    """
+
+def _collect_raw_account_entries(data: dict) -> dict[int, Any]:
+    """收集列表和扁平字段中的原始账号配置，用于旧配置迁移。"""
+    entries: dict[int, Any] = {}
+    raw_list = data.get("account_list")
+    if isinstance(raw_list, list):
+        entries.update(enumerate(raw_list))
+
+    pattern = re.compile(r"^account_list_(\d+)$")
+    for key, value in data.items():
+        match = pattern.fullmatch(key)
+        if match:
+            entries[int(match.group(1)) - 1] = value
+    return entries
+
+
+def _extract_legacy_private_configs(data: dict) -> tuple[dict[int, dict], set[int]]:
+    """提取旧版账号组中的委派开关，并记录显式私有开关。"""
+    legacy_configs: dict[int, dict] = {}
+    explicit_flags: set[int] = set()
+    for index, value in _collect_raw_account_entries(data).items():
+        if not isinstance(value, dict):
+            continue
+        if "enable_private_config" in value:
+            explicit_flags.add(index)
+        private_config = {
+            key: value[key]
+            for key in _PRIVATE_CONFIG_FIELDS
+            if key in value
+        }
+        if private_config:
+            legacy_configs[index] = private_config
+    return legacy_configs, explicit_flags
+
+
+class MultiAccountDelegation(ConfigBase, extra="allow"):
+    """多账号式神委派的总配置。"""
 
     scheduler: Scheduler = Field(default_factory=Scheduler)
     multi_account_delegation_config: MultiAccountDelegationConfig = Field(
-        default_factory=MultiAccountDelegationConfig
+        default_factory=MultiAccountDelegationConfig,
+        title="公共式神委派配置",
+        description="所有账号共用的式神委派参数",
     )
     account_list: list[MultiAccountDelegationAccount] = Field(default_factory=list)
+    private_config: list[MultiAccountDelegationPrivateConfig] = Field(
+        default_factory=list,
+    )
 
-    def update_account_next_delegation_time(self, account: MultiAccountDelegationAccount, next_time: datetime):
+    def update_account_next_delegation_time(
+        self,
+        account: MultiAccountDelegationAccount,
+        next_time: datetime,
+    ) -> None:
+        """更新指定账号的下一次委派时间。"""
         for info in self.account_list:
-            if info.character != account.character or info.svr != account.svr:
-                continue
-            info.next_delegation_time = next_time
-            break
+            if info.character == account.character and info.svr == account.svr:
+                info.next_delegation_time = next_time
+                break
 
-    def update_account_login_history(self, account: MultiAccountDelegationAccount):
+    def update_account_login_history(self, account: MultiAccountDelegationAccount) -> None:
+        """更新账号最近一次完成时间。"""
         for info in self.account_list:
-            if info.character != account.character or info.svr != account.svr:
-                continue
-            info.last_complete_time = datetime.now()
-            break
+            if info.character == account.character and info.svr == account.svr:
+                info.last_complete_time = datetime.now()
+                break
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
-    def validator_all(cls, v: dict) -> Any:
-        if not isinstance(v, dict):
-            return v
+    def validator_all(cls, value: Any) -> Any:
+        """兼容旧版账号配置，并还原 OASX 的扁平配置组。"""
+        if not isinstance(value, dict):
+            return value
 
-        shared_config = v.get('multi_account_delegation_config')
-        if not isinstance(shared_config, dict):
-            shared_config = v.get('config') or v.get('shared_config') or {}
-        if not isinstance(shared_config, dict):
-            shared_config = {}
+        data = dict(value)
+        data.setdefault("account_list", [])
+        data.setdefault("private_config", [])
+        legacy_configs, explicit_flags = _extract_legacy_private_configs(data)
 
-        account_count = shared_config.get('account_count', v.get('account_count', 1))
-        try:
-            account_count_value = int(account_count)
-        except Exception:
-            account_count_value = 1
-
-        data = dict(v)
-        data.setdefault('account_list', [])
-        if 'multi_account_delegation_config' not in data:
-            data['multi_account_delegation_config'] = dict(shared_config, account_count=account_count_value)
-        elif isinstance(data['multi_account_delegation_config'], dict):
-            data['multi_account_delegation_config'] = MultiAccountDelegationConfig(
-                **data['multi_account_delegation_config']
+        raw_shared = data.get("multi_account_delegation_config")
+        shared_config = as_dict(raw_shared)
+        if not shared_config:
+            shared_config = as_dict(
+                data.get("config")
+                or data.get("shared_config")
+                or data.get("common_config")
             )
 
-        for alias in ('config', 'shared_config'):
+        count_config = as_dict(raw_shared)
+        if "account_count" not in count_config:
+            count_config["account_count"] = data.get(
+                "account_count",
+                shared_config.get("account_count", 1),
+            )
+        try:
+            count_config["account_count"] = int(count_config["account_count"])
+        except (TypeError, ValueError):
+            count_config["account_count"] = 1
+        count_model = MultiAccountDelegationConfig(**count_config)
+
+        shared_config.pop("account_count", None)
+        public_model = MultiAccountDelegationConfig(
+            account_count=count_model.account_count,
+            **shared_config,
+        )
+        data["multi_account_delegation_config"] = public_model
+
+        for alias in (
+            "config",
+            "shared_config",
+            "common_config",
+            "account_count",
+        ):
             data.pop(alias, None)
 
-        remove_keys = []
-        for key, value in data.items():
-            if key == 'account_list' or 'account_list' not in key:
-                continue
-            try:
-                item = MultiAccountDelegationAccount(**value)
-                if item.is_valid():
-                    data['account_list'].append(item)
-                remove_keys.append(key)
-            except Exception:
-                pass
+        # 把旧版账号组中的委派开关迁移到对应的私有配置列表。
+        private_values = data.get("private_config")
+        if not isinstance(private_values, list):
+            private_values = []
+        else:
+            private_values = list(private_values)
+        for index, private_config in legacy_configs.items():
+            while len(private_values) <= index:
+                private_values.append({})
+            if not private_values[index]:
+                private_values[index] = private_config
+        data["private_config"] = private_values
 
-        while len(data['account_list']) < account_count_value:
-            data['account_list'].append(MultiAccountDelegationAccount())
+        accounts = load_indexed_models(
+            data,
+            "account_list",
+            MultiAccountDelegationAccount,
+        )
+        private_configs = load_indexed_models(
+            data,
+            "private_config",
+            MultiAccountDelegationPrivateConfig,
+        )
 
-        for item in data['account_list']:
-            if not hasattr(item, 'next_delegation_time') or not item.next_delegation_time:
-                item.next_delegation_time = DateTime.fromisoformat('2023-01-01 00:00:00')
+        # 旧版账号组默认就是账号独立配置，迁移后自动启用私有配置。
+        for index in legacy_configs:
+            if index < len(accounts) and index not in explicit_flags:
+                accounts[index].enable_private_config = True
 
-        for key in remove_keys:
-            data.pop(key, None)
+        pad_parallel_models(
+            {
+                "account_list": accounts,
+                "private_config": private_configs,
+            },
+            count_model.account_count,
+            {
+                "account_list": MultiAccountDelegationAccount,
+                "private_config": MultiAccountDelegationPrivateConfig,
+            },
+        )
 
+        # 未启用私有配置的账号不参与私有配置序列化和运行。
+        for index, account in enumerate(accounts):
+            if not account.enable_private_config:
+                private_configs[index] = MultiAccountDelegationPrivateConfig()
+                account._legacy_config = public_model
+            else:
+                account._legacy_config = private_configs[index]
+
+        data["account_list"] = accounts
+        data["private_config"] = private_configs
         return data
 
     @model_serializer()
-    def serializer_model(self, value: Any) -> Dict[str, Any]:
-        properties = self.__dict__
-        data = {}
+    def serializer_model(self, value: Any) -> dict[str, Any]:
+        """把账号列表和私有配置序列化成前端配置组。"""
+        data: dict[str, Any] = {}
+        for key, current_value in self.__dict__.items():
+            if key == "account_list":
+                serialize_account_list(
+                    data,
+                    key,
+                    current_value,
+                    {
+                        "private_config": (
+                            self.private_config,
+                            "enable_private_config",
+                            MultiAccountDelegationPrivateConfig,
+                        ),
+                    },
+                )
+                continue
 
-        def v_dump(v):
-            try:
-                return v.model_dump()
-            except AttributeError as e:
-                logger.error(e)
-                return v
+            if key == "private_config":
+                continue
 
-        for key, value in properties.items():
-            if isinstance(value, list):
-                for index, v in enumerate(value):
-                    data[f'{key}_{index + 1}'] = v_dump(v)
+            if isinstance(current_value, list):
+                serialize_indexed_models(data, key, current_value)
             else:
-                data[key] = v_dump(value)
+                data[key] = dump_model(current_value)
         return data

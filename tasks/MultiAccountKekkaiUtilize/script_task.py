@@ -23,6 +23,8 @@ class ScriptTask(MultiAccountTaskBase):
         for index, account_info in enumerate(self.fade_conf.account_list):
             if not account_info.is_valid():
                 continue
+            if not self._is_account_in_scope(account_info):
+                continue
 
             next_utilize_time = account_info.next_utilize_time
             if self._is_in_forbidden_period(index, next_utilize_time):
@@ -75,10 +77,12 @@ class ScriptTask(MultiAccountTaskBase):
         account_success: bool,
     ) -> None:
         """读取内层调度结果后恢复配置，避免污染下一个账号。"""
-        if account_success:
-            next_utilize_time = self._get_kekkai_utilize_next_run_time()
-            self._current_next_utilize_time = next_utilize_time
-        self._restore_utilize_config()
+        try:
+            if account_success:
+                next_utilize_time = self._get_kekkai_utilize_next_run_time()
+                self._current_next_utilize_time = next_utilize_time
+        finally:
+            self._restore_utilize_config()
 
     def on_account_success(self, index: int, account_info: object) -> bool | None:
         """保存当前账号下一次蹭卡时间。"""
@@ -131,6 +135,8 @@ class ScriptTask(MultiAccountTaskBase):
         self.config.kekkai_utilize.utilize_config = UtilizeConfig(
             **selected_config.model_dump()
         )
+        # 内层任务设置下次调度时会重新加载配置，因此必须先保存临时账号配置。
+        self.config.save()
 
     def _restore_utilize_config(self):
         """恢复内层蹭卡配置和调度器，防止账号之间相互污染。"""
@@ -205,7 +211,7 @@ class ScriptTask(MultiAccountTaskBase):
     def _get_next_run_time(self):
         next_times = [
             account.next_utilize_time
-            for account in self.fade_conf.account_list
+            for account in self.get_scoped_accounts()
             if account.is_valid() and account.next_utilize_time
         ]
         if not next_times:

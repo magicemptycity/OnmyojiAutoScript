@@ -25,6 +25,8 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountKekkaiActivationAssets):
         for index, account_info in enumerate(self.fade_conf.account_list):
             if not account_info.is_valid():
                 continue
+            if not self._is_account_in_scope(account_info):
+                continue
 
             next_activation_time = account_info.next_activation_time
             if next_activation_time and next_activation_time > now:
@@ -177,7 +179,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountKekkaiActivationAssets):
         """返回所有有效账号中最早的下一次挂卡时间。"""
         next_times = [
             account.next_activation_time
-            for account in self.fade_conf.account_list
+            for account in self.get_scoped_accounts()
             if account.is_valid() and account.next_activation_time
         ]
         if not next_times:

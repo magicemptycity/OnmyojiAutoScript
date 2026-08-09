@@ -31,7 +31,10 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
 
     def run(self):
         self.fade_conf = self.get_multi_account_config()
+        # 多账号任务被“多账号多任务”调用时，只处理外层传入的当前账号。
+        self._account_scope = self._get_account_scope()
         pending_accounts = self.collect_pending_accounts(datetime.now())
+        pending_accounts = self._filter_scoped_accounts(pending_accounts)
 
         if not pending_accounts:
             self.save_multi_account_config()
@@ -141,7 +144,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
 
     def should_run_account(self, index: int, account: Any, now: datetime) -> bool:
         """判断账号是否应该在本轮执行。"""
-        return True
+        return self._is_account_in_scope(account)
 
     def get_account_config(self, index: int, account: Any) -> Any:
         """返回当前账号对应的私有配置，默认没有私有配置。"""
@@ -173,6 +176,54 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             return next_run
         return datetime.now() + timedelta(hours=1)
 
+    def _get_account_scope(self) -> Any:
+        """读取外层循环任务传入的当前账号。"""
+        if getattr(self, "current_account_index", None) is not None:
+            return None
+        return getattr(self, "current_account_info", None)
+
+    def _is_account_in_scope(self, account: Any) -> bool:
+        """判断账号是否属于当前执行范围。"""
+        scope = getattr(self, "_account_scope", None)
+        if scope is None:
+            return True
+        if account is scope:
+            return True
+
+        scope_account = getattr(scope, "account", "") or ""
+        account_value = getattr(account, "account", "") or ""
+        if scope_account and account_value:
+            return scope_account == account_value
+
+        scope_character = getattr(scope, "character", "") or ""
+        scope_svr = getattr(scope, "svr", "") or ""
+        if scope_character and scope_svr:
+            return (
+                account.character == scope_character
+                and account.svr == scope_svr
+            )
+        if scope_character:
+            return account.character == scope_character
+        return False
+
+    def _filter_scoped_accounts(self, accounts: list[tuple[int, Any]]) -> list[tuple[int, Any]]:
+        """过滤当前账号范围，防止嵌套多账号任务再次遍历全部账号。"""
+        if getattr(self, "_account_scope", None) is None:
+            return accounts
+        return [
+            (index, account)
+            for index, account in accounts
+            if self._is_account_in_scope(account)
+        ]
+
+    def get_scoped_accounts(self) -> list[Any]:
+        """返回当前执行范围内的账号，供子类计算下次调度时间。"""
+        return [
+            account
+            for account in self.fade_conf.account_list
+            if self._is_account_in_scope(account)
+        ]
+
     def save_multi_account_config(self) -> None:
         """保存外层多账号配置。"""
         setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
@@ -200,7 +251,11 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
 
     def attach_account_context(self, task_obj: Any) -> Any:
         """把当前账号信息和私有配置传递给内层任务。"""
-        task_obj.current_account_index = self.current_account_index
+        if isinstance(task_obj, MultiAccountTaskBase):
+            # 嵌套多账号任务必须根据当前账号重新查找自己的配置下标。
+            task_obj.current_account_index = None
+        else:
+            task_obj.current_account_index = self.current_account_index
         task_obj.current_account_info = self.current_account_info
         task_obj.current_account_config = self.current_account_config
         return task_obj
