@@ -219,19 +219,19 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                 continue
         self.appear_then_click(self.I_UI_BACK_RED)
         donate_datas: list = [
-            (self.config.daily_trifles.guild_donate.guild_member_list_v,
+            (self.config.daily_trifles_special.guild_donate.guild_member_list_v,
              lambda : self.switch_select(self.I_DT_GW_GUILD_MEMBER_SELECTED, self.I_DT_GW_FRIEND_SELECTED, self.I_DT_GW_SELECT_GUILD_MEMBER),
-             self.config.daily_trifles.guild_donate.name_check),
-            (self.config.daily_trifles.guild_donate.friend_list_v,
+             self.config.daily_trifles_special.guild_donate.name_check),
+            (self.config.daily_trifles_special.guild_donate.friend_list_v,
              lambda : self.switch_select(self.I_DT_GW_FRIEND_SELECTED, self.I_DT_GW_GUILD_MEMBER_SELECTED, self.I_DT_GW_SELECT_FRIEND),
-             self.config.daily_trifles.guild_donate.name_check)
+             self.config.daily_trifles_special.guild_donate.name_check)
         ]
         all_done = True
         for name_list, switch_func, name_check in donate_datas:
             # 分别执行两个名单，前一个名单失败也不能跳过后一个名单。
             donate_ret = self.donate(name_list, switch_func, name_check)
             all_done = all_done and donate_ret
-        if self.config.daily_trifles.guild_donate.auto_get_rewards:
+        if self.config.daily_trifles_special.guild_donate.auto_get_rewards:
             self.guild_donate_get_reward()
         self.goto_page(page_main)
 
@@ -284,6 +284,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             self.ui_click(self.C_DT_GW_INPUT_SEARCH, self.I_DT_GW_CONFIRM, interval=1.5)  # 点击搜索框
             self.click(self.C_DT_GW_CLICK_INPUT)  # 点击名称输入框
             self.device.adb.send_keys(name)  # 输入名称
+            sleep(2)  # 等待
             self.ui_click_until_disappear(self.I_DT_GW_CONFIRM, interval=1.5)  # 点击确定
             donate_btn = self.I_DT_GW_DONATE
             if name_check:  # 若有多个相同前缀名称, 则需要取出一样的或最相近的名称
@@ -315,15 +316,16 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                 continue
             if self.appear(self.I_DT_GW_SEARCH_EMPTY):
                 logger.warning('Maybe not wish or not find, skip')
-                if self.config.daily_trifles.guild_donate.notify_enable:
+                if self.config.daily_trifles_special.guild_donate.notify_enable:
                     self.config.notifier.push(title='好友搜索失败', content=f'{name} 搜索失败, 没有搜索到对应用户, 无法捐赠')
                 return False
             if self.appear_then_click(donate_btn, interval=0.6):
+                sleep(2)
                 timeout_timer.reset()
                 continue
             if self.appear(self.I_DT_GW_INSUFFICIENT, interval=0.6):
                 logger.warning('Not enough fragment to donate, skip')
-                if self.config.daily_trifles.guild_donate.notify_enable:
+                if self.config.daily_trifles_special.guild_donate.notify_enable:
                     self.config.notifier.push(title='捐赠碎片不足', content=f'捐给{name}的碎片不足, 请上线查看')
                 return False
             if self.appear(self.I_DT_GW_FULL, interval=1.2):
@@ -341,7 +343,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         while not timeout_timer.reached():
             self.screenshot()
             if self.appear(self.I_DT_GW_SEARCH_EMPTY):  # 空的直接退出
-                if self.config.daily_trifles.guild_donate.notify_enable:
+                if self.config.daily_trifles_special.guild_donate.notify_enable:
                     self.config.notifier.push(title='好友搜索失败', content=f'没有搜索到对应用户 {name}, 无法捐赠')
                 return None
             text_results = self.O_DT_GW_NAME.detect_and_ocr(self.device.image)
@@ -459,7 +461,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         while 1:
             self.screenshot()
             # count, price = detect_buy_count(roi)
-            # if count >= self.config.model.daily_trifles.trifles_config.buy_sushi_count:
+            # if count >= self.config.model.daily_trifles_special.trifles_config.buy_sushi_count:
             #     break
             logger.info(f"购买次数为: {self.config.daily_trifles_special.trifles_config.buy_sushi_count} 次")
             if self.appear(self.I_STORE_COST_TYPE_JADE):
