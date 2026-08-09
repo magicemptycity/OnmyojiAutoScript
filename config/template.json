@@ -607,8 +607,7 @@
       "float_time": "00:00:00"
     },
     "common_config": {
-      "same_heart_team_mode": "御魂",
-      "team_num": "2人"
+      "same_heart_team_mode": "御魂"
     },
     "orochi_config": {
       "layer": "壹层",

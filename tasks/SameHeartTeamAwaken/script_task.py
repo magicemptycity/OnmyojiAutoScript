@@ -11,7 +11,6 @@ from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_awake_zones, page_main, page_shikigami_records
 from tasks.SameHeartTeam.assets import SameHeartTeamAssets
-from tasks.SameHeartTeam.config import SameHeartTeamTeamNum
 from tasks.SameHeartTeam.script_task import ScriptTask as SameHeartTeamScriptTask
 from tasks.SameHeartTeamAwaken.config import SameHeartTeamAwaken, SameHeartTeamAwakenConfig
 from tasks.EvoZone.assets import EvoZoneAssets
@@ -110,15 +109,18 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
             self.set_next_run(self.name, finish=False, success=False)
             raise TaskEnd(self.name)
 
-        # 设置队员数量为 2 人模式，确保点击集结后进入正确的组队状态
-        if not SameHeartTeamScriptTask._set_team_member_count(self, SameHeartTeamTeamNum.TWO):
+        # 自动选择队员，默认2人，最低1人
+        if not SameHeartTeamScriptTask._set_team_member_count(self):
             logger.warning('无法设置队员数量')
             self.set_next_run(self.name, finish=False, success=False)
             raise TaskEnd(self.name)
 
         # 点击集结按钮，开始申请副本集结
         logger.info('点击集结按钮')
-        SameHeartTeamScriptTask._confirm_gather(self)
+        if not SameHeartTeamScriptTask._confirm_gather(self):
+            logger.warning('无法点击副本集结按钮')
+            self.set_next_run(self.name, finish=False, success=False)
+            raise TaskEnd(self.name)
 
         # 等待集结成功并返回组队页面，只有成功进入组队页面才能继续创建房间
         if not SameHeartTeamScriptTask._wait_for_gather_success(self):

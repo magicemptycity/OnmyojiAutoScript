@@ -44,11 +44,6 @@ class SameHeartTeamMode(str, Enum):
     AWAKEN = '觉醒'
 
 
-class SameHeartTeamTeamNum(str, Enum):
-    ONE = '1人'
-    TWO = '2人'
-
-
 class SameHeartTeamSwitchSoulConfig(SwitchSoulConfig):
     enable: bool = Field(default=False, description='same_heart_team_switch_soul_enable_help')
     switch_group_team: str = Field(default='-1,-1', description='same_heart_team_switch_group_team_help')
@@ -60,8 +55,6 @@ class SameHeartTeamSwitchSoulConfig(SwitchSoulConfig):
 class SameHeartTeamCommonConfig(ConfigBase):
     # 选择要执行的副本类型
     same_heart_team_mode: SameHeartTeamMode = Field(default=SameHeartTeamMode.OROCHI, description='same_heart_team_mode_help')
-    # 选择人数：1人或2人
-    team_num: SameHeartTeamTeamNum = Field(default=SameHeartTeamTeamNum.TWO, description='same_heart_team_team_num_help')
 
 
 class SameHeartTeamOrochiConfig(ConfigBase):

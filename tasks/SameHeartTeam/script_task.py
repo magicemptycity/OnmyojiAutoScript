@@ -14,7 +14,7 @@ from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_shikigami_records, page_awake_zones, page_soul_zones
 from tasks.SameHeartTeam.assets import SameHeartTeamAssets
-from tasks.SameHeartTeam.config import SameHeartTeamMode, SameHeartTeamTeamNum
+from tasks.SameHeartTeam.config import SameHeartTeamMode
 from tasks.Orochi.assets import OrochiAssets
 from tasks.EvoZone.assets import EvoZoneAssets
 from tasks.Orochi.config import Layer as OrochiLayer
@@ -79,7 +79,9 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
 
         # 4. 如果是觉醒，先选择麒麟类型
         if con.common_config.same_heart_team_mode == SameHeartTeamMode.AWAKEN:
-            self._select_kirin(kirin_button)
+            if not self._select_kirin(kirin_button):
+                logger.warning('未能进入觉醒副本页面')
+                self._finish_task_failure()
         # 如果是御魂，直接进入御魂页面
         if con.common_config.same_heart_team_mode == SameHeartTeamMode.OROCHI:
             self.goto_page(page_orochi)
@@ -88,7 +90,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         layer = active_config.layer.value if hasattr(active_config.layer, 'value') else active_config.layer
         if not self._select_layer(layer, layer_list):
             logger.warning(f'未找到对应层数: {layer}，任务终止')
-            return
+            self._finish_task_failure()
 
         # 6. 锁定阵容（如果需要）
         self.check_lock(active_config.lock_team_enable, lock_icon, unlock_icon)
@@ -105,23 +107,27 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         # 8. 进入同心队页面
         if not self._enter_same_heart_team_page():
             logger.warning('无法进入同心队页面')
-            return
+            self._finish_task_failure()
 
         # 9. 进入集结页面
         if not self._enter_gather_page():
             logger.warning('无法进入集结页面')
-            return
+            self._finish_task_failure()
 
-        # 10. 设置队员数量（1或2）
-        self._set_team_member_count(con.common_config.team_num)
+        # 10. 自动选择队员，默认2人，最低1人
+        if not self._set_team_member_count():
+            logger.warning('无法设置队员数量')
+            self._finish_task_failure()
 
         # 11. 点击副本集结按钮
-        self._confirm_gather()
+        if not self._confirm_gather():
+            logger.warning('无法点击副本集结按钮')
+            self._finish_task_failure()
 
         # 12. 等待集结成功，进入组队页面
         if not self._wait_for_gather_success():
             logger.warning('集结失败')
-            return
+            self._finish_task_failure()
 
         # 13. 在组队页面点击创建队伍图标，进入房间
         logger.info('点击创建队伍图标')
@@ -216,21 +222,29 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
             self.set_next_run('SameHeartTeam', finish=False, success=False)
         raise TaskEnd('SameHeartTeam')
 
+    def _finish_task_failure(self, task_name: str = 'SameHeartTeam') -> None:
+        """记录失败并结束任务，避免失败分支被外层任务误判为成功。"""
+        self.set_next_run(task_name, finish=False, success=False)
+        raise TaskEnd(task_name)
+
     # ---------- 辅助方法 ----------
 
     def _select_kirin(self, kirin_button):
-        """选择麒麟类型"""
+        """选择麒麟类型，超过重试次数仍未进入组队页时返回失败。"""
         logger.info('选择麒麟')
-        while True:
+        for _ in range(60):
             self.screenshot()
             if self.appear(self.I_FORM_TEAM):
                 return True
             if self.appear_then_click(kirin_button, interval=1):
                 continue
+        logger.warning('多次尝试后仍未进入觉醒组队页面')
         return False
 
     def _select_layer(self, layer: str, layer_list) -> bool:
         """选中指定层数"""
+        if hasattr(layer, 'value'):
+            layer = layer.value
         pos = self.list_find(layer_list, layer)
         if pos:
             self.device.click(x=pos[0], y=pos[1], control_name=f'LAYER_{layer}')
@@ -259,10 +273,8 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
                 sleep(0.5)
         return False
 
-    def _set_team_member_count(self, team_num: SameHeartTeamTeamNum):
-        raw = team_num.value
-        digits = ''.join(filter(str.isdigit, raw))
-        target = int(digits) if digits else 1
+    def _set_team_member_count(self):
+        target = 2
         logger.info(f'设置队员数量为 {target}')
         for _ in range(10):
             self.screenshot()
@@ -272,8 +284,12 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
             current_unselected = len(unselected_matches)
             logger.info(f'当前选中数量: {current_selected}, 未选中数量: {current_unselected}')
 
-            if current_selected <= target and current_unselected == 0:
-                logger.info('当前选中数量小于等于目标人数，且没有未选中图标可点击，视为满足要求')
+            if current_selected == 0 and current_unselected == 0:
+                logger.error('未检测到已选择或未选择的队员图标，任务结束')
+                return False
+
+            if current_selected < target and current_unselected == 0:
+                logger.info('可选人数不足默认人数2人，按最低1人继续')
                 return True
 
             if current_selected == target:

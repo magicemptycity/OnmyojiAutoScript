@@ -12,7 +12,6 @@ from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import any_of, page_main, page_shikigami_records, page_soul_zones
 from tasks.SameHeartTeam.assets import SameHeartTeamAssets
-from tasks.SameHeartTeam.config import SameHeartTeamTeamNum
 from tasks.SameHeartTeam.script_task import ScriptTask as SameHeartTeamScriptTask
 from tasks.SameHeartTeamOrochi.config import SameHeartTeamOrochi, SameHeartTeamOrochiConfig
 from tasks.Orochi.assets import OrochiAssets
@@ -23,6 +22,13 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
     """
     同心队御魂任务
     """
+
+    task_name = 'SameHeartTeamOrochi'
+
+    def _finish_task_failure(self) -> None:
+        """记录失败并结束任务，避免被外层任务误判为成功。"""
+        self.set_next_run(self.task_name, finish=False, success=False)
+        raise TaskEnd(self.task_name)
 
     def run(self):
         # 从配置读取当前任务的御魂同心队设置
@@ -62,7 +68,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
 
         if not SameHeartTeamScriptTask._select_layer(self, active_config.layer, OrochiAssets.L_LAYER_LIST):
             logger.warning(f'未找到对应层数: {active_config.layer}')
-            return
+            self._finish_task_failure()
 
         if active_config.lock_team_enable:
             self.check_lock(active_config.lock_team_enable, self.I_OROCHI_LOCK, self.I_OROCHI_UNLOCK)
@@ -78,24 +84,26 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
 
         if not SameHeartTeamScriptTask._enter_same_heart_team_page(self):
             logger.warning('无法进入同心队页面')
-            return
+            self._finish_task_failure()
 
         if not SameHeartTeamScriptTask._enter_gather_page(self):
             logger.warning('无法进入集结页面')
-            return
+            self._finish_task_failure()
 
-        # 设置队员数量为 2，进入副本集结流程
-        if not SameHeartTeamScriptTask._set_team_member_count(self, SameHeartTeamTeamNum.TWO):
+        # 自动选择队员，默认2人，最低1人
+        if not SameHeartTeamScriptTask._set_team_member_count(self):
             logger.warning('无法设置队员数量')
-            return
+            self._finish_task_failure()
 
         logger.info('点击集结按钮')
-        SameHeartTeamScriptTask._confirm_gather(self)
+        if not SameHeartTeamScriptTask._confirm_gather(self):
+            logger.warning('无法点击副本集结按钮')
+            self._finish_task_failure()
 
         # 等待集结成功，保证页面跳转回队伍界面之后再进行下一步创建房间
         if not SameHeartTeamScriptTask._wait_for_gather_success(self):
             logger.warning('集结失败')
-            return
+            self._finish_task_failure()
 
         logger.info('点击创建队伍图标')
         while True:
