@@ -443,11 +443,42 @@
       "delay_date": 1,
       "float_time": "00:00:00"
     },
+    "multi_account_kekkai_activation_count_config": {
+      "account_count": 1
+    },
     "multi_account_kekkai_activation_config": {
-      "account_count": 1,
-      "exchange_before": true,
-      "exchange_max": true
-    }
+      "card_type": "太鼓",
+      "card_star": "6星",
+      "swipe_retry_limit": 10,
+      "min_taiko_num": 8,
+      "min_fish_num": 16,
+      "auto_fill": false,
+      "shikigami_class": "N"
+    },
+    "account_list": [
+      {
+        "character": "",
+        "svr": "",
+        "account": "",
+        "account_alias": "",
+        "apple_or_android": true,
+        "last_complete_time": "2023-01-01 00:00:00",
+        "next_activation_time": "2023-01-01 00:00:00",
+        "enable_private_config": false,
+        "card_not_found_count": 0
+      }
+    ],
+    "private_config": [
+      {
+        "card_type": "太鼓",
+        "card_star": "6星",
+        "swipe_retry_limit": 10,
+        "min_taiko_num": 8,
+        "min_fish_num": 16,
+        "auto_fill": false,
+        "shikigami_class": "N"
+      }
+    ]
   },
   "demon_encounter": {
     "scheduler": {

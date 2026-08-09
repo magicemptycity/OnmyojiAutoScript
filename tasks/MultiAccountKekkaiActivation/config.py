@@ -73,26 +73,17 @@ class MultiAccountKekkaiActivationPrivateConfig(ConfigBase):
     )
 
 
-class MultiAccountKekkaiActivationConfig(
-    MultiAccountKekkaiActivationPrivateConfig,
-    extra="allow",
-):
-    """多账号挂卡的公共配置。"""
-
+class MultiAccountKekkaiActivationCountConfig(ConfigBase):
+    """多账号挂卡的账号数量配置。"""
     account_count: int = Field(
         default=1,
         ge=1,
-        description="账号数量，决定下面生成几组账号配置",
-    )
-    exchange_before: bool = Field(
-        default=True,
-        description="执行挂卡前是否先替换满级式神",
-    )
-    exchange_max: bool = Field(
-        default=True,
-        description="执行挂卡后是否再替换满级式神",
+        title='账号数量',
+        description='账号数量，决定下面生成几组账号配置',
     )
 
+class MultiAccountKekkaiActivationConfig(MultiAccountKekkaiActivationPrivateConfig):
+    """多账号挂卡的公共配置。"""
 
 _PRIVATE_CONFIG_FIELDS = frozenset(
     MultiAccountKekkaiActivationPrivateConfig.model_fields.keys()
@@ -137,6 +128,11 @@ class MultiAccountKekkaiActivation(ConfigBase, extra="allow"):
     """多账号挂卡的总配置。"""
 
     scheduler: Scheduler = Field(default_factory=Scheduler)
+    multi_account_kekkai_activation_count_config: MultiAccountKekkaiActivationCountConfig = Field(
+        default_factory=MultiAccountKekkaiActivationCountConfig,
+        title='账号数量',
+        description='账号数量，决定下面生成几组账号配置',
+    )
     multi_account_kekkai_activation_config: MultiAccountKekkaiActivationConfig = Field(
         default_factory=MultiAccountKekkaiActivationConfig,
         title="公共挂卡配置",
@@ -189,20 +185,21 @@ class MultiAccountKekkaiActivation(ConfigBase, extra="allow"):
                 or data.get("shared_activation_config")
             )
 
-        raw_count = data.get("multi_account_kekkai_activation_config")
+        raw_count = data.get("multi_account_kekkai_activation_count_config")
         count_config = as_dict(raw_count)
         if "account_count" not in count_config:
             count_config["account_count"] = data.get(
                 "account_count",
                 shared_config.get("account_count", 1),
             )
-        count_model = MultiAccountKekkaiActivationConfig(**count_config)
+        count_model = MultiAccountKekkaiActivationCountConfig(**count_config)
 
         shared_config.pop("account_count", None)
-        public_model = MultiAccountKekkaiActivationConfig(
-            account_count=count_model.account_count,
-            **shared_config,
-        )
+        # 这两个选项固定开启，不再暴露给使用者配置。
+        shared_config.pop("exchange_before", None)
+        shared_config.pop("exchange_max", None)
+        data["multi_account_kekkai_activation_count_config"] = count_model
+        public_model = MultiAccountKekkaiActivationConfig(**shared_config)
         data["multi_account_kekkai_activation_config"] = public_model
 
         for alias in (
@@ -210,6 +207,8 @@ class MultiAccountKekkaiActivation(ConfigBase, extra="allow"):
             "shared_config",
             "shared_activation_config",
             "account_count",
+            "exchange_before",
+            "exchange_max",
         ):
             data.pop(alias, None)
 

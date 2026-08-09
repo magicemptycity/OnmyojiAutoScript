@@ -35,8 +35,8 @@ class MultiAccountKekkaiUtilizeAccount(AccountInfo):
     )
 
 
-class MultiAccountKekkaiUtilizeConfig(ConfigBase, extra="allow"):
-    """多账号蹭卡的公共结界配置。"""
+class MultiAccountKekkaiUtilizeBaseConfig(ConfigBase):
+    """公共和私有蹭卡共用的配置字段。"""
 
     utilize_rule: UtilizeRule = Field(default=UtilizeRule.DEFAULT, description="utilize_rule_help")
     select_friend_list: SelectFriendList = Field(
@@ -55,6 +55,10 @@ class MultiAccountKekkaiUtilizeConfig(ConfigBase, extra="allow"):
     box_ap_enable: bool = Field(default=True)
     box_exp_enable: bool = Field(default=True)
     box_exp_waste: bool = Field(default=True, description="box_exp_waste_help")
+
+
+class MultiAccountKekkaiUtilizeConfig(MultiAccountKekkaiUtilizeBaseConfig, extra="allow"):
+    """多账号蹭卡的公共结界配置。"""
 
 
 class MultiAccountKekkaiUtilizeCountConfig(ConfigBase, extra="allow"):
@@ -88,26 +92,8 @@ class MultiAccountKekkaiUtilizeForbidConfig(ConfigBase, extra="allow"):
     )
 
 
-class MultiAccountKekkaiUtilizePrivateUtilizeConfig(ConfigBase):
-    """账号私有结界蹭卡配置。"""
-
-    utilize_rule: UtilizeRule = Field(default=UtilizeRule.DEFAULT, description="utilize_rule_help")
-    select_friend_list: SelectFriendList = Field(
-        default=SelectFriendList.SAME_SERVER,
-        description="select_friend_list_help",
-    )
-    auto_fill: bool = Field(default=False, description="auto_fill_help")
-    shikigami_class: ShikigamiClass = Field(
-        default=ShikigamiClass.N,
-        description="shikigami_class_help",
-    )
-    shikigami_order: int = Field(default=4, description="shikigami_order_help")
-    harvest_guild_max_times: int = Field(default=3, description="harvest_guild_max_times_help")
-    utilize_harvest: bool = Field(default=True, description="utilize_harvest_help")
-    utilize_enable: bool = Field(default=True, description="utilize_enable_help")
-    box_ap_enable: bool = Field(default=True)
-    box_exp_enable: bool = Field(default=True)
-    box_exp_waste: bool = Field(default=True, description="box_exp_waste_help")
+class MultiAccountKekkaiUtilizePrivateUtilizeConfig(MultiAccountKekkaiUtilizeBaseConfig):
+    """多账号蹭卡的账号私有配置。"""
 
 
 class MultiAccountKekkaiUtilizePrivateForbidConfig(ConfigBase):

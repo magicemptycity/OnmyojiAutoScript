@@ -129,7 +129,6 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountKekkaiActivationAssets):
         if index is None:
             index = self._resolve_account_index(account_info)
         selected_config = self.get_account_config(index, account_info)
-        public_config = self.fade_conf.multi_account_kekkai_activation_config
         activation_config = self.config.kekkai_activation.activation_config
 
         activation_config.card_type = selected_config.card_type
@@ -139,8 +138,8 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountKekkaiActivationAssets):
         activation_config.min_fish_num = selected_config.min_fish_num
         activation_config.auto_fill = selected_config.auto_fill
         activation_config.shikigami_class = selected_config.shikigami_class
-        activation_config.exchange_before = public_config.exchange_before
-        activation_config.exchange_max = public_config.exchange_max
+        activation_config.exchange_before = True
+        activation_config.exchange_max = True
         activation_config.card_not_found_count = account_info.card_not_found_count
 
     def _sync_account_activation_state(
