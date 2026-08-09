@@ -1,0 +1,230 @@
+"""多账号任务共用的外层轮询执行器。"""
+
+import importlib.util
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, ClassVar
+
+from module.exception import RequestHumanTakeover, TaskEnd
+from module.logger import logger
+from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
+from tasks.Component.SwitchAccount.switch_account import SwitchAccount
+from tasks.GameUi.game_ui import GameUi
+
+
+class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
+    """多账号任务的通用调度基类。
+
+    子类只需要实现账号筛选、账号执行和账号级状态更新，公共的切号、异常隔离、
+    内层任务上下文传递、逐账号保存以及最终调度逻辑由这里统一处理。
+    """
+
+    task_name: ClassVar[str] = ""
+    multi_account_config_attr: ClassVar[str] = ""
+    retry_delay: ClassVar[timedelta] = timedelta(minutes=10)
+    server_schedule: ClassVar[bool] = True
+
+    fade_conf: Any = None
+    current_account_index: int | None = None
+    current_account_info: Any = None
+    current_account_config: Any = None
+
+    def run(self):
+        self.fade_conf = self.get_multi_account_config()
+        pending_accounts = self.collect_pending_accounts(datetime.now())
+
+        if not pending_accounts:
+            self.save_multi_account_config()
+            self.set_next_run(
+                self.task_name,
+                success=True,
+                server=self.server_schedule,
+                target=self.get_next_run_time(),
+            )
+            raise TaskEnd(self.task_name)
+
+        overall_failed = False
+        for index, account in pending_accounts:
+            self._set_account_context(index, account)
+            logger.info("开始处理账号 %s-%s", account.character, account.svr)
+
+            if not self._switch_account(account):
+                overall_failed = True
+                logger.warning("切换到账号 %s-%s 失败", account.character, account.svr)
+                self.on_account_failure(index, account, "切换账号失败")
+                self.save_multi_account_config()
+                self._clear_account_context()
+                continue
+
+            account_success = False
+            try:
+                self.prepare_account(index, account)
+                result = self.run_account(index, account)
+                account_success = result is not False
+            except TaskEnd:
+                # 内层任务通常通过 TaskEnd 表示流程正常结束。
+                account_success = True
+            except RequestHumanTakeover:
+                raise
+            except Exception as exc:
+                overall_failed = True
+                logger.exception(
+                    "执行%s失败（%s-%s）：%s",
+                    self.task_name,
+                    account.character,
+                    account.svr,
+                    exc,
+                )
+            finally:
+                try:
+                    self.cleanup_account(index, account, account_success)
+                except RequestHumanTakeover:
+                    raise
+                except Exception as exc:
+                    account_success = False
+                    overall_failed = True
+                    logger.exception(
+                        "清理%s账号上下文失败（%s-%s）：%s",
+                        self.task_name,
+                        account.character,
+                        account.svr,
+                        exc,
+                    )
+
+            if account_success:
+                try:
+                    success_result = self.on_account_success(index, account)
+                except RequestHumanTakeover:
+                    raise
+                except Exception as exc:
+                    success_result = False
+                    logger.exception(
+                        "更新%s账号状态失败（%s-%s）：%s",
+                        self.task_name,
+                        account.character,
+                        account.svr,
+                        exc,
+                    )
+                if success_result is False:
+                    account_success = False
+                    overall_failed = True
+
+            if not account_success:
+                overall_failed = True
+                self.on_account_failure(index, account, "账号任务执行失败")
+
+            self.save_multi_account_config()
+            self._clear_account_context()
+
+        self.set_next_run(
+            self.task_name,
+            success=not overall_failed,
+            server=self.server_schedule,
+            target=self.get_next_run_time(),
+        )
+        raise TaskEnd(self.task_name)
+
+    def get_multi_account_config(self) -> Any:
+        """获取外层多账号配置对象。"""
+        config = getattr(self.config, self.multi_account_config_attr, None)
+        if config is None:
+            config = getattr(self.config.model, self.multi_account_config_attr)
+        return config
+
+    def collect_pending_accounts(self, now: datetime) -> list[tuple[int, Any]]:
+        """返回本轮需要执行的账号及其下标。"""
+        return [
+            (index, account)
+            for index, account in enumerate(self.fade_conf.account_list)
+            if account.is_valid() and self.should_run_account(index, account, now)
+        ]
+
+    def should_run_account(self, index: int, account: Any, now: datetime) -> bool:
+        """判断账号是否应该在本轮执行。"""
+        return True
+
+    def get_account_config(self, index: int, account: Any) -> Any:
+        """返回当前账号对应的私有配置，默认没有私有配置。"""
+        return None
+
+    def prepare_account(self, index: int, account: Any) -> None:
+        """账号切换成功后、执行内层任务前的准备钩子。"""
+
+    def run_account(self, index: int, account: Any) -> bool | None:
+        """执行一个账号的实际业务。"""
+        raise NotImplementedError
+
+    def cleanup_account(self, index: int, account: Any, account_success: bool) -> None:
+        """账号业务结束后的清理钩子。"""
+
+    def on_account_success(self, index: int, account: Any) -> bool | None:
+        """账号执行成功后的状态钩子。"""
+        account.last_complete_time = datetime.now()
+        return True
+
+    def on_account_failure(self, index: int, account: Any, reason: str) -> None:
+        """账号执行失败后的状态钩子。"""
+
+    def get_next_run_time(self) -> datetime | None:
+        """返回外层任务下一次运行时间，子类可按账号状态覆盖。"""
+        scheduler = getattr(self.fade_conf, "scheduler", None)
+        next_run = getattr(scheduler, "next_run", None) if scheduler else None
+        if isinstance(next_run, datetime):
+            return next_run
+        return datetime.now() + timedelta(hours=1)
+
+    def save_multi_account_config(self) -> None:
+        """保存外层多账号配置。"""
+        setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
+        self.config.save()
+
+    def create_task_object(
+        self,
+        task_name: str,
+        *,
+        script_name: str = "script_task.py",
+        **kwargs,
+    ):
+        """加载一个内层任务，并传递当前账号上下文。"""
+        module_path = Path.cwd() / "tasks" / task_name / script_name
+        module_name = f"multi_account_inner_{task_name}_{module_path.stem}"
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"无法加载内层任务：{module_path}")
+
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        task_obj = module.ScriptTask(**kwargs)
+        self.attach_account_context(task_obj)
+        return task_obj
+
+    def attach_account_context(self, task_obj: Any) -> Any:
+        """把当前账号信息和私有配置传递给内层任务。"""
+        task_obj.current_account_index = self.current_account_index
+        task_obj.current_account_info = self.current_account_info
+        task_obj.current_account_config = self.current_account_config
+        return task_obj
+
+    def _switch_account(self, account: Any) -> bool:
+        try:
+            return SwitchAccount(self.config, self.device, account).switchAccount()
+        except RequestHumanTakeover:
+            raise
+        except Exception as exc:
+            logger.exception(
+                "切换账号时发生异常（%s-%s）：%s",
+                account.character,
+                account.svr,
+                exc,
+            )
+            return False
+
+    def _set_account_context(self, index: int, account: Any) -> None:
+        self.current_account_index = index
+        self.current_account_info = account
+        self.current_account_config = self.get_account_config(index, account)
+
+    def _clear_account_context(self) -> None:
+        self.current_account_index = None
+        self.current_account_info = None
+        self.current_account_config = None

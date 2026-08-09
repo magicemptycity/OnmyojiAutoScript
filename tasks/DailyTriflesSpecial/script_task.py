@@ -228,7 +228,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         ]
         all_done = True
         for name_list, switch_func, name_check in donate_datas:
-            all_done = all_done and self.donate(name_list, switch_func, name_check)
+            # 分别执行两个名单，前一个名单失败也不能跳过后一个名单。
+            donate_ret = self.donate(name_list, switch_func, name_check)
+            all_done = all_done and donate_ret
         if self.config.daily_trifles.guild_donate.auto_get_rewards:
             self.guild_donate_get_reward()
         self.goto_page(page_main)

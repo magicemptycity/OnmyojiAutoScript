@@ -240,10 +240,19 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         ]
         all_done = True
         for name_list, switch_func, name_check in donate_datas:
-            all_done = all_done and self.donate(name_list, switch_func, name_check)
+            # 同时执行两个名单；不能直接写成 all_done and ...，否则前一个名单失败后会短路，
+            # 跳过后一个名单。
+            donate_ret = self.donate(name_list, switch_func, name_check)
+            all_done = all_done and donate_ret
         if self.config.daily_trifles.guild_donate.auto_get_rewards:
             self.guild_donate_get_reward()
-        self.config.daily_trifles.done_record.guild_donate_finish = all_done
+
+        # 完成标志必须和当天的时间戳一起写入，today_is_done() 才能在当天后续运行时跳过，
+        # 同时失败时不会被误判为完成，仍然可以重试。
+        done_record = self.config.daily_trifles.done_record
+        done_record.guild_donate_finish = all_done
+        if all_done:
+            done_record.guild_donate_dt = datetime.now()
         self.goto_page(page_main)
 
     def guild_donate_get_reward(self):
@@ -430,6 +439,8 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         if self.config.daily_trifles.today_is_done('store_sign'):
             logger.info('Today is done, skip')
             return
+        # 当前没有“已领取”状态模板，进入签到流程即视为当天已处理，
+        # 这样玩家手动领取后不会在下一次调度中重复进入商店。
         self.config.daily_trifles.done_record.store_sign_dt = datetime.now()
         self.goto_page(page_store_gift_room)
         self.screenshot()
@@ -487,7 +498,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             # count, price = detect_buy_count(roi)
             # if count >= self.config.model.daily_trifles.trifles_config.buy_sushi_count:
             #     break
-            logger.info(f"购买次数为: {self.config.daily_trifles_special.trifles_config.buy_sushi_count} 次")
+            logger.info(f"购买次数为: {self.config.daily_trifles.trifles_config.buy_sushi_count} 次")
             if self.appear(self.I_STORE_COST_TYPE_JADE):
                 count, price = detect_buy_count(self.I_STORE_COST_TYPE_JADE)
                 if count >= self.config.daily_trifles.trifles_config.buy_sushi_count:
@@ -499,7 +510,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             if self.appear(self.I_SPECIAL_SUSHI):
                 # 此处确定当前购买体力所需勾玉数量的位置,用于后续识别
                 count, price = detect_buy_count(self.I_SPECIAL_SUSHI)
-                if count >= self.config.daily_trifles_special.trifles_config.buy_sushi_count:
+                if count >= self.config.daily_trifles.trifles_config.buy_sushi_count:
                     logger.info(f"已经购买 {count} 次, 退出购买")
                     break
                 self.ui_click(self.I_SPECIAL_SUSHI, stop=self.I_STORE_COST_TYPE_JADE, interval=2)

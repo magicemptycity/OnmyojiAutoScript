@@ -1,6 +1,6 @@
-# This file is a copied-and-isolated implementation of AreaBoss logic
-# It reads per-account overrides from `current_account_info` when enabled,
-# otherwise falls back to global `config.area_boss` values.
+# 这是地域鬼王的内层执行任务。
+# 外层多账号任务会把当前账号的私有配置通过 current_account_config 传进来。
+
 import time
 
 import random
@@ -25,10 +25,10 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, MultiAccountAreaBossAssets):
         return self.I_AB_CLOSE_RED
 
     def _get_active_area_boss_config(self):
-        # 返回当前账号的私有配置；若未启用则返回全局 common_config
-        info = getattr(self, 'current_account_info', None)
-        if info and getattr(info, 'enable_private_config', False):
-            return info
+        # 私有配置已经由外层任务按账号下标选好；没有私有配置时使用公共配置。
+        private_config = getattr(self, 'current_account_config', None)
+        if private_config is not None:
+            return private_config
         return self.config.multi_account_area_boss.common_config
 
     def _get_boss_conf(self):
