@@ -150,57 +150,78 @@ class ScriptTask(MultiAccountTaskBase):
         del self._utilize_config_backup
         del self._kekkai_scheduler_backup
 
-    def _get_active_forbid_window(self, index: int):
-        """获取当前账号实际使用的禁止蹭卡时段，私有配置优先于公共配置。"""
+    def _get_active_forbid_windows(self, index: int):
+        """获取当前账号实际使用的禁止蹭卡时段列表，私有配置优先于公共配置。"""
         account_info = self.fade_conf.account_list[index]
         private_config = self._get_active_forbid_config(index)
-        if (
-            account_info.enable_private_forbid_time
-            and private_config
-            and private_config.utilize_forbidden_time_enable
-        ):
-            return (
-                private_config.utilize_forbidden_time_start,
-                private_config.utilize_forbidden_time_end,
-            )
+        if account_info.enable_private_forbid_time and private_config:
+            return private_config.get_forbid_windows()
 
         public_config = self.fade_conf.multi_account_kekkai_forbid_config
         if public_config.public_forbid_time_enable:
-            return (
-                public_config.public_forbid_time_start,
-                public_config.public_forbid_time_end,
-            )
+            return public_config.get_forbid_windows()
 
-        return None, None
+        return []
 
     def _is_in_forbidden_period(self, index: int, next_utilize_time):
         if not next_utilize_time:
             return False
 
-        start, end = self._get_active_forbid_window(index)
-        if start is None or end is None or start == end:
+        windows = self._get_active_forbid_windows(index)
+        if not windows:
             return False
 
         current_time = next_utilize_time.time()
-        if start < end:
-            return start <= current_time < end
-        return current_time >= start or current_time < end
+        for start, end in windows:
+            if start == end:
+                continue
+            if start < end:
+                if start <= current_time < end:
+                    return True
+            elif current_time >= start or current_time < end:
+                return True
+        return False
 
     def _get_end_forbidden_time(self, index: int, next_utilize_time):
-        start, end = self._get_active_forbid_window(index)
-        if start is None or end is None:
+        """计算当前禁止时段合并后的结束时间。"""
+        windows = self._get_active_forbid_windows(index)
+        if not windows:
             return next_utilize_time
 
-        if start < end:
-            end_time = datetime.combine(next_utilize_time.date(), end)
-            if end_time <= next_utilize_time:
-                end_time += timedelta(days=1)
-        elif next_utilize_time.time() >= start:
-            end_time = datetime.combine(next_utilize_time.date() + timedelta(days=1), end)
-        else:
-            end_time = datetime.combine(next_utilize_time.date(), end)
+        current = next_utilize_time
+        intervals = []
+        for day_offset in (-1, 0, 1):
+            current_date = current.date() + timedelta(days=day_offset)
+            for start, end in windows:
+                start_at = datetime.combine(current_date, start)
+                end_at = datetime.combine(current_date, end)
+                if end <= start:
+                    end_at += timedelta(days=1)
+                intervals.append((start_at, end_at))
 
-        return end_time + timedelta(minutes=10)
+        active_intervals = [
+            (start_at, end_at)
+            for start_at, end_at in intervals
+            if start_at <= current < end_at
+        ]
+        if not active_intervals:
+            return current + timedelta(minutes=10)
+
+        forbidden_end = max(end_at for _, end_at in active_intervals)
+        while True:
+            extended_end = max(
+                (
+                    end_at
+                    for start_at, end_at in intervals
+                    if start_at <= forbidden_end
+                ),
+                default=forbidden_end,
+            )
+            if extended_end <= forbidden_end:
+                break
+            forbidden_end = extended_end
+
+        return forbidden_end + timedelta(minutes=10)
 
     def _get_retry_time(self):
         return datetime.now() + self.retry_delay

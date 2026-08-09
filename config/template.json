@@ -321,8 +321,10 @@
     },
     "multi_account_kekkai_forbid_config": {
       "public_forbid_time_enable": false,
-      "public_forbid_time_start": "00:00:00",
-      "public_forbid_time_end": "00:00:00"
+      "public_forbid_time_start_1": "00:00:00",
+      "public_forbid_time_end_1": "00:00:00",
+      "public_forbid_time_start_2": "00:00:00",
+      "public_forbid_time_end_2": "00:00:00"
     },
     "multi_account_kekkai_utilize_config": {
       "utilize_rule": "default",
@@ -366,9 +368,10 @@
     ],
     "private_forbid_config": [
       {
-        "utilize_forbidden_time_enable": false,
-        "utilize_forbidden_time_start": "00:00:00",
-        "utilize_forbidden_time_end": "00:00:00"
+        "utilize_forbidden_time_start_1": "00:00:00",
+        "utilize_forbidden_time_end_1": "00:00:00",
+        "utilize_forbidden_time_start_2": "00:00:00",
+        "utilize_forbidden_time_end_2": "00:00:00"
       }
     ]
   },

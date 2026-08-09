@@ -80,16 +80,53 @@ class MultiAccountKekkaiUtilizeForbidConfig(ConfigBase, extra="allow"):
         title="启用公共禁止蹭卡时段",
         description="是否启用公共禁止蹭卡时间段",
     )
-    public_forbid_time_start: Time = Field(
+    public_forbid_time_start_1: Time = Field(
         default=time.fromisoformat("00:00:00"),
-        title="禁止蹭卡开始时间",
-        description="公共禁止蹭卡时间段开始时间",
+        title="禁止蹭卡开始时间 1",
+        description="公共禁止蹭卡时间段 1 开始时间",
     )
-    public_forbid_time_end: Time = Field(
+    public_forbid_time_end_1: Time = Field(
         default=time.fromisoformat("00:00:00"),
-        title="禁止蹭卡结束时间",
-        description="公共禁止蹭卡时间段结束时间",
+        title="禁止蹭卡结束时间 1",
+        description="公共禁止蹭卡时间段 1 结束时间",
     )
+    public_forbid_time_start_2: Time = Field(
+        default=time.fromisoformat("00:00:00"),
+        title="禁止蹭卡开始时间 2",
+        description="公共禁止蹭卡时间段 2 开始时间",
+    )
+    public_forbid_time_end_2: Time = Field(
+        default=time.fromisoformat("00:00:00"),
+        title="禁止蹭卡结束时间 2",
+        description="公共禁止蹭卡时间段 2 结束时间",
+    )
+
+    def get_forbid_windows(self) -> list[tuple[time, time]]:
+        windows = []
+        for index in range(1, 3):
+            start = getattr(self, f"public_forbid_time_start_{index}", None)
+            end = getattr(self, f"public_forbid_time_end_{index}", None)
+            if start is None or end is None:
+                continue
+            if start == end:
+                continue
+            windows.append((start, end))
+        return windows
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_fields(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+
+        data = dict(value)
+        legacy_start = data.pop("public_forbid_time_start", None)
+        legacy_end = data.pop("public_forbid_time_end", None)
+        if "public_forbid_time_start_1" not in data and legacy_start is not None:
+            data["public_forbid_time_start_1"] = legacy_start
+        if "public_forbid_time_end_1" not in data and legacy_end is not None:
+            data["public_forbid_time_end_1"] = legacy_end
+        return data
 
 
 class MultiAccountKekkaiUtilizePrivateUtilizeConfig(MultiAccountKekkaiUtilizeBaseConfig):
@@ -99,18 +136,85 @@ class MultiAccountKekkaiUtilizePrivateUtilizeConfig(MultiAccountKekkaiUtilizeBas
 class MultiAccountKekkaiUtilizePrivateForbidConfig(ConfigBase):
     """账号私有禁止蹭卡时段配置。"""
 
-    utilize_forbidden_time_enable: bool = Field(
-        default=False,
-        description="是否启用该账号的禁止蹭卡时间段",
-    )
-    utilize_forbidden_time_start: Time = Field(
+    utilize_forbidden_time_start_1: Time = Field(
         default=time.fromisoformat("00:00:00"),
-        description="账号禁止蹭卡时间段开始时间",
+        description="账号禁止蹭卡时间段 1 开始时间",
     )
-    utilize_forbidden_time_end: Time = Field(
+    utilize_forbidden_time_end_1: Time = Field(
         default=time.fromisoformat("00:00:00"),
-        description="账号禁止蹭卡时间段结束时间",
+        description="账号禁止蹭卡时间段 1 结束时间",
     )
+    utilize_forbidden_time_start_2: Time = Field(
+        default=time.fromisoformat("00:00:00"),
+        description="账号禁止蹭卡时间段 2 开始时间",
+    )
+    utilize_forbidden_time_end_2: Time = Field(
+        default=time.fromisoformat("00:00:00"),
+        description="账号禁止蹭卡时间段 2 结束时间",
+    )
+
+    def get_forbid_windows(self) -> list[tuple[time, time]]:
+        windows = []
+        for index in range(1, 3):
+            start = getattr(self, f"utilize_forbidden_time_start_{index}", None)
+            end = getattr(self, f"utilize_forbidden_time_end_{index}", None)
+            if start is None or end is None:
+                continue
+            if start == end:
+                continue
+            windows.append((start, end))
+        return windows
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_fields(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+
+        data = dict(value)
+        legacy_start = data.pop("utilize_forbidden_time_start", None)
+        legacy_end = data.pop("utilize_forbidden_time_end", None)
+        # 旧版私有开关由外层账号配置接管，此处只迁移时间字段。
+        data.pop("utilize_forbidden_time_enable", None)
+        if "utilize_forbidden_time_start_1" not in data and legacy_start is not None:
+            data["utilize_forbidden_time_start_1"] = legacy_start
+        if "utilize_forbidden_time_end_1" not in data and legacy_end is not None:
+            data["utilize_forbidden_time_end_1"] = legacy_end
+        return data
+
+
+def _collect_indexed_values(data: dict, field_name: str) -> dict[int, Any]:
+    """收集列表字段和扁平字段中的配置项。"""
+    values: dict[int, Any] = {}
+    raw_values = data.get(field_name)
+    if isinstance(raw_values, list):
+        values.update(enumerate(raw_values))
+
+    prefix = f"{field_name}_"
+    for key, value in data.items():
+        if not key.startswith(prefix):
+            continue
+        suffix = key[len(prefix):]
+        if suffix.isdigit() and int(suffix) > 0:
+            values[int(suffix) - 1] = value
+    return values
+
+
+def _collect_legacy_private_forbid_flags(
+    data: dict,
+) -> tuple[dict[int, bool], set[int]]:
+    """读取旧版私有禁止时段开关及账号开关的显式配置。"""
+    legacy_flags: dict[int, bool] = {}
+    for index, value in _collect_indexed_values(data, "private_forbid_config").items():
+        if isinstance(value, dict) and "utilize_forbidden_time_enable" in value:
+            legacy_flags[index] = bool(value["utilize_forbidden_time_enable"])
+
+    explicit_account_flags = {
+        index
+        for index, value in _collect_indexed_values(data, "account_list").items()
+        if isinstance(value, dict) and "enable_private_forbid_time" in value
+    }
+    return legacy_flags, explicit_account_flags
 
 
 class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
@@ -169,6 +273,9 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
         data.setdefault("account_list", [])
         data.setdefault("private_utilize_config", [])
         data.setdefault("private_forbid_config", [])
+        legacy_private_forbid_flags, explicit_account_flags = (
+            _collect_legacy_private_forbid_flags(data)
+        )
 
         raw_shared = data.get("multi_account_kekkai_utilize_config")
         shared_config = as_dict(raw_shared)
@@ -196,12 +303,26 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
                     "public_forbid_time_enable",
                     False,
                 ),
-                "public_forbid_time_start": shared_config.get(
-                    "public_forbid_time_start",
+                "public_forbid_time_start_1": shared_config.get(
+                    "public_forbid_time_start_1",
+                    shared_config.get(
+                        "public_forbid_time_start",
+                        time.fromisoformat("00:00:00"),
+                    ),
+                ),
+                "public_forbid_time_end_1": shared_config.get(
+                    "public_forbid_time_end_1",
+                    shared_config.get(
+                        "public_forbid_time_end",
+                        time.fromisoformat("00:00:00"),
+                    ),
+                ),
+                "public_forbid_time_start_2": shared_config.get(
+                    "public_forbid_time_start_2",
                     time.fromisoformat("00:00:00"),
                 ),
-                "public_forbid_time_end": shared_config.get(
-                    "public_forbid_time_end",
+                "public_forbid_time_end_2": shared_config.get(
+                    "public_forbid_time_end_2",
                     time.fromisoformat("00:00:00"),
                 ),
             }
@@ -217,6 +338,10 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
             "public_forbid_time_enable",
             "public_forbid_time_start",
             "public_forbid_time_end",
+            "public_forbid_time_start_1",
+            "public_forbid_time_end_1",
+            "public_forbid_time_start_2",
+            "public_forbid_time_end_2",
         ):
             shared_config.pop(key, None)
         raw_utilize = data.get("multi_account_kekkai_utilize_config")
@@ -236,6 +361,10 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
             "public_forbid_time_enable",
             "public_forbid_time_start",
             "public_forbid_time_end",
+            "public_forbid_time_start_1",
+            "public_forbid_time_end_1",
+            "public_forbid_time_start_2",
+            "public_forbid_time_end_2",
         ):
             data.pop(alias, None)
 
@@ -254,6 +383,10 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
             "private_forbid_config",
             MultiAccountKekkaiUtilizePrivateForbidConfig,
         )
+
+        for index, enabled in legacy_private_forbid_flags.items():
+            if index < len(accounts) and index not in explicit_account_flags:
+                accounts[index].enable_private_forbid_time = enabled
 
         pad_parallel_models(
             {
