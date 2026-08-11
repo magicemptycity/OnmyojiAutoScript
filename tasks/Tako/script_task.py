@@ -99,7 +99,7 @@ class ScriptTask(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, SwitchSoul):
         raise TaskEnd('Tako')
 
     def _exit_matcher(self) -> ExitMatcher | None:
-        return any_of(self.I_CHECK_MAIN, self.I_CHECK_TEAM)
+        return any_of(self.I_CHECK_MAIN, self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW)
 
 
 if __name__ == '__main__':

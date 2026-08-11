@@ -94,7 +94,7 @@ class ScriptTask(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, SwitchSoul, 
         logger.info('Create team')
         while 1:
             self.screenshot()
-            if self.appear(self.I_CHECK_TEAM):
+            if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
                 break
             if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                 continue
