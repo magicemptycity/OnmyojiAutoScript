@@ -273,10 +273,10 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         timeout_timer.reset()
         while not timeout_timer.reached():
             self.screenshot()
+            self.ui_reward_appear_click()
             if self.appear_then_click(self.I_UI_CONFIRM, interval=0.6):
                 continue
-            if self.appear(self.I_DT_GW_DONATE_RECORD_THANKS):  # 受赠界面的一键感谢
-                self.ui_get_reward(self.I_DT_GW_DONATE_RECORD_THANKS)
+            if self.appear_then_click(self.I_DT_GW_DONATE_RECORD_THANKS, interval=1.5):  # 受赠界面的一键感谢
                 timeout_timer.reset()
                 continue
             if self.appear(self.I_DT_GW_DONATE_RED, interval=2.5):  # 赠予界面的一键领取
@@ -303,8 +303,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             self.appear_then_click(self.I_DT_GW_CLEAR_SEARCH)  # 清除搜索框内容
             self.ui_click(self.C_DT_GW_INPUT_SEARCH, self.I_DT_GW_CONFIRM, interval=1.5)  # 点击搜索框
             self.click(self.C_DT_GW_CLICK_INPUT)  # 点击名称输入框
-            self.device.adb.send_keys(name)  # 输入名称
-            sleep(2)  # 等待
+            # uiautomator2 通过 FastInputIME 传输 UTF-8 文本，并在必要时回退到 set_text
+            logger.info(f'Inputting name using uiautomator2: {name}, waiting start and send')
+            self.device.u2.send_keys(name, clear=True)
             self.ui_click_until_disappear(self.I_DT_GW_CONFIRM, interval=1.5)  # 点击确定
             donate_btn = self.I_DT_GW_DONATE
             if name_check:  # 若有多个相同前缀名称, 则需要取出一样的或最相近的名称
@@ -339,8 +340,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                 if self.config.daily_trifles.guild_donate.notify_enable:
                     self.config.notifier.push(title='好友搜索失败', content=f'{name} 搜索失败, 没有搜索到对应用户, 无法捐赠')
                 return False
-            if self.appear_then_click(donate_btn, interval=0.6):
-                sleep(2)
+            if self.appear_then_click(donate_btn, interval=1.5):
                 timeout_timer.reset()
                 continue
             if self.appear(self.I_DT_GW_INSUFFICIENT, interval=0.6):
@@ -348,7 +348,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                 if self.config.daily_trifles.guild_donate.notify_enable:
                     self.config.notifier.push(title='捐赠碎片不足', content=f'捐给{name}的碎片不足, 请上线查看')
                 return False
-            if self.appear(self.I_DT_GW_FULL, interval=1.2):
+            if self.appear(self.I_DT_GW_FULL, interval=0.6):
                 logger.info(f'Donate success!')
                 return True
         return False
