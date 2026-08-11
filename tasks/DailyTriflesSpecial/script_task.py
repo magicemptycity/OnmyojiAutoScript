@@ -91,43 +91,20 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
 
         self.goto_page(page_same_heart_team, confirm_wait=2)
 
-        if self.appear(self.O_O_SAMEHEARTTEAM) and not self.appear(self.I_I_PRE_DEPOSIT):
+        if not self.appear(self.I_I_PRE_DEPOSIT):
             logger.warning('当前角色没有同心队，跳过一键预存')
             return
         else:
-            logger.info('当前角色有同心队，执行一键预存')
+            logger.info('当前角色有同心队，前往一键预存页面')
             self.goto_page(page_one_click_pre_deposit, confirm_wait=2)
 
-            if not self._do_one_click_pre_deposit():
-                logger.warning('一键预存失败')
-                return
-
-        self.goto_page(page_main)
-
-    def _do_one_click_pre_deposit(self) -> bool:
-        if not self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
-            return False
-        self.appear_then_click(self.I_I_ONE_CLICK_PRE_DEPOSIT, interval=1)
-
-        for _ in range(10):
-            self.screenshot()
+            self.ui_click(self.I_I_ONE_CLICK_PRE_DEPOSIT, stop=self.I_UI_CONFIRM, interval=1)
 
             if self.appear(self.I_UI_CONFIRM):
-                sleep(1)
-                self.appear_then_click(self.I_UI_CONFIRM, interval=1)
-                sleep(1)
-                self.screenshot()
-                if not self.appear(self.I_UI_CONFIRM):
-                    logger.info('一键预存成功')
-                    return True
-                else:
-                    logger.info('一键预存失败，尝试再次点击确认')
-                    self.appear_then_click(self.I_UI_CONFIRM, interval=1)
-                    logger.info('一键预存成功')
-                    return True
+                self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
+                logger.info('一键预存成功')
 
-            sleep(1)
-        return False
+        self.goto_page(page_main)
 
     def summon_recall(self):
         """

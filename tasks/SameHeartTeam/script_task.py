@@ -124,7 +124,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
             logger.warning('无法点击副本集结按钮')
             self._finish_task_failure()
 
-        # 12. 等待集结成功，进入组队页面
+        # 12. 等待集结成功，进入副本组队页面
         if not self._wait_for_gather_success():
             logger.warning('集结失败')
             self._finish_task_failure()
@@ -330,52 +330,32 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
                     logger.info(f'点击了集结按钮: {btn.name}')
                     sleep(0.5)
                     return True
-            sleep(0.3)
+            sleep(0.5)
         logger.warning('未找到任何副本集结按钮')
         return False
     
     def _wait_for_gather_success(self) -> bool:
-        """等待集结成功，出现组队图标"""
-        for _ in range(20):
-            self.screenshot()
-            if self.appear(self.I_I_SAME_HEART_TEAM_UP):
-                self.appear_then_click(self.I_I_SAME_HEART_TEAM_UP, interval=1)
-                for _ in range(10):
-                    self.screenshot()
-                    if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
-                        return True
-                    sleep(0.5)
-                return False
-            if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
-                return True
-            sleep(0.5)
-        return False
+        """等待集结成功，出现副本图标，点击副本图标"""
+
+        if self.wait_until_appear(self.I_I_SAME_HEART_TEAM_UP, wait_time=10):
+            self.ui_click(self.I_I_SAME_HEART_TEAM_UP, stop=self.I_CHECK_TEAM, interval=1)
+            return True
+        else:
+            return False
 
     def _exit_same_heart_team(self):
         """退出同心队，解散集结，返回庭院"""
         logger.info('开始处理解散同心队')
-        for attempt in range(3):
-            self.screenshot()
-            sleep(1)
-            if self.appear(self.I_I_SAME_HEART_TEAM_CLOSE):
-                logger.info('发现关闭集结按钮，点击关闭')
-                sleep(1)
-                self.appear_then_click(self.I_I_SAME_HEART_TEAM_CLOSE, interval=1)
-                # 等待确认弹窗并点击确认
-                for _ in range(10):
-                    self.screenshot()
-                    # 点击确认
-                    if self.appear(self.I_UI_CONFIRM):
-                        logger.info('确认解散')
-                        self.appear_then_click(self.I_UI_CONFIRM, interval=1)
-                        sleep(0.5)
-                        break
-                    sleep(0.5)
 
-                self.click(self.I_UI_BACK_YELLOW)
-                return
-            else:
-                logger.info('未找到关闭按钮，点击左上角返回')
-                self.click(self.I_UI_BACK_YELLOW)
-                sleep(1)
+        if self.wait_until_appear(self.I_I_SAME_HEART_TEAM_CLOSE, wait_time=5):
+            logger.info('发现关闭集结按钮，点击关闭')
+            sleep(1)
+            self.ui_click(self.I_I_SAME_HEART_TEAM_CLOSE, stop=self.I_UI_CONFIRM, interval=1)
+
+            if self.appear(self.I_UI_CONFIRM):
+                self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
+                logger.info('解散成功')
+
+            self.click(self.I_UI_BACK_YELLOW)
+
         self.goto_page(page_main)

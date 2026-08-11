@@ -22,7 +22,7 @@ class SameHeartTeamAssets:
 	I_I_GATHER_UNSELECTED = RuleImage(roi_front=(463,255,16,16), roi_back=(418,242,462,41), threshold=0.5, method="Template matching", file="./tasks/SameHeartTeam/res/res_i_gather_unselected.png")
 	# 被选中状态 
 	I_I_GATHER_SELECTED = RuleImage(roi_front=(558,255,16,16), roi_back=(418,242,462,41), threshold=0.8, method="Template matching", file="./tasks/SameHeartTeam/res/res_i_gather_selected.png")
-	# 同心队的组队按钮 
+	# 同心队的副本按钮 
 	I_I_SAME_HEART_TEAM_UP = RuleImage(roi_front=(969,637,56,54), roi_back=(897,567,383,153), threshold=0.8, method="Template matching", file="./tasks/SameHeartTeam/res/res_i_same_heart_team_up.png")
 	# 解散同心队图标 
 	I_I_SAME_HEART_TEAM_CLOSE = RuleImage(roi_front=(742,34,42,40), roi_back=(636,0,309,99), threshold=0.8, method="Template matching", file="./tasks/SameHeartTeam/res/res_i_same_heart_team_close.png")

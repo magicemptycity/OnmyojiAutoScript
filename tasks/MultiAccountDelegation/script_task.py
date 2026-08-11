@@ -83,7 +83,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
 
     def on_account_success(self, index: int, account_info: object) -> bool | None:
         """保存当前账号下一次委派时间。"""
-        interval = self.fade_conf.multi_account_delegation_config.delegation_interval
+        interval = self.fade_conf.multi_account_delegation_count_config.delegation_interval
         account_info.next_delegation_time = self._calculate_next_delegation_time(
             interval,
             datetime.now(),

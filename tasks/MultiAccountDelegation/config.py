@@ -83,21 +83,27 @@ class MultiAccountDelegationPrivateConfig(ConfigBase):
     strange_trace: bool = Field(default=False, description="strange_trace_help")
 
 
+class MultiAccountDelegationCountConfig(ConfigBase):
+    """多账号式神委派的账号数量和调度间隔配置。"""
+
+    account_count: int = Field(
+        default=1,
+        ge=1,
+        title="账号数量",
+        description="账号数量，决定下面生成几组账号配置",
+    )
+    delegation_interval: DelegationInterval = Field(
+        default=DelegationInterval.SIX_HOURS,
+        title="委派间隔",
+        description="委派间隔：六小时循环|完成时间循环",
+    )
+
+
 class MultiAccountDelegationConfig(
     MultiAccountDelegationPrivateConfig,
     extra="allow",
 ):
     """多账号式神委派的公共配置。"""
-
-    account_count: int = Field(
-        default=1,
-        ge=1,
-        description="账号数量，决定下面生成几组账号配置",
-    )
-    delegation_interval: DelegationInterval = Field(
-        default=DelegationInterval.SIX_HOURS,
-        description="委派间隔：六小时循环|完成时间循环",
-    )
 
 
 _PRIVATE_CONFIG_FIELDS = frozenset(
@@ -143,6 +149,11 @@ class MultiAccountDelegation(ConfigBase, extra="allow"):
     """多账号式神委派的总配置。"""
 
     scheduler: Scheduler = Field(default_factory=Scheduler)
+    multi_account_delegation_count_config: MultiAccountDelegationCountConfig = Field(
+        default_factory=MultiAccountDelegationCountConfig,
+        title="账号数量与委派间隔",
+        description="设置多账号委派的账号数量和账号下一次委派的间隔",
+    )
     multi_account_delegation_config: MultiAccountDelegationConfig = Field(
         default_factory=MultiAccountDelegationConfig,
         title="公共式神委派配置",
@@ -192,23 +203,31 @@ class MultiAccountDelegation(ConfigBase, extra="allow"):
                 or data.get("common_config")
             )
 
-        count_config = as_dict(raw_shared)
+        raw_count = data.get("multi_account_delegation_count_config")
+        count_config = as_dict(raw_count)
         if "account_count" not in count_config:
             count_config["account_count"] = data.get(
                 "account_count",
                 shared_config.get("account_count", 1),
             )
+        if "delegation_interval" not in count_config:
+            count_config["delegation_interval"] = data.get(
+                "delegation_interval",
+                shared_config.get(
+                    "delegation_interval",
+                    DelegationInterval.SIX_HOURS,
+                ),
+            )
         try:
             count_config["account_count"] = int(count_config["account_count"])
         except (TypeError, ValueError):
             count_config["account_count"] = 1
-        count_model = MultiAccountDelegationConfig(**count_config)
+        count_model = MultiAccountDelegationCountConfig(**count_config)
 
         shared_config.pop("account_count", None)
-        public_model = MultiAccountDelegationConfig(
-            account_count=count_model.account_count,
-            **shared_config,
-        )
+        shared_config.pop("delegation_interval", None)
+        public_model = MultiAccountDelegationConfig(**shared_config)
+        data["multi_account_delegation_count_config"] = count_model
         data["multi_account_delegation_config"] = public_model
 
         for alias in (
@@ -216,6 +235,7 @@ class MultiAccountDelegation(ConfigBase, extra="allow"):
             "shared_config",
             "common_config",
             "account_count",
+            "delegation_interval",
         ):
             data.pop(alias, None)
 
