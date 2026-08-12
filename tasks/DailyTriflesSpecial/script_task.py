@@ -288,31 +288,28 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         :return: 捐赠是否成功(点击了捐赠/确定/识别到已满都认为成功)
         """
         timeout_timer = Timer(3).start()
+        donated = False  # 判断是否已执行捐赠
         while not timeout_timer.reached():
             self.screenshot()
-            if self.ui_reward_appear_click():  # 识别到奖励就直接退出
-                return True
             if self.appear(self.I_DT_GW_SEARCH_EMPTY):
                 logger.warning('Maybe not wish or not find, skip')
                 if self.config.daily_trifles_special.guild_donate.notify_enable:
                     self.config.notifier.push(title='好友搜索失败', content=f'{name} 搜索失败, 没有搜索到对应用户, 无法捐赠')
                 return False
-            # 尝试点击捐赠按钮
-            if self.appear_then_click(donate_btn, interval=1.5):
+            if not donated and self.appear_then_click(donate_btn, interval=2.5):
                 timeout_timer.reset()
                 # 点击后，等待所有弹窗消失（确认、奖励），然后重新定位
                 post_click_timeout = Timer(3).start()
-                handled_popup = False
                 while not post_click_timeout.reached():
                     self.screenshot()
                     # 处理确认弹窗
                     if self.appear(self.I_UI_CONFIRM, interval=0.6):
                         self.ui_get_reward(self.I_UI_CONFIRM, click_interval=1.5)
-                        handled_popup = True
+                        donated = True
                     # 如果没有弹窗了，退出子循环
                     if not self.appear(self.I_UI_REWARD) and not self.appear(self.I_UI_REWARD):
                         break
-                if handled_popup:
+                if donated:
                     # 处理了弹窗，视为捐赠成功
                     logger.info(f'Donate success for {name}!')
                     return True
@@ -329,15 +326,17 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                     self.I_DT_GW_INSUFFICIENT.roi_back = new_roi_back
                     logger.info(f"Updated ROI after donation attempt: {new_roi_back}")
                     continue
+
             if self.appear(self.I_DT_GW_INSUFFICIENT, interval=0.6):
                 logger.warning('Not enough fragment to donate, skip')
                 if self.config.daily_trifles_special.guild_donate.notify_enable:
                     self.config.notifier.push(title='捐赠碎片不足', content=f'捐给{name}的碎片不足, 请上线查看')
                 return False
-            if self.appear(self.I_DT_GW_FULL, interval=1.2):
+            if self.appear(self.I_DT_GW_FULL, interval=0.6):
                 logger.info(f'Donate success!')
-                return True
-        return False
+                donated = True
+        return donated
+
     def find_target_name(self, name) -> List[int]:
         """寻找目标名称
         :param name: 名称
@@ -446,9 +445,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             MAX_COUNT = 9999
             roi = copy.deepcopy(base_element.roi_front)
             roi[0] = roi[0] + roi[2]
-            roi[1] = roi[1] + roi[3] - 30
-            roi[2] = 60
-            roi[3] = 30
+            roi[1] = roi[1] + roi[3] - 45
+            roi[2] = 75
+            roi[3] = 45
             self.O_STORE_SUSHI_PRICE.roi = roi
             _price = self.O_STORE_SUSHI_PRICE.detect_text(self.device.image)
             # 保守策略，避免OCR错误购买
