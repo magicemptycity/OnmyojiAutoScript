@@ -230,10 +230,10 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         timeout_timer.reset()
         while not timeout_timer.reached():
             self.screenshot()
+            self.ui_reward_appear_click()
             if self.appear_then_click(self.I_UI_CONFIRM, interval=0.6):
                 continue
-            if self.appear(self.I_DT_GW_DONATE_RECORD_THANKS):  # 受赠界面的一键感谢
-                self.ui_get_reward(self.I_DT_GW_DONATE_RECORD_THANKS)
+            if self.appear_then_click(self.I_DT_GW_DONATE_RECORD_THANKS, interval=1.5):  # 受赠界面的一键感谢
                 timeout_timer.reset()
                 continue
             if self.appear(self.I_DT_GW_DONATE_RED, interval=2.5):  # 赠予界面的一键领取
@@ -260,8 +260,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             self.appear_then_click(self.I_DT_GW_CLEAR_SEARCH)  # 清除搜索框内容
             self.ui_click(self.C_DT_GW_INPUT_SEARCH, self.I_DT_GW_CONFIRM, interval=1.5)  # 点击搜索框
             self.click(self.C_DT_GW_CLICK_INPUT)  # 点击名称输入框
-            self.device.adb.send_keys(name)  # 输入名称
-            sleep(2)  # 等待
+            # uiautomator2 通过 FastInputIME 传输 UTF-8 文本，并在必要时回退到 set_text
+            logger.info(f'Inputting name using uiautomator2: {name}, waiting start and send')
+            self.device.u2.send_keys(name, clear=True)
             self.ui_click_until_disappear(self.I_DT_GW_CONFIRM, interval=1.5)  # 点击确定
             donate_btn = self.I_DT_GW_DONATE
             if name_check:  # 若有多个相同前缀名称, 则需要取出一样的或最相近的名称
@@ -271,8 +272,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                     all_done = False
                     continue
                 # 设置赠与按钮back与对应name同一行
-                donate_btn.roi_back = [name_roi[0], name_roi[1] - 15, max(name_roi[2] + 700, 1280),
-                                       max(name_roi[3] + 60, 720)]
+                donate_btn.roi_back = [name_roi[0]-5, name_roi[1] - 15, 850, 90]  # 设置赠与按钮back区域和对应name同一行
             self.I_DT_GW_FULL.roi_back = donate_btn.roi_back  # 设置已捐满标志back区域和赠与按钮同一行
             self.I_DT_GW_INSUFFICIENT.roi_back = donate_btn.roi_back  # 设置碎片不足标志back区域和赠与按钮同一行
             donate_ret = self.process_donate(donate_btn, name)
@@ -281,25 +281,54 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
 
     def process_donate(self, donate_btn: RuleImage, name: str) -> bool:
         """捐赠式神碎片
+        TODO: 游戏有bug,搜索结束之后会突然神经展开全部寮友/好友,会有一瞬间识别到了好友,点击捐赠结果实际捐错人了
 
         :param name: 被捐方名称
         :param donate_btn: 赠与按钮
-        :return: 捐赠是否成功
+        :return: 捐赠是否成功(点击了捐赠/确定/识别到已满都认为成功)
         """
         timeout_timer = Timer(3).start()
         while not timeout_timer.reached():
             self.screenshot()
-            if self.appear_then_click(self.I_UI_CONFIRM, interval=0.6):
-                continue
+            if self.ui_reward_appear_click():  # 识别到奖励就直接退出
+                return True
             if self.appear(self.I_DT_GW_SEARCH_EMPTY):
                 logger.warning('Maybe not wish or not find, skip')
                 if self.config.daily_trifles_special.guild_donate.notify_enable:
                     self.config.notifier.push(title='好友搜索失败', content=f'{name} 搜索失败, 没有搜索到对应用户, 无法捐赠')
                 return False
-            if self.appear_then_click(donate_btn, interval=0.6):
-                sleep(2)
+            # 尝试点击捐赠按钮
+            if self.appear_then_click(donate_btn, interval=1.5):
                 timeout_timer.reset()
-                continue
+                # 点击后，等待所有弹窗消失（确认、奖励），然后重新定位
+                post_click_timeout = Timer(3).start()
+                handled_popup = False
+                while not post_click_timeout.reached():
+                    self.screenshot()
+                    # 处理确认弹窗
+                    if self.appear(self.I_UI_CONFIRM, interval=0.6):
+                        self.ui_get_reward(self.I_UI_CONFIRM, click_interval=1.5)
+                        handled_popup = True
+                    # 如果没有弹窗了，退出子循环
+                    if not self.appear(self.I_UI_REWARD) and not self.appear(self.I_UI_REWARD):
+                        break
+                if handled_popup:
+                    # 处理了弹窗，视为捐赠成功
+                    logger.info(f'Donate success for {name}!')
+                    return True
+                else:
+                    # 子循环结束后，重新定位目标行（因为如果被搜索到的玩家有多个，被赠与方被赠送满了就会下沉到最后位置）
+                    new_roi = self.find_target_name(name)
+                    if new_roi is None:
+                        logger.warning(f'{name} disappeared after donation, skip')
+                        return False
+                    # 更新三个按钮的 ROI
+                    new_roi_back = [new_roi[0] - 5, new_roi[1] - 15, 850, 90]
+                    donate_btn.roi_back = new_roi_back
+                    self.I_DT_GW_FULL.roi_back = new_roi_back
+                    self.I_DT_GW_INSUFFICIENT.roi_back = new_roi_back
+                    logger.info(f"Updated ROI after donation attempt: {new_roi_back}")
+                    continue
             if self.appear(self.I_DT_GW_INSUFFICIENT, interval=0.6):
                 logger.warning('Not enough fragment to donate, skip')
                 if self.config.daily_trifles_special.guild_donate.notify_enable:

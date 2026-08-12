@@ -9,7 +9,10 @@ from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.GameUi.game_ui import GameUi
 from tasks.MultiAccountRepeat.assets import MultiAccountRepeatAssets
-from tasks.MultiAccountRepeat.config import MultiAccountRepeat
+from tasks.MultiAccountRepeat.config import (
+    MultiAccountRepeat,
+    MultiAccountRepeatAccount,
+)
 
 
 class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
@@ -18,6 +21,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
     task_name: ClassVar[str] = "MultiAccountRepeat"
     multi_account_config_attr: ClassVar[str] = "multi_account_repeat"
     fade_conf: MultiAccountRepeat = None
+    task_retry_limit: ClassVar[int] = 3
 
     def run(self):
         self.fade_conf = getattr(self.config, self.multi_account_config_attr)
@@ -62,39 +66,11 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
 
             task_failed = False
             for task_name in task_names:
-                logger.info(
-                    "为账号 %s-%s 执行多账号多任务项 %s",
-                    account_info.character,
-                    account_info.svr,
-                    task_name,
-                )
-                try:
-                    task_obj = self.create_task_object(
-                        task_name,
-                        config=self.config,
-                        device=self.device,
-                        current_account_info=account_info,
-                    )
-                    task_obj.run()
-                except TaskEnd:
-                    logger.info(
-                        "%s-%s 的任务 %s 执行结束",
-                        account_info.character,
-                        account_info.svr,
-                        task_name,
-                    )
-                except RequestHumanTakeover:
-                    raise
-                except Exception as exc:
-                    logger.exception(
-                        "执行%s失败（%s-%s）：%s",
-                        task_name,
-                        account_info.character,
-                        account_info.svr,
-                        exc,
-                    )
-                    task_failed = True
-                    overall_failed = True
+                if self._run_task_with_retry(account_info, task_name):
+                    continue
+
+                task_failed = True
+                overall_failed = True
 
             if task_failed:
                 continue
@@ -105,6 +81,80 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
 
         self.set_next_run(self.task_name, success=not overall_failed)
         raise TaskEnd(self.task_name)
+
+    def _run_task_with_retry(
+        self,
+        account_info: MultiAccountRepeatAccount,
+        task_name: str,
+    ) -> bool:
+        """执行单个任务；失败后重启游戏并最多重试三次。"""
+        for attempt in range(1, self.task_retry_limit + 1):
+            if attempt > 1:
+                logger.warning(
+                    "%s-%s 的任务 %s 失败，重启游戏后重试（第 %s/%s 次）",
+                    account_info.character,
+                    account_info.svr,
+                    task_name,
+                    attempt,
+                    self.task_retry_limit,
+                )
+                # 重启不会改变当前登录账号，直接重试当前任务即可。
+                self._restart_game()
+
+            logger.info(
+                "为账号 %s-%s 执行多账号多任务项 %s（第 %s/%s 次）",
+                account_info.character,
+                account_info.svr,
+                task_name,
+                attempt,
+                self.task_retry_limit,
+            )
+            try:
+                task_obj = self.create_task_object(
+                    task_name,
+                    config=self.config,
+                    device=self.device,
+                    current_account_info=account_info,
+                )
+                task_obj.run()
+                return True
+            except TaskEnd:
+                logger.info(
+                    "%s-%s 的任务 %s 执行结束",
+                    account_info.character,
+                    account_info.svr,
+                    task_name,
+                )
+                return True
+            except RequestHumanTakeover:
+                raise
+            except Exception as exc:
+                logger.exception(
+                    "执行%s失败（%s-%s），第 %s/%s 次：%s",
+                    task_name,
+                    account_info.character,
+                    account_info.svr,
+                    attempt,
+                    self.task_retry_limit,
+                    exc,
+                )
+
+        content = (
+            f"{account_info.character}-{account_info.svr} 的任务 "
+            f"{task_name} 连续运行 {self.task_retry_limit} 次失败"
+        )
+        logger.error(content)
+        self.config.notifier.push(title="多账号多任务失败", content=content)
+        # 无论当前账号是否还有任务，都先重启；外层随后会继续下一个任务或账号。
+        self._restart_game()
+        return False
+
+    def _restart_game(self) -> None:
+        """重启游戏并等待启动就绪，供任务失败后的恢复流程使用。"""
+        logger.info("多账号多任务：重启游戏以恢复后续执行")
+        self.device.app_stop()
+        self.device.app_start()
+        self.device.wait_app_start_ready()
 
     def _is_account_in_scope(self, account_info) -> bool:
         """判断循环任务账号是否属于外层传入的当前账号。"""
