@@ -29,9 +29,7 @@ from tasks.ExperienceYoukai.config import ExperienceYoukai
 from tasks.GoldYoukai.config import GoldYoukai
 from tasks.Nian.config import Nian
 from tasks.KekkaiUtilize.config import KekkaiUtilize
-from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
 from tasks.KekkaiActivation.config import KekkaiActivation
-from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
 from tasks.DemonEncounter.config import DemonEncounter
 from tasks.DailyTrifles.config import DailyTrifles
 from tasks.DailyTriflesSpecial.config import DailyTriflesSpecial
@@ -41,7 +39,6 @@ from tasks.SameHeartTeamAwaken.config import SameHeartTeamAwaken
 from tasks.TalismanPass.config import TalismanPass
 from tasks.Pets.config import Pets
 from tasks.SoulsTidy.config import SoulsTidy
-from tasks.MultiAccountDelegation.config import MultiAccountDelegation
 from tasks.Delegation.config import Delegation
 from tasks.WantedQuests.config import WantedQuests
 from tasks.Tako.config import Tako
@@ -80,11 +77,6 @@ from tasks.Hyakkiyakou.config import Hyakkiyakou
 from tasks.HeroTest.config import HeroTest
 from tasks.FindJade.config import FindJade
 from tasks.MemoryScrolls.config import MemoryScrolls
-from tasks.MultiAccountRepeat.config import MultiAccountRepeat
-from tasks.MultiAccountRepeatDay.config import MultiAccountRepeatDay
-from tasks.MultiAccountRepeatWeek.config import MultiAccountRepeatWeek
-from tasks.MultiAccountRepeatMonth.config import MultiAccountRepeatMonth
-from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
 # ----------------------------------------------------------------------------------------------------------------------
 
 # 每周任务---------------------------------------------------------------------------------------------------------------
@@ -94,6 +86,17 @@ from tasks.Secret.config import Secret
 from tasks.WeeklyTrifles.config import WeeklyTrifles
 from tasks.MysteryShop.config import MysteryShop
 from tasks.Duel.config import Duel
+# ----------------------------------------------------------------------------------------------------------------------
+
+# 多账号专属---------------------------------------------------------------------------------------------------------------
+from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
+from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
+from tasks.MultiAccountDelegation.config import MultiAccountDelegation
+from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
+from tasks.MultiAccountRepeat.config import MultiAccountRepeat
+from tasks.MultiAccountRepeatDay.config import MultiAccountRepeatDay
+from tasks.MultiAccountRepeatWeek.config import MultiAccountRepeatWeek
+from tasks.MultiAccountRepeatMonth.config import MultiAccountRepeatMonth
 # ----------------------------------------------------------------------------------------------------------------------
 
 class ConfigModel(ConfigBase):
@@ -111,9 +114,7 @@ class ConfigModel(ConfigBase):
     realm_raid: RealmRaid = Field(default_factory=RealmRaid)
     ryou_toppa: RyouToppa = Field(default_factory=RyouToppa)
     kekkai_utilize: KekkaiUtilize = Field(default_factory=KekkaiUtilize)
-    multi_account_kekkai_utilize: MultiAccountKekkaiUtilize = Field(default_factory=MultiAccountKekkaiUtilize)
     kekkai_activation: KekkaiActivation = Field(default_factory=KekkaiActivation)
-    multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
     demon_encounter: DemonEncounter = Field(default_factory=DemonEncounter)
     daily_trifles: DailyTrifles = Field(default_factory=DailyTrifles)
     daily_trifles_special: DailyTriflesSpecial = Field(default_factory=DailyTriflesSpecial)
@@ -123,7 +124,6 @@ class ConfigModel(ConfigBase):
     talisman_pass: TalismanPass = Field(default_factory=TalismanPass)
     pets: Pets = Field(default_factory=Pets)
     souls_tidy: SoulsTidy = Field(default_factory=SoulsTidy)
-    multi_account_delegation: MultiAccountDelegation = Field(default_factory=MultiAccountDelegation)
     delegation: Delegation = Field(default_factory=Delegation)
     exploration: Exploration = Field(default_factory=Exploration)
     wanted_quests: WantedQuests = Field(default_factory=WantedQuests)
@@ -158,11 +158,6 @@ class ConfigModel(ConfigBase):
     hero_test: HeroTest = Field(default_factory=HeroTest)
     find_jade: FindJade = Field(default_factory=FindJade)
     memory_scrolls: MemoryScrolls = Field(default_factory=MemoryScrolls)
-    multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
-    multi_account_repeat_day: MultiAccountRepeatDay = Field(default_factory=MultiAccountRepeatDay)
-    multi_account_repeat_week: MultiAccountRepeatWeek = Field(default_factory=MultiAccountRepeatWeek)
-    multi_account_repeat_month: MultiAccountRepeatMonth = Field(default_factory=MultiAccountRepeatMonth)
-    multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)
 
     # 这些是每周任务
     true_orochi: TrueOrochi = Field(default_factory=TrueOrochi)
@@ -171,6 +166,16 @@ class ConfigModel(ConfigBase):
     weekly_trifles: WeeklyTrifles = Field(default_factory=WeeklyTrifles)
     mystery_shop: MysteryShop = Field(default_factory=MysteryShop)
     duel: Duel = Field(default_factory=Duel)
+
+    # 多账号专属
+    multi_account_kekkai_utilize: MultiAccountKekkaiUtilize = Field(default_factory=MultiAccountKekkaiUtilize)
+    multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
+    multi_account_delegation: MultiAccountDelegation = Field(default_factory=MultiAccountDelegation)
+    multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)
+    multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
+    multi_account_repeat_day: MultiAccountRepeatDay = Field(default_factory=MultiAccountRepeatDay)
+    multi_account_repeat_week: MultiAccountRepeatWeek = Field(default_factory=MultiAccountRepeatWeek)
+    multi_account_repeat_month: MultiAccountRepeatMonth = Field(default_factory=MultiAccountRepeatMonth)
 
     # 阴阳寮
     collective_missions: CollectiveMissions = Field(default_factory=CollectiveMissions)
