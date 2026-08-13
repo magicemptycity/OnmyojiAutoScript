@@ -240,8 +240,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         ]
         all_done = True
         for name_list, switch_func, name_check in donate_datas:
-            # 同时执行两个名单；不能直接写成 all_done and ...，否则前一个名单失败后会短路，
-            # 跳过后一个名单。
+            # 分别执行两个名单，前一个名单失败也不能跳过后一个名单。
             donate_ret = self.donate(name_list, switch_func, name_check)
             all_done = all_done and donate_ret
         if self.config.daily_trifles.guild_donate.auto_get_rewards:
@@ -315,7 +314,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
                     all_done = False
                     continue
                 # 设置赠与按钮back与对应name同一行
-                donate_btn.roi_back = [name_roi[0] - 5, name_roi[1] - 15, 850, 90]
+                donate_btn.roi_back = [name_roi[0] - 5, name_roi[1] - 15, 850, 90]   # 设置赠与按钮back区域和对应name同一行
             self.I_DT_GW_FULL.roi_back = donate_btn.roi_back  # 设置已捐满标志back区域和赠与按钮同一行
             self.I_DT_GW_INSUFFICIENT.roi_back = donate_btn.roi_back  # 设置碎片不足标志back区域和赠与按钮同一行
             donate_ret = self.process_donate(donate_btn, name)
