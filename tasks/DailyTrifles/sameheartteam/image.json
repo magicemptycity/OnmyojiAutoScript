@@ -1,0 +1,29 @@
+[
+  {
+    "itemName": "i_pre_deposit_need",
+    "imageName": "sameheartteam_i_pre_deposit_need.png",
+    "roiFront": "923,253,63,60",
+    "roiBack": "900,196,110,482",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "预存（带感叹号）"
+  },
+  {
+    "itemName": "i_pre_deposit",
+    "imageName": "sameheartteam_i_pre_deposit.png",
+    "roiFront": "925,263,49,49",
+    "roiBack": "900,196,110,482",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "预存"
+  },
+  {
+    "itemName": "i_one_click_pre_deposit",
+    "imageName": "sameheartteam_i_one_click_pre_deposit.png",
+    "roiFront": "1190,531,42,74",
+    "roiBack": "1124,451,156,269",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "一键预存"
+  }
+]
