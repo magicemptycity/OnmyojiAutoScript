@@ -26,6 +26,12 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
 
     fade_conf: Any = None
     current_account_index: int | None = None
+    task_display_names: ClassVar[dict[str, str]] = {
+        "MultiAccountKekkaiUtilize": "多账号蹭卡",
+        "MultiAccountKekkaiActivation": "多账号挂卡",
+        "MultiAccountDelegation": "多账号式神委派",
+        "MultiAccountAreaBoss": "多账号地域鬼王",
+    }
     current_account_info: Any = None
     current_account_config: Any = None
 
@@ -54,6 +60,11 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             if not self._switch_account(account):
                 overall_failed = True
                 logger.warning("切换到账号 %s-%s 失败", account.character, account.svr)
+                account_name = f"{account.character}-{account.svr}"
+                self.config.notifier.push(
+                    title=f"{self._task_display_name()}切号失败：{account_name}",
+                    content=f"{account_name} 切换账号失败",
+                )
                 self.on_account_failure(index, account, "切换账号失败")
                 self.save_multi_account_config()
                 self._clear_account_context()
@@ -126,6 +137,10 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             target=self.get_next_run_time(),
         )
         raise TaskEnd(self.task_name)
+
+    def _task_display_name(self) -> str:
+        """返回当前多账号功能用于通知的中文名称。"""
+        return self.task_display_names.get(self.task_name, self.task_name)
 
     def get_multi_account_config(self) -> Any:
         """获取外层多账号配置对象。"""

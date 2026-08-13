@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
+from tasks.MultiAccountRepeat.task_name_resolver import TaskNameResolver
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.GameUi.game_ui import GameUi
@@ -53,6 +54,11 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     account_info.character,
                     account_info.svr,
                 )
+                account_name = f"{account_info.character}-{account_info.svr}"
+                self.config.notifier.push(
+                    title=f"多账号多任务切号失败：{account_name}",
+                    content=f"{account_name} 切换账号失败",
+                )
                 continue
 
             task_names = account_info.repeat_task_names
@@ -81,6 +87,12 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
 
         self.set_next_run(self.task_name, success=not overall_failed)
         raise TaskEnd(self.task_name)
+
+    @staticmethod
+    def _task_display_name(task_name: str) -> str:
+        """将内部任务名转换为配置中使用的中文任务名。"""
+        aliases = TaskNameResolver._build_aliases(task_name)
+        return next((name for name in aliases if any('\u4e00' <= char <= '\u9fff' for char in name)), task_name)
 
     def _run_task_with_retry(
         self,
@@ -139,12 +151,16 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     exc,
                 )
 
+        task_display_name = self._task_display_name(task_name)
         content = (
             f"{account_info.character}-{account_info.svr} 的任务 "
-            f"{task_name} 连续运行 {self.task_retry_limit} 次失败"
+            f"{task_display_name} 连续运行 {self.task_retry_limit} 次失败"
         )
         logger.error(content)
-        self.config.notifier.push(title="多账号多任务失败", content=content)
+        self.config.notifier.push(
+            title=f"多账号多任务失败：{account_info.character}-{account_info.svr}",
+            content=content,
+        )
         # 无论当前账号是否还有任务，都先重启；外层随后会继续下一个任务或账号。
         self._restart_game()
         return False

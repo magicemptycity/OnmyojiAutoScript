@@ -203,42 +203,41 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
         logger.info("start selectAccount")
         self.O_SA_ACCOUNT_ACCOUNT_LIST.keyword = accountInfo.account
         self.O_SA_ACCOUNT_ACCOUNT_SELECTED.keyword = accountInfo.account
-        # 正常情况一次就行,但防不住OCR搞幺蛾子 保险起见 多来几次吧 反正挂机不差这点
-        for i in range(3):
-            while 1:
-                self.screenshot()
-                if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED):
-                    if self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED):
-                        return True
-                    self.ui_click_until_disappear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED,
-                                                  interval=1.5)
+        # 每次调用仅完整扫描一次账号列表；重新打开页面后的重试由 login() 负责。
+        while 1:
+            self.screenshot()
+            if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED):
+                if self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED):
+                    return True
+                self.ui_click_until_disappear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED,
+                                              interval=1.5)
+                continue
+
+            # 账号列表已打开状态
+            ocrRes = self.O_SA_ACCOUNT_ACCOUNT_LIST.detect_and_ocr(self.device.image)
+
+            # 找到该账号
+            for index, ocr_account in enumerate([ocrResItem.ocr_text for ocrResItem in ocrRes]):
+                if not accountInfo.is_account_alias(ocr_account):
                     continue
-
-                # 账号列表已打开状态
-                ocrRes = self.O_SA_ACCOUNT_ACCOUNT_LIST.detect_and_ocr(self.device.image)
-
-                # 找到该账号
-                for index, ocr_account in enumerate([ocrResItem.ocr_text for ocrResItem in ocrRes]):
-                    if not accountInfo.is_account_alias(ocr_account):
-                        continue
                     # if accountInfo.account in [ocrResItem.ocr_text for ocrResItem in ocrRes]:
                     #     index = [ocrResItem.ocr_text for ocrResItem in ocrRes].index(accountInfo.account)
-                    ocrResBoxList = [ocrResItem.box for ocrResItem in ocrRes]
-                    self.O_SA_ACCOUNT_ACCOUNT_LIST.area = [
-                        self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[0] + ocrResBoxList[index][0][0],
-                        self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[1] + ocrResBoxList[index][0][1],
-                        ocrResBoxList[index][1][0] - ocrResBoxList[index][0][0],
-                        ocrResBoxList[index][2][1] - ocrResBoxList[index][1][1]]
-                    time.sleep(1)
-                    self.click(self.O_SA_ACCOUNT_ACCOUNT_LIST)
-                    logger.info("account [ %s ] found", accountInfo.account)
-                    return True
+                ocrResBoxList = [ocrResItem.box for ocrResItem in ocrRes]
+                self.O_SA_ACCOUNT_ACCOUNT_LIST.area = [
+                    self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[0] + ocrResBoxList[index][0][0],
+                    self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[1] + ocrResBoxList[index][0][1],
+                    ocrResBoxList[index][1][0] - ocrResBoxList[index][0][0],
+                    ocrResBoxList[index][2][1] - ocrResBoxList[index][1][1]]
+                time.sleep(1)
+                self.click(self.O_SA_ACCOUNT_ACCOUNT_LIST)
+                logger.info("account [ %s ] found", accountInfo.account)
+                return True
 
-                # 未找到该账号
-                if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_ADD_ACCOUNT):
-                    break
-                self.swipe(self.S_SA_ACCOUNT_LIST_UP, 1.5)
-                time.sleep(0.5)
+            # 未找到该账号
+            if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_ADD_ACCOUNT):
+                break
+            self.swipe(self.S_SA_ACCOUNT_LIST_UP, 1.5)
+            time.sleep(0.5)
         logger.info("account [ %s ] not found ", accountInfo.account)
         return False
 
@@ -312,9 +311,35 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                 # 当前选择账号不是account
                 if not self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED):
                     # 没有找到account
-                    if not self.selectAccount(accountInfo):
-                        self.ui_click_until_disappear(self.C_SA_LOGIN_FORM_ACCOUNT_CLOSE_BTN,
-                                                      stop=self.I_SA_NETEASE_GAME_LOGO)
+                    MAX_RETRY = 3
+                    found = False
+
+                    for retry in range(MAX_RETRY):
+                        logger.info("selectAccount attempt %d/%d", retry + 1, MAX_RETRY)
+
+                        # 重置 OCR 区域为默认值，避免上次残留
+                        self.O_SA_ACCOUNT_ACCOUNT_LIST.area = self.O_SA_ACCOUNT_ACCOUNT_LIST.roi
+                        self.screenshot()
+
+                        if self.selectAccount(accountInfo):
+                            found = True
+                            break
+
+
+                        if retry < MAX_RETRY - 1:
+                            # 切号重试：关闭账号选择页后重新打开。
+                            logger.info("Account not found, retrying (close & reopen)")
+                            self.ui_click_until_disappear(
+                                self.C_SA_LOGIN_FORM_ACCOUNT_CLOSE_BTN,
+                                stop=self.I_SA_NETEASE_GAME_LOGO,
+                                interval=1.5,
+                            )
+                            time.sleep(1)
+                            self.jump2SelectAccount()
+                            time.sleep(1)
+
+                    if not found:
+                        logger.error("selectAccount failed after %d retries", MAX_RETRY)
                         return False
                     # selectAccount 后更新图片
                     self.screenshot()
