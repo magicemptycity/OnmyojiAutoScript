@@ -347,7 +347,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         """退出同心队，解散集结，返回庭院"""
         logger.info('开始处理解散同心队')
 
-        if self.wait_until_appear(self.I_I_SAME_HEART_TEAM_CLOSE, wait_time=5):
+        if self.wait_until_appear(self.I_I_SAME_HEART_TEAM_CLOSE, wait_time=15):
             logger.info('发现关闭集结按钮，点击关闭')
             sleep(1)
             self.ui_click(self.I_I_SAME_HEART_TEAM_CLOSE, stop=self.I_UI_CONFIRM, interval=1)
