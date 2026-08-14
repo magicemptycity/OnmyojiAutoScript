@@ -161,6 +161,8 @@ class ConfigManager:
             if key not in fields:
                 dynamic_field = ConfigManager._dynamic_list_item_model(str(key), fields)
                 if dynamic_field is None:
+                    if model_type.model_config.get('extra') == 'allow':
+                        continue
                     errors.append(
                         ConfigManager._format_field_error(
                             field_path,

@@ -32,6 +32,10 @@ from tasks.KekkaiUtilize.config import KekkaiUtilize
 from tasks.KekkaiActivation.config import KekkaiActivation
 from tasks.DemonEncounter.config import DemonEncounter
 from tasks.DailyTrifles.config import DailyTrifles
+from tasks.DailyTriflesSpecial.config import DailyTriflesSpecial
+from tasks.SameHeartTeam.config import SameHeartTeam
+from tasks.SameHeartTeamOrochi.config import SameHeartTeamOrochi
+from tasks.SameHeartTeamAwaken.config import SameHeartTeamAwaken
 from tasks.TalismanPass.config import TalismanPass
 from tasks.Pets.config import Pets
 from tasks.SoulsTidy.config import SoulsTidy
@@ -84,6 +88,17 @@ from tasks.MysteryShop.config import MysteryShop
 from tasks.Duel.config import Duel
 # ----------------------------------------------------------------------------------------------------------------------
 
+# 多账号专属---------------------------------------------------------------------------------------------------------------
+from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
+from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
+from tasks.MultiAccountDelegation.config import MultiAccountDelegation
+from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
+from tasks.MultiAccountRepeat.config import MultiAccountRepeat
+from tasks.MultiAccountRepeatDay.config import MultiAccountRepeatDay
+from tasks.MultiAccountRepeatWeek.config import MultiAccountRepeatWeek
+from tasks.MultiAccountRepeatMonth.config import MultiAccountRepeatMonth
+# ----------------------------------------------------------------------------------------------------------------------
+
 class ConfigModel(ConfigBase):
     config_name: str = "oas"
     running_task: str = ''
@@ -102,6 +117,10 @@ class ConfigModel(ConfigBase):
     kekkai_activation: KekkaiActivation = Field(default_factory=KekkaiActivation)
     demon_encounter: DemonEncounter = Field(default_factory=DemonEncounter)
     daily_trifles: DailyTrifles = Field(default_factory=DailyTrifles)
+    daily_trifles_special: DailyTriflesSpecial = Field(default_factory=DailyTriflesSpecial)
+    same_heart_team: SameHeartTeam = Field(default_factory=SameHeartTeam)
+    same_heart_team_orochi: SameHeartTeamOrochi = Field(default_factory=SameHeartTeamOrochi)
+    same_heart_team_awaken: SameHeartTeamAwaken = Field(default_factory=SameHeartTeamAwaken)
     talisman_pass: TalismanPass = Field(default_factory=TalismanPass)
     pets: Pets = Field(default_factory=Pets)
     souls_tidy: SoulsTidy = Field(default_factory=SoulsTidy)
@@ -147,6 +166,16 @@ class ConfigModel(ConfigBase):
     weekly_trifles: WeeklyTrifles = Field(default_factory=WeeklyTrifles)
     mystery_shop: MysteryShop = Field(default_factory=MysteryShop)
     duel: Duel = Field(default_factory=Duel)
+
+    # 多账号专属
+    multi_account_kekkai_utilize: MultiAccountKekkaiUtilize = Field(default_factory=MultiAccountKekkaiUtilize)
+    multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
+    multi_account_delegation: MultiAccountDelegation = Field(default_factory=MultiAccountDelegation)
+    multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)
+    multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
+    multi_account_repeat_day: MultiAccountRepeatDay = Field(default_factory=MultiAccountRepeatDay)
+    multi_account_repeat_week: MultiAccountRepeatWeek = Field(default_factory=MultiAccountRepeatWeek)
+    multi_account_repeat_month: MultiAccountRepeatMonth = Field(default_factory=MultiAccountRepeatMonth)
 
     # 阴阳寮
     collective_missions: CollectiveMissions = Field(default_factory=CollectiveMissions)
