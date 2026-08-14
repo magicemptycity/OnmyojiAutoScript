@@ -141,6 +141,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
             except RequestHumanTakeover:
                 raise
             except Exception as exc:
+                self.save_error_log()
                 logger.exception(
                     "执行%s失败（%s-%s），第 %s/%s 次：%s",
                     task_name,
@@ -205,6 +206,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
         except RequestHumanTakeover:
             raise
         except Exception as exc:
+            self.save_error_log()
             logger.exception(
                 "切换账号时发生异常（%s-%s）：%s",
                 account_info.character,

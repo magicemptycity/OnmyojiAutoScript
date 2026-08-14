@@ -81,6 +81,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             except RequestHumanTakeover:
                 raise
             except Exception as exc:
+                self.save_error_log()
                 overall_failed = True
                 logger.exception(
                     "执行%s失败（%s-%s）：%s",
@@ -95,6 +96,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                 except RequestHumanTakeover:
                     raise
                 except Exception as exc:
+                    self.save_error_log()
                     account_success = False
                     overall_failed = True
                     logger.exception(
@@ -111,6 +113,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                 except RequestHumanTakeover:
                     raise
                 except Exception as exc:
+                    self.save_error_log()
                     success_result = False
                     logger.exception(
                         "更新%s账号状态失败（%s-%s）：%s",
@@ -281,6 +284,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         except RequestHumanTakeover:
             raise
         except Exception as exc:
+            self.save_error_log()
             logger.exception(
                 "切换账号时发生异常（%s-%s）：%s",
                 account.character,

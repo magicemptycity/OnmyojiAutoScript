@@ -335,7 +335,8 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                                 interval=1.5,
                             )
                             time.sleep(1)
-                            self.jump2SelectAccount()
+                            #self.jump2SelectAccount()
+                            self.ui_click(self.C_SA_LOGIN_FORM_USER_CENTER,self.I_SA_NETEASE_GAME_LOGO,interval=1.5)
                             time.sleep(1)
 
                     if not found:
