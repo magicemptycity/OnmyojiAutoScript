@@ -1,7 +1,10 @@
 # This Python file uses the following encoding: utf-8
 
+import time
 from datetime import datetime, timedelta
 from enum import Enum
+
+from module.base.decorator import del_cached_property
 from module.exception import RequestHumanTakeover, GameNotRunningError
 from typing import Any, Callable, Protocol
 
@@ -328,19 +331,48 @@ class ScriptRuntimeController:
 
         self._ensure_emulator_running('Wake emulator before running task')
 
-        try:
-            running = self.device.app_is_running()
-        except RequestHumanTakeover as e:
-            # adb 重试 3 次都连不上 → "无法确认游戏是否在前台"。
-            # 翻译为 GameNotRunningError,沿调用栈上抛,
-            # 由 Script._handle_task_exception 统一走 Restart 恢复分支。
-            raise GameNotRunningError(f'Failed to query app state before task `{task}` (likely adb disconnected): {e}') \
-                from e
+        running = self._app_is_running_with_retry(task)
 
         if not running:
             return self._run_restart_recovery(f'Game is not running before task `{task}`, recover it via Restart')
 
         return ScriptRuntimeDecision.READY
+
+    def _app_is_running_with_retry(self, task: str, max_retry: int = 3) -> bool:
+        """设备连接异常时，重新初始化连接后重试查询游戏状态。"""
+        for attempt in range(1, max_retry + 1):
+            try:
+                return self.device.app_is_running()
+            except RequestHumanTakeover as exc:
+                # 连接层重试耗尽后会抛出此异常，这里也转换为统一的游戏状态异常。
+                raise GameNotRunningError(
+                    f'Failed to query app state before task `{task}`: {exc}'
+                ) from exc
+            except Exception as exc:
+                logger.warning(
+                    f'查询任务 `{task}` 启动状态失败，第 {attempt}/{max_retry} 次：{exc}'
+                )
+                if attempt >= max_retry:
+                    logger.error(
+                        f'查询任务 `{task}` 启动状态连续失败 {max_retry} 次'
+                    )
+                    raise
+
+                self._refresh_device_connection(attempt, task)
+                time.sleep(5)
+
+        raise RuntimeError('Unreachable app state retry branch')
+
+    def _refresh_device_connection(self, attempt: int, task: str) -> None:
+        """清理失效的 uiautomator2 连接，并尝试重新连接 ADB。"""
+        logger.info(f'刷新任务 `{task}` 的设备连接，第 {attempt + 1}/3 次')
+        device = self.device
+        # u2 可能保留着已经断开的端口转发，必须删除后重新建立。
+        del_cached_property(device, 'u2')
+        try:
+            device.adb_reconnect()
+        except Exception as exc:
+            logger.warning(f'刷新设备连接失败，将继续进行下一次重试：{exc}')
 
     def _wait_until_with_emulator_preheat(
         self,
