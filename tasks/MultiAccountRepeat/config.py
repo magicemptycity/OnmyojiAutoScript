@@ -40,12 +40,12 @@ class MultiAccountRepeatAccount(AccountInfo):
         ),
     )
 
-
-    failed_task_names: list[str] = Field(
-        default_factory=list,
-        exclude=True,
-        description="自动记录连续重试仍失败的任务，下次仅重试这些任务",
+    failed_task_list: MultiLine = Field(
+        default="",
+        description="自动记录连续重试仍失败的任务，下次仅重试这些任务。可手动清空。",
     )
+
+
 
     @model_validator(mode="before")
     @classmethod
@@ -62,12 +62,17 @@ class MultiAccountRepeatAccount(AccountInfo):
             )
         return data
 
-    @model_serializer(mode="wrap")
-    def serialize_model(self, handler) -> dict[str, Any]:
-        """保存内部的失败任务记录，不在配置页面展示。"""
-        data = handler(self)
-        data["failed_task_names"] = self.failed_task_names
-        return data
+    @property
+    def failed_task_names(self) -> list[str]:
+        """将失败任务列表转换为内部任务名。"""
+        names = []
+        for line in self.failed_task_list.split("\n"):
+            raw = line.strip()
+            if not raw:
+                continue
+            resolved = TaskNameResolver.resolve(raw)
+            names.append(resolved or raw)
+        return names
 
     @property
     def repeat_task_names(self) -> list[str]:

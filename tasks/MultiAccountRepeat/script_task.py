@@ -44,9 +44,10 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                 continue
             logger.info("开始处理账号 %s-%s", account_info.character, account_info.svr)
 
+            failed_task_names = account_info.failed_task_names
             if (
                 self.fade_conf.multi_account_repeat_config.skip_if_logged_today
-                and not account_info.failed_task_names
+                and not failed_task_names
             ):
                 last_complete_time = account_info.last_complete_time
                 now = datetime.now()
@@ -65,39 +66,38 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     account_info.character,
                     account_info.svr,
                 )
-                self._push_error_notification(
-                    account_info,
-                    "切换账号",
-                    getattr(self, "_last_switch_error", None),
-                )
+                self._push_error_notification(account_info, "切换账号", getattr(self, "_last_switch_error", None))
                 continue
 
-            task_names = self._get_task_names_to_run(account_info)
+            task_names = self._get_task_names_to_run(account_info, failed_task_names)
             if not task_names:
                 logger.warning(
                     "%s-%s 没有配置需要执行的任务",
                     account_info.character,
                     account_info.svr,
                 )
+                account_info.failed_task_list = ""
                 setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
                 self.config.save()
                 continue
 
-            failed_task_names = []
+            current_failed_task_names = []
             for task_name in task_names:
                 if self._run_task_with_retry(account_info, task_name):
                     continue
-
-                failed_task_names.append(task_name)
+                current_failed_task_names.append(task_name)
                 overall_failed = True
 
-            if failed_task_names:
-                account_info.failed_task_names = failed_task_names
+            if current_failed_task_names:
+                account_info.failed_task_list = "\n".join(
+                    self._task_display_name(task_name)
+                    for task_name in current_failed_task_names
+                )
                 setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
                 self.config.save()
                 continue
 
-            account_info.failed_task_names = []
+            account_info.failed_task_list = ""
             self.fade_conf.update_account_login_history(account_info)
             setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
             self.config.save()
@@ -108,10 +108,10 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
     def _get_task_names_to_run(
         self,
         account_info: MultiAccountRepeatAccount,
+        failed_task_names: list[str],
     ) -> list[str]:
         """优先返回上次运行失败的任务，避免重复执行已成功任务。"""
         configured_task_names = account_info.repeat_task_names
-        failed_task_names = account_info.failed_task_names
         if not failed_task_names:
             return configured_task_names
 
@@ -132,7 +132,9 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                 account_info.svr,
                 ", ".join(removed_task_names),
             )
-            account_info.failed_task_names = task_names
+            account_info.failed_task_list = "\n".join(
+                self._task_display_name(task_name) for task_name in task_names
+            )
 
         if task_names:
             logger.info(

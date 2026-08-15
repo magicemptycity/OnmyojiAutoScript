@@ -2099,7 +2099,8 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
-      "repeat_task_list": ""
+      "repeat_task_list": "",
+      "failed_task_list": ""
     }
   },
   "multi_account_repeat_morning": {
@@ -2124,7 +2125,8 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
-      "repeat_task_list": ""
+      "repeat_task_list": "",
+      "failed_task_list": ""
     }
   },
   "multi_account_repeat_afternoon": {
@@ -2149,7 +2151,8 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
-      "repeat_task_list": ""
+      "repeat_task_list": "",
+      "failed_task_list": ""
     }
   },
   "multi_account_repeat_day": {
@@ -2174,7 +2177,8 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
-      "repeat_task_list": ""
+      "repeat_task_list": "",
+      "failed_task_list": ""
     }
   },
   "multi_account_repeat_week": {
@@ -2199,7 +2203,8 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
-      "repeat_task_list": ""
+      "repeat_task_list": "",
+      "failed_task_list": ""
     }
   },
   "multi_account_repeat_month": {
@@ -2224,7 +2229,8 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
-      "repeat_task_list": ""
+      "repeat_task_list": "",
+      "failed_task_list": ""
     }
   },
   "collective_missions": {
