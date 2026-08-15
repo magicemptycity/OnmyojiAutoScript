@@ -23,6 +23,14 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
     multi_account_config_attr: ClassVar[str] = "multi_account_repeat"
     fade_conf: MultiAccountRepeat = None
     task_retry_limit: ClassVar[int] = 3
+    task_display_names: ClassVar[dict[str, str]] = {
+        "MultiAccountRepeat": "多账号多任务",
+        "MultiAccountRepeatMorning": "多账号多任务上午",
+        "MultiAccountRepeatAfternoon": "多账号多任务下午",
+        "MultiAccountRepeatDay": "多账号多任务每日",
+        "MultiAccountRepeatWeek": "多账号多任务每周",
+        "MultiAccountRepeatMonth": "多账号多任务每月",
+    }
 
     def run(self):
         self.fade_conf = getattr(self.config, self.multi_account_config_attr)
@@ -54,10 +62,10 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     account_info.character,
                     account_info.svr,
                 )
-                account_name = f"{account_info.character}-{account_info.svr}"
-                self.config.notifier.push(
-                    title=f"多账号多任务切号失败：{account_name}",
-                    content=f"{account_name} 切换账号失败",
+                self._push_error_notification(
+                    account_info,
+                    "切换账号",
+                    getattr(self, "_last_switch_error", None),
                 )
                 continue
 
@@ -94,12 +102,30 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
         aliases = TaskNameResolver._build_aliases(task_name)
         return next((name for name in aliases if any('\u4e00' <= char <= '\u9fff' for char in name)), task_name)
 
+    def _current_task_display_name(self) -> str:
+        return self.task_display_names.get(self.task_name, self.task_name)
+
+    def _push_error_notification(self, account_info, failed_task: str, exc: Exception | None = None) -> None:
+        account_name = f"{account_info.character}-{account_info.svr}"
+        error_type = type(exc).__name__ if exc is not None else "切换失败"
+        current_task = self._current_task_display_name()
+        self.config.notifier.push(
+            title=f"{current_task}报错：{account_name}",
+            content=(
+                f"当前功能：{current_task}\n"
+                f"报错账号：{account_name}\n"
+                f"报错功能：{failed_task}\n"
+                f"报错类型：{error_type}"
+            ),
+        )
+
     def _run_task_with_retry(
         self,
         account_info: MultiAccountRepeatAccount,
         task_name: str,
     ) -> bool:
         """执行单个任务；失败后重启游戏并最多重试三次。"""
+        last_exception: Exception | None = None
         for attempt in range(1, self.task_retry_limit + 1):
             if attempt > 1:
                 logger.warning(
@@ -142,6 +168,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                 raise
             except Exception as exc:
                 self.save_error_log()
+                last_exception = exc
                 logger.exception(
                     "执行%s失败（%s-%s），第 %s/%s 次：%s",
                     task_name,
@@ -153,16 +180,11 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                 )
 
         task_display_name = self._task_display_name(task_name)
-        content = (
+        logger.error(
             f"{account_info.character}-{account_info.svr} 的任务 "
             f"{task_display_name} 连续运行 {self.task_retry_limit} 次失败"
         )
-        logger.error(content)
-        self.config.notifier.push(
-            title=f"多账号多任务失败：{account_info.character}-{account_info.svr}",
-            content=content,
-        )
-        # 无论当前账号是否还有任务，都先重启；外层随后会继续下一个任务或账号。
+        self._push_error_notification(account_info, task_display_name, last_exception)
         self._restart_game()
         return False
 
@@ -197,6 +219,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
 
     def _switch_account(self, account_info) -> bool:
         """切换到循环任务当前账号。"""
+        self._last_switch_error = None
         try:
             return SwitchAccount(
                 self.config,
@@ -206,6 +229,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
         except RequestHumanTakeover:
             raise
         except Exception as exc:
+            self._last_switch_error = exc
             self.save_error_log()
             logger.exception(
                 "切换账号时发生异常（%s-%s）：%s",

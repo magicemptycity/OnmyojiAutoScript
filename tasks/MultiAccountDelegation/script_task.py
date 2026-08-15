@@ -19,6 +19,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
 
     task_name = "MultiAccountDelegation"
     multi_account_config_attr = "multi_account_delegation"
+    inner_task_display_name = "式神委派"
     server_schedule = False
     retry_delay = timedelta(minutes=10)
     fade_conf: MultiAccountDelegation = None

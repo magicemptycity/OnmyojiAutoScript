@@ -32,6 +32,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         "MultiAccountDelegation": "多账号式神委派",
         "MultiAccountAreaBoss": "多账号地域鬼王",
     }
+    inner_task_display_name: ClassVar[str] = ""
     current_account_info: Any = None
     current_account_config: Any = None
 
@@ -60,10 +61,10 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             if not self._switch_account(account):
                 overall_failed = True
                 logger.warning("切换到账号 %s-%s 失败", account.character, account.svr)
-                account_name = f"{account.character}-{account.svr}"
-                self.config.notifier.push(
-                    title=f"{self._task_display_name()}切号失败：{account_name}",
-                    content=f"{account_name} 切换账号失败",
+                self._push_error_notification(
+                    account,
+                    "切换账号",
+                    getattr(self, "_last_switch_error", None),
                 )
                 self.on_account_failure(index, account, "切换账号失败")
                 self.save_multi_account_config()
@@ -90,6 +91,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                     account.svr,
                     exc,
                 )
+                self._push_error_notification(account, self._failed_task_display_name(), exc)
             finally:
                 try:
                     self.cleanup_account(index, account, account_success)
@@ -106,6 +108,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                         account.svr,
                         exc,
                     )
+                    self._push_error_notification(account, "清理账号上下文", exc)
 
             if account_success:
                 try:
@@ -122,6 +125,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                         account.svr,
                         exc,
                     )
+                    self._push_error_notification(account, "更新账号状态", exc)
                 if success_result is False:
                     account_success = False
                     overall_failed = True
@@ -140,6 +144,23 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             target=self.get_next_run_time(),
         )
         raise TaskEnd(self.task_name)
+
+    def _failed_task_display_name(self) -> str:
+        return self.inner_task_display_name or self._task_display_name()
+
+    def _push_error_notification(self, account: Any, failed_task: str, exc: Exception | None = None) -> None:
+        account_name = f"{account.character}-{account.svr}"
+        error_type = type(exc).__name__ if exc is not None else "切换失败"
+        current_task = self._task_display_name()
+        self.config.notifier.push(
+            title=f"{current_task}报错：{account_name}",
+            content=(
+                f"当前功能：{current_task}\n"
+                f"报错账号：{account_name}\n"
+                f"报错功能：{failed_task}\n"
+                f"报错类型：{error_type}"
+            ),
+        )
 
     def _task_display_name(self) -> str:
         """返回当前多账号功能用于通知的中文名称。"""
@@ -279,11 +300,13 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         return task_obj
 
     def _switch_account(self, account: Any) -> bool:
+        self._last_switch_error = None
         try:
             return SwitchAccount(self.config, self.device, account).switchAccount()
         except RequestHumanTakeover:
             raise
         except Exception as exc:
+            self._last_switch_error = exc
             self.save_error_log()
             logger.exception(
                 "切换账号时发生异常（%s-%s）：%s",

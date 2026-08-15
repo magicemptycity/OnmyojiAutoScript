@@ -15,6 +15,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountKekkaiActivationAssets):
 
     task_name = "MultiAccountKekkaiActivation"
     multi_account_config_attr = "multi_account_kekkai_activation"
+    inner_task_display_name = "结界挂卡"
     server_schedule = False
     retry_delay = timedelta(minutes=10)
     fade_conf: MultiAccountKekkaiActivation = None

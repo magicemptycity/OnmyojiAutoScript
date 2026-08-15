@@ -12,6 +12,7 @@ class ScriptTask(MultiAccountTaskBase):
 
     task_name = "MultiAccountKekkaiUtilize"
     multi_account_config_attr = "multi_account_kekkai_utilize"
+    inner_task_display_name = "结界蹭卡"
     fade_conf: MultiAccountKekkaiUtilize = None
     retry_delay = timedelta(minutes=10)
     # 蹭卡按每个账号的 next_utilize_time 调度，不能被服务器更新时间覆盖。

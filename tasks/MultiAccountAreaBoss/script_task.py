@@ -14,6 +14,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountAreaBossAssets):
 
     task_name = "MultiAccountAreaBoss"
     multi_account_config_attr = "multi_account_area_boss"
+    inner_task_display_name = "地域鬼王"
     fade_conf: MultiAccountAreaBoss = None
 
     def get_account_config(
