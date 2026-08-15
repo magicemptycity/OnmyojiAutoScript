@@ -1,16 +1,13 @@
 import copy
 from datetime import datetime, timedelta
 
-from module.exception import RequestHumanTakeover
 from module.logger import logger
 from tasks.Component.MultiAccount.multi_account_task import MultiAccountTaskBase
-from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.Delegation.config import DelegationConfig
 from tasks.MultiAccountDelegation.assets import MultiAccountDelegationAssets
 from tasks.MultiAccountDelegation.config import (
     DelegationInterval,
     MultiAccountDelegation,
-    MultiAccountDelegationAccount,
 )
 
 
@@ -69,9 +66,19 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
         self.config.save()
 
     def run_account(self, index: int, account_info: object) -> bool | None:
-        """调用原有式神委派任务执行真实委派动作。"""
-        self._run_delegation_for_account(account_info)
+        """直接调用原式神委派任务，复用其全部逻辑和优化。"""
+        task_obj = self.create_task_object(
+            "Delegation",
+            config=self.config,
+            device=self.device,
+        )
+        # 内层原任务不应覆盖多账号式神委派的调度时间。
+        task_obj.set_next_run = self._skip_inner_task_schedule
+        task_obj.run()
         return True
+
+    def _skip_inner_task_schedule(self, *args, **kwargs) -> None:
+        """防止原式神委派覆盖多账号式神委派的调度时间。"""
 
     def cleanup_account(
         self,
@@ -102,18 +109,6 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
             reason,
             account_info.next_delegation_time,
         )
-
-    def _run_delegation_for_account(
-        self,
-        account_info: MultiAccountDelegationAccount,
-    ) -> None:
-        """加载原有式神委派任务，执行当前账号的委派流程。"""
-        task_obj = self.create_task_object(
-            "Delegation",
-            config=self.config,
-            device=self.device,
-        )
-        task_obj.run()
 
     def _restore_delegation_config(self) -> None:
         """恢复内层式神委派配置和调度器。"""
@@ -156,42 +151,6 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
         if not next_times:
             return datetime.now() + timedelta(hours=6)
         return min(next_times)
-
-    @staticmethod
-    def _account_matches_current(account_info, current_account_info) -> bool:
-        """兼容被其他任务指定当前账号时的单账号执行模式。"""
-        current_character = getattr(current_account_info, "character", "") or ""
-        current_svr = getattr(current_account_info, "svr", "") or ""
-        current_account = getattr(current_account_info, "account", "") or ""
-
-        if current_account:
-            account_value = getattr(account_info, "account", "") or ""
-            if account_value and account_value == current_account:
-                return True
-
-        if current_character and current_svr:
-            return (
-                account_info.character == current_character
-                and account_info.svr == current_svr
-            )
-        if current_character:
-            return account_info.character == current_character
-        return False
-
-    def _switch_account(self, account: object) -> bool:
-        """切换账号，保留旧接口并统一转换切号异常。"""
-        try:
-            return SwitchAccount(self.config, self.device, account).switchAccount()
-        except RequestHumanTakeover:
-            raise
-        except Exception as exc:
-            logger.exception(
-                "切换账号时发生异常（%s-%s）：%s",
-                account.character,
-                account.svr,
-                exc,
-            )
-            return False
 
     def _save_fade_config(self) -> None:
         """兼容旧调用方的保存方法。"""
