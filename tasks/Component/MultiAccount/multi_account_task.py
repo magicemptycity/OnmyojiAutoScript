@@ -300,6 +300,11 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         return task_obj
 
     def _switch_account(self, account: Any) -> bool:
+        # 多账号多任务已成功切到当前账号，内层多账号任务无需重复切号。
+        if getattr(self, "_account_scope", None) is not None and self._is_account_in_scope(account):
+            logger.info("多账号多任务已切换到当前账号，跳过重复切号")
+            return True
+
         self._last_switch_error = None
         try:
             return SwitchAccount(self.config, self.device, account).switchAccount()

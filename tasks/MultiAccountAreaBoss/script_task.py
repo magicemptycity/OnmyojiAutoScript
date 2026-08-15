@@ -28,19 +28,39 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountAreaBossAssets):
         return self.fade_conf.common_config
 
     def prepare_account(self, index: int, account: MultiAccountAreaBossAccount) -> None:
-        """备份内层地域鬼王配置，避免账号之间互相污染。"""
+        """备份原地域鬼王配置，并映射当前账号配置。"""
         self._area_boss_config_backup = copy.deepcopy(self.config.area_boss)
+        active_config = self.get_account_config(index, account)
+
+        boss_config = self.config.area_boss.boss
+        boss_config.boss_number = active_config.boss_number
+        boss_config.boss_reward = active_config.boss_reward
+        boss_config.reward_floor = active_config.reward_floor
+        boss_config.use_collect = active_config.use_collect
+        boss_config.Attack_60 = active_config.Attack_60
+
+        general_battle = self.config.area_boss.general_battle
+        general_battle.lock_team_enable = active_config.lock_team_enable
+        general_battle.preset_enable = active_config.switch_team_enable
+        self.config.area_boss.switch_soul.enable = active_config.switch_soul_enable
+        self.config.area_boss.switch_soul.switch_group_team = active_config.preset_public_enable
+        self.config.area_boss.switch_soul.enable_switch_by_name = False
+        self.config.area_boss.switch_soul.group_name = ""
+        self.config.area_boss.switch_soul.team_name = ""
 
     def run_account(self, index: int, account: MultiAccountAreaBossAccount) -> bool | None:
-        """把当前账号配置传给内层地域鬼王任务并执行。"""
+        """直接调用原地域鬼王任务，复用其全部逻辑和优化。"""
         task_obj = self.create_task_object(
-            "MultiAccountAreaBoss",
-            script_name="area_script_task.py",
+            "AreaBoss",
             config=self.config,
             device=self.device,
         )
+        task_obj.set_next_run = self._skip_inner_task_schedule
         task_obj.run()
         return True
+
+    def _skip_inner_task_schedule(self, *args, **kwargs) -> None:
+        """防止原地域鬼王覆盖多账号地域鬼王的调度时间。"""
 
     def cleanup_account(
         self,
@@ -48,7 +68,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountAreaBossAssets):
         account: MultiAccountAreaBossAccount,
         account_success: bool,
     ) -> None:
-        """恢复内层配置，保证下一个账号从原始配置开始。"""
+        """恢复原地域鬼王配置，保证下一个账号从原始配置开始。"""
         latest_outer_config = getattr(self.config.model, self.multi_account_config_attr, None)
         latest_scheduler = getattr(latest_outer_config, "scheduler", None)
         if latest_scheduler is not None:
@@ -59,31 +79,3 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountAreaBossAssets):
             return
         self.config.model.area_boss = backup
         del self._area_boss_config_backup
-
-    def create_area_boss_task(
-        self,
-        account_info: MultiAccountAreaBossAccount,
-        **kwargs,
-    ):
-        """保留旧接口，方便其他代码继续创建内层任务。"""
-        kwargs.setdefault("config", self.config)
-        kwargs.setdefault("device", self.device)
-        task_obj = self.create_task_object(
-            "MultiAccountAreaBoss",
-            script_name="area_script_task.py",
-            **kwargs,
-        )
-        task_obj.current_account_info = account_info
-        index = self.current_account_index
-        if index is None:
-            index = next(
-                (
-                    item_index
-                    for item_index, item in enumerate(self.fade_conf.account_list)
-                    if item is account_info
-                ),
-                -1,
-            )
-        if index >= 0:
-            task_obj.current_account_config = self.get_account_config(index, account_info)
-        return task_obj
