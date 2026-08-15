@@ -6,6 +6,7 @@ from typing import ClassVar
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
 from tasks.MultiAccountRepeat.task_name_resolver import TaskNameResolver
+from tasks.Component.MultiAccount.account_library import resolve_shared_account
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.GameUi.game_ui import GameUi
@@ -38,6 +39,10 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
         overall_failed = False
 
         for account_info in self.fade_conf.account_list:
+            if not resolve_shared_account(self.config, account_info):
+                logger.error("公共账号序号无效：%s", getattr(account_info, "shared_account_index", 0))
+                overall_failed = True
+                continue
             if not account_info.is_valid():
                 continue
             if not self._is_account_in_scope(account_info):

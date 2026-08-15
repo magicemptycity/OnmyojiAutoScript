@@ -10,7 +10,7 @@ from tasks.Component.MultiAccount.multi_account_config import (
     pad_parallel_models,
     serialize_indexed_models,
 )
-from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
+from tasks.Component.MultiAccount.account_library import MultiAccountReference
 from tasks.Component.config_base import ConfigBase, MultiLine
 from tasks.Component.config_scheduler import Scheduler
 from tasks.MultiAccountRepeat.task_name_resolver import TaskNameResolver
@@ -30,7 +30,7 @@ class MultiAccountRepeatConfig(ConfigBase, extra="allow"):
     )
 
 
-class MultiAccountRepeatAccount(AccountInfo):
+class MultiAccountRepeatAccount(MultiAccountReference):
     """多账号多任务中的账号和任务列表。"""
 
     repeat_task_list: MultiLine = Field(

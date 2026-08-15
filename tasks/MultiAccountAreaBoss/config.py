@@ -12,12 +12,12 @@ from tasks.Component.MultiAccount.multi_account_config import (
     serialize_account_list,
     serialize_indexed_models,
 )
-from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
+from tasks.Component.MultiAccount.account_library import MultiAccountReference
 from tasks.Component.config_base import ConfigBase
 from tasks.Component.config_scheduler import Scheduler
 
 
-class MultiAccountAreaBossAccount(AccountInfo):
+class MultiAccountAreaBossAccount(MultiAccountReference):
     """多账号地域鬼王中的账号信息。"""
 
     enable_private_config: bool = Field(default=False, description="是否启用私有配置")

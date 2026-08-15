@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
+from tasks.Component.MultiAccount.account_library import resolve_shared_account
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.GameUi.game_ui import GameUi
@@ -40,6 +41,14 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         self.fade_conf = self.get_multi_account_config()
         # 多账号任务被“多账号多任务”调用时，只处理外层传入的当前账号。
         self._account_scope = self._get_account_scope()
+        self._invalid_shared_account_ids = {
+            id(account)
+            for account in self.fade_conf.account_list
+            if not resolve_shared_account(self.config, account)
+        }
+        for account in self.fade_conf.account_list:
+            if id(account) in self._invalid_shared_account_ids:
+                logger.error("公共账号序号无效：%s", getattr(account, "shared_account_index", 0))
         pending_accounts = self.collect_pending_accounts(datetime.now())
         pending_accounts = self._filter_scoped_accounts(pending_accounts)
 
@@ -178,7 +187,8 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         return [
             (index, account)
             for index, account in enumerate(self.fade_conf.account_list)
-            if account.is_valid() and self.should_run_account(index, account, now)
+            if id(account) not in getattr(self, "_invalid_shared_account_ids", set())
+            and account.is_valid() and self.should_run_account(index, account, now)
         ]
 
     def should_run_account(self, index: int, account: Any, now: datetime) -> bool:

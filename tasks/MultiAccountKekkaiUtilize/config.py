@@ -11,14 +11,14 @@ from tasks.Component.MultiAccount.multi_account_config import (
     serialize_account_list,
     serialize_indexed_models,
 )
-from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
+from tasks.Component.MultiAccount.account_library import MultiAccountReference
 from tasks.Component.config_base import ConfigBase, DateTime, Time
 from tasks.Component.config_scheduler import Scheduler
 from tasks.KekkaiUtilize.config import SelectFriendList, UtilizeRule
 from tasks.Utils.config_enum import ShikigamiClass
 
 
-class MultiAccountKekkaiUtilizeAccount(AccountInfo):
+class MultiAccountKekkaiUtilizeAccount(MultiAccountReference):
     """多账号蹭卡中的账号信息和账号级调度状态。"""
 
     next_utilize_time: DateTime = Field(

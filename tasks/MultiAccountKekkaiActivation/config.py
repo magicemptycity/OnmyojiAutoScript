@@ -12,14 +12,14 @@ from tasks.Component.MultiAccount.multi_account_config import (
     serialize_account_list,
     serialize_indexed_models,
 )
-from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
+from tasks.Component.MultiAccount.account_library import MultiAccountReference
 from tasks.Component.config_base import ConfigBase, DateTime
 from tasks.Component.config_scheduler import Scheduler
 from tasks.KekkaiActivation.config import CardStar, CardType
 from tasks.Utils.config_enum import ShikigamiClass
 
 
-class MultiAccountKekkaiActivationAccount(AccountInfo):
+class MultiAccountKekkaiActivationAccount(MultiAccountReference):
     """多账号挂卡中的账号信息和运行状态。"""
 
     next_activation_time: DateTime = Field(

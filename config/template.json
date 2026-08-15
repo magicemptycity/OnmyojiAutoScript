@@ -1886,6 +1886,18 @@
       "team_name": ""
     }
   },
+  "multi_account_accounts": {
+    "multi_account_accounts_config": {
+      "account_count": 1
+    },
+    "account_list_1": {
+      "character": "",
+      "svr": "",
+      "account": "",
+      "account_alias": "",
+      "apple_or_android": true
+    }
+  },
   "multi_account_kekkai_utilize": {
     "scheduler": {
       "enable": false,
@@ -1922,6 +1934,7 @@
     },
     "account_list": [
       {
+        "shared_account_index": 0,
         "character": "",
         "svr": "",
         "account": "",
@@ -1981,6 +1994,7 @@
     },
     "account_list": [
       {
+        "shared_account_index": 0,
         "character": "",
         "svr": "",
         "account": "",
@@ -2027,6 +2041,7 @@
     },
     "account_list": [
       {
+        "shared_account_index": 0,
         "character": "",
         "svr": "",
         "account": "",
@@ -2066,6 +2081,7 @@
     },
     "account_list": [
       {
+        "shared_account_index": 0,
         "character": "",
         "svr": "",
         "account": "",
@@ -2093,6 +2109,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
+      "shared_account_index": 0,
       "character": "",
       "svr": "",
       "account": "",
@@ -2119,6 +2136,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
+      "shared_account_index": 0,
       "character": "",
       "svr": "",
       "account": "",
@@ -2145,6 +2163,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
+      "shared_account_index": 0,
       "character": "",
       "svr": "",
       "account": "",
@@ -2171,6 +2190,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
+      "shared_account_index": 0,
       "character": "",
       "svr": "",
       "account": "",
@@ -2197,6 +2217,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
+      "shared_account_index": 0,
       "character": "",
       "svr": "",
       "account": "",
@@ -2223,6 +2244,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
+      "shared_account_index": 0,
       "character": "",
       "svr": "",
       "account": "",

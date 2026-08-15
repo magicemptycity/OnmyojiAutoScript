@@ -40,6 +40,7 @@ class ConfigMenu:
                               'Hunt', 'AbyssShadows', 'GuildBanquet', 'DemonRetreat', 'GuildActivityMonitor']
         # 多账号专属
         self.menu["多账号专属"] = [
+            'MultiAccountAccounts',
             'MultiAccountKekkaiUtilize',
             'MultiAccountKekkaiActivation',
             'MultiAccountDelegation',
