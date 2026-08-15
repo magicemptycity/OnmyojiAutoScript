@@ -40,6 +40,13 @@ class MultiAccountRepeatAccount(AccountInfo):
         ),
     )
 
+
+    failed_task_names: list[str] = Field(
+        default_factory=list,
+        exclude=True,
+        description="自动记录连续重试仍失败的任务，下次仅重试这些任务",
+    )
+
     @model_validator(mode="before")
     @classmethod
     def normalize_repeat_task_list(cls, value: Any) -> Any:
@@ -53,6 +60,13 @@ class MultiAccountRepeatAccount(AccountInfo):
                 "repeat_task_list",
                 "",
             )
+        return data
+
+    @model_serializer(mode="wrap")
+    def serialize_model(self, handler) -> dict[str, Any]:
+        """保存内部的失败任务记录，不在配置页面展示。"""
+        data = handler(self)
+        data["failed_task_names"] = self.failed_task_names
         return data
 
     @property
