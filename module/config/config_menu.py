@@ -45,6 +45,8 @@ class ConfigMenu:
             'MultiAccountDelegation',
             'MultiAccountAreaBoss',
             'MultiAccountRepeat',
+            'MultiAccountRepeatMorning',
+            'MultiAccountRepeatAfternoon',
             'MultiAccountRepeatDay',
             'MultiAccountRepeatWeek',
             'MultiAccountRepeatMonth',

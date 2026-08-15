@@ -34,6 +34,8 @@ TASK_NAME_ALIASES = {
     'FindJade': ['寻找协作任务'],
     'MemoryScrolls': ['绘卷'],
     'MultiAccountRepeat': ['多账号多任务', '多账号任务', '多账号循环任务', '多账号循环', '多账号轮回', '循环任务'],
+    'MultiAccountRepeatMorning': ['多账号多任务上午'],
+    'MultiAccountRepeatAfternoon': ['多账号多任务下午'],
     'MultiAccountRepeatDay': ['多账号多任务每日', '多账号任务每日', '多账号循环任务每日', '多账号循环任务日', '多账号日循环', '多账号循环日'],
     'MultiAccountRepeatWeek': ['多账号多任务每周', '多账号任务每周', '多账号循环任务每周', '多账号循环任务周', '多账号周循环', '多账号循环周'],
     'MultiAccountRepeatMonth': ['多账号多任务每月', '多账号任务每月', '多账号循环任务每月', '多账号循环任务月', '多账号月循环', '多账号循环月'],
