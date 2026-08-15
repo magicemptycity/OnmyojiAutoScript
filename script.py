@@ -71,16 +71,24 @@ class Script:
 
     @cached_property
     def device(self) -> Device | None:
-        try:
-            from module.device.device import Device
-            device = Device(config=self.config)
-            return device
-        except RequestHumanTakeover:
-            logger.critical('Request human takeover')
-            exit(1)
-        except Exception as e:
-            logger.exception(e)
-            exit(1)
+        from module.device.device import Device
+
+        max_retry = 3
+        for attempt in range(1, max_retry + 1):
+            try:
+                return Device(config=self.config)
+            except RequestHumanTakeover:
+                logger.critical('Request human takeover')
+                exit(1)
+            except Exception as exc:
+                if attempt >= max_retry:
+                    logger.exception(exc)
+                    exit(1)
+                logger.warning(
+                    f'Device initialization failed, retrying '
+                    f'({attempt + 1}/{max_retry}) after 5 seconds: {exc}'
+                )
+                time.sleep(5)
 
     @cached_property
     def checker(self):

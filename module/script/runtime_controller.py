@@ -203,7 +203,7 @@ class ScriptRuntimeController:
         if self.emulator_down:
             if reason:
                 logger.info(reason)
-            self.script.device = Device(self.config)
+            _ = self.device
             self.emulator_down = False
             return
 
