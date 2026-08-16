@@ -10,7 +10,7 @@ import re
 import inflection
 
 from pathlib import Path
-from pydantic import BaseModel, ValidationError, Field, model_validator
+from pydantic import BaseModel, ValidationError, Field
 
 from module.config.utils import *
 from module.logger import logger
@@ -191,53 +191,6 @@ class ConfigModel(ConfigBase):
     guild_banquet: GuildBanquet = Field(default_factory=GuildBanquet)
     demon_retreat: DemonRetreat = Field(default_factory=DemonRetreat)
     guild_activity_monitor: GuildActivityMonitor = Field(default_factory=GuildActivityMonitor)
-
-    @model_validator(mode="after")
-    def migrate_multi_account_library(self):
-        """把旧多账号任务中的登录信息自动迁移到公共账号库。"""
-        task_names = (
-            "multi_account_kekkai_utilize",
-            "multi_account_kekkai_activation",
-            "multi_account_delegation",
-            "multi_account_area_boss",
-            "multi_account_repeat",
-            "multi_account_repeat_morning",
-            "multi_account_repeat_afternoon",
-            "multi_account_repeat_day",
-            "multi_account_repeat_week",
-            "multi_account_repeat_month",
-        )
-        library = self.multi_account_accounts
-        accounts = [account for account in library.account_list if account.is_valid()]
-        index_by_key = {
-            (account.account or f"{account.character}-{account.svr}"): index
-            for index, account in enumerate(accounts, start=1)
-        }
-        for task_name in task_names:
-            task = getattr(self, task_name)
-            for account in task.account_list:
-                if getattr(account, "shared_account_index", 0):
-                    continue
-                if not getattr(account, "character", ""):
-                    continue
-                key = getattr(account, "account", "") or f"{account.character}-{account.svr}"
-                index = index_by_key.get(key)
-                if index is None:
-                    from tasks.Component.MultiAccount.account_library import SharedAccount
-                    accounts.append(SharedAccount(
-                        character=account.character,
-                        svr=account.svr,
-                        account=account.account,
-                        account_alias=account.account_alias,
-                        apple_or_android=account.apple_or_android,
-                    ))
-                    index = len(accounts)
-                    index_by_key[key] = index
-                account.shared_account_index = index
-        if accounts:
-            library.account_list = accounts
-            library.multi_account_accounts_config.account_count = len(accounts)
-        return self
 
     def __init__(self, config_name: str=None, **data) -> None:
         """

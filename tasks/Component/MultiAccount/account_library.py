@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
 from tasks.Component.config_base import ConfigBase, dynamic_hide
+from tasks.Component.config_scheduler import Scheduler
 from tasks.Component.MultiAccount.multi_account_config import (
     as_dict,
     dump_model,
@@ -52,6 +53,7 @@ class MultiAccountAccountsConfig(ConfigBase):
 class MultiAccountAccounts(ConfigBase, extra="allow"):
     """全部多账号功能共用的账号库。"""
 
+    scheduler: Scheduler = Field(default_factory=Scheduler)
     multi_account_accounts_config: MultiAccountAccountsConfig = Field(default_factory=MultiAccountAccountsConfig)
     account_list: list[SharedAccount] = Field(default_factory=list)
 
