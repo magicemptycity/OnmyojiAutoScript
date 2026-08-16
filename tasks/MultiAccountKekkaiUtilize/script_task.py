@@ -28,16 +28,15 @@ class ScriptTask(MultiAccountTaskBase):
                 continue
 
             next_utilize_time = account_info.next_utilize_time
-            if self._is_in_forbidden_period(index, next_utilize_time):
-                next_time = self._get_end_forbidden_time(index, next_utilize_time)
-                logger.info(
-                    "%s-%s 的蹭卡时间 %s 位于禁止时段，调整为 %s",
-                    account_info.character,
-                    account_info.svr,
-                    next_utilize_time,
-                    next_time,
-                )
-                account_info.next_utilize_time = next_time
+            # 提前修正落在禁止时段内的计划时间，避免无意义地唤醒模拟器。
+            deferred_time = self._get_deferred_forbidden_time(
+                index,
+                account_info,
+                next_utilize_time,
+                "下一次蹭卡时间",
+            )
+            if deferred_time is not None:
+                account_info.next_utilize_time = deferred_time
                 continue
 
             if next_utilize_time and next_utilize_time > now:
@@ -47,6 +46,17 @@ class ScriptTask(MultiAccountTaskBase):
                     account_info.svr,
                     next_utilize_time,
                 )
+                continue
+
+            # 计划时间可能因排队、重启或模拟器启动变慢而延后，必须复核实际执行时间。
+            deferred_time = self._get_deferred_forbidden_time(
+                index,
+                account_info,
+                now,
+                "当前执行时间",
+            )
+            if deferred_time is not None:
+                account_info.next_utilize_time = deferred_time
                 continue
 
             pending_accounts.append((index, account_info))
@@ -96,7 +106,14 @@ class ScriptTask(MultiAccountTaskBase):
             )
             return False
 
-        account_info.next_utilize_time = next_utilize_time
+        # 内层任务生成下次时间后立即避开禁止时段，避免到点后再空跑一次任务。
+        deferred_time = self._get_deferred_forbidden_time(
+            index,
+            account_info,
+            next_utilize_time,
+            "下一次蹭卡时间",
+        )
+        account_info.next_utilize_time = deferred_time or next_utilize_time
         account_info.last_complete_time = datetime.now()
         return True
 
@@ -163,6 +180,28 @@ class ScriptTask(MultiAccountTaskBase):
             return public_config.get_forbid_windows()
 
         return []
+
+    def _get_deferred_forbidden_time(
+        self,
+        index: int,
+        account_info: object,
+        reference_time: datetime | None,
+        reference_name: str,
+    ) -> datetime | None:
+        """若指定时间处于禁止时段，返回顺延后的时间；否则返回 None。"""
+        if not self._is_in_forbidden_period(index, reference_time):
+            return None
+
+        next_time = self._get_end_forbidden_time(index, reference_time)
+        logger.info(
+            "%s-%s 的%s %s 位于禁止蹭卡时段，调整为 %s",
+            account_info.character,
+            account_info.svr,
+            reference_name,
+            reference_time,
+            next_time,
+        )
+        return next_time
 
     def _is_in_forbidden_period(self, index: int, next_utilize_time):
         if not next_utilize_time:
