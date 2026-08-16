@@ -203,6 +203,8 @@ class ScriptRuntimeController:
         if self.emulator_down:
             if reason:
                 logger.info(reason)
+            # 删除已失效的旧设备缓存，确保通过带重试的属性重新连接。
+            del_cached_property(self.script, 'device')
             _ = self.device
             self.emulator_down = False
             return
