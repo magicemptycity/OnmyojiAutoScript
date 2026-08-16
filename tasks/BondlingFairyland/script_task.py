@@ -74,6 +74,61 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         context.is_win = is_win
         return ret
 
+    def set_next_run(
+        self,
+        task: str,
+        finish: bool = False,
+        success: bool = None,
+        server: bool = True,
+        target: datetime = None,
+    ) -> None:
+        """契灵正常完成时更新身份互换状态，再设置下次调度。"""
+        if task == "BondlingFairyland" and finish and success is True:
+            if self._update_role_swap_after_complete():
+                # task_delay 会重新加载配置，必须在此前保存互换状态。
+                self.config.save()
+        super().set_next_run(task, finish, success, server, target)
+
+    def _update_role_swap_after_complete(self) -> bool:
+        """按完成日期累计队长队员互换间隔，同一天内多次完成只计一次。"""
+        bondling_config = self.config.bondling_fairyland.bondling_config
+        if not bondling_config.role_swap_enable:
+            return False
+
+        current_status = bondling_config.user_status
+        if current_status not in {UserStatus.LEADER, UserStatus.MEMBER}:
+            logger.info("当前身份不是队长或队员，跳过队长队员互换。")
+            return False
+
+        today = datetime.now().date().isoformat()
+        if bondling_config.role_swap_last_complete_date == today:
+            logger.info("今日已记录契灵完成状态，不重复累计互换间隔。")
+            return False
+
+        bondling_config.role_swap_last_complete_date = today
+        bondling_config.role_swap_completed_days += 1
+        if bondling_config.role_swap_completed_days < bondling_config.role_swap_interval_days:
+            logger.info(
+                "契灵身份互换累计进度：%s/%s 天，本次不互换。",
+                bondling_config.role_swap_completed_days,
+                bondling_config.role_swap_interval_days,
+            )
+            return True
+
+        previous_status = current_status
+        bondling_config.user_status = (
+            UserStatus.MEMBER
+            if current_status == UserStatus.LEADER
+            else UserStatus.LEADER
+        )
+        bondling_config.role_swap_completed_days = 0
+        logger.info(
+            "契灵身份已互换：%s -> %s",
+            previous_status.value,
+            bondling_config.user_status.value,
+        )
+        return True
+
     def run(self):
         cong = self.config.bondling_fairyland
 

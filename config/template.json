@@ -1392,6 +1392,10 @@
       "bondling_stone_class": "镇墓兽",
       "bondling_stone_enable": false,
       "bondling_search_enable": false,
+      "role_swap_enable": false,
+      "role_swap_interval_days": 1,
+      "role_swap_completed_days": 0,
+      "role_swap_last_complete_date": "",
       "check_enable": true,
       "limit_num": 2000
     },

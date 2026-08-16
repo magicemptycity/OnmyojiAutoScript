@@ -63,6 +63,25 @@ class BondlingConfig(ConfigBase):
                                                                     '若启用了购买契灵则优先购买契灵,购买失败则进行探查\n'
                                                                     '若启用了切换御魂则切换契灵御魂的同时也会切换探查御魂\n'
                                                                     '注:探查耗费的时间与次数也计入总时间和次数中')
+    role_swap_enable: bool = Field(
+        default=False,
+        title="开启队长队员互换",
+        description="契灵之境每次正常完成后，按设置天数自动将队长与队员身份互换。",
+    )
+    role_swap_interval_days: int = Field(
+        default=1,
+        ge=1,
+        title="互换间隔（天）",
+        description="按完成任务的日期计数；设为 1 时每次完成后互换，设为 2 时第二个完成日期后互换。",
+    )
+    role_swap_completed_days: int = Field(default=0)
+    role_swap_last_complete_date: str = Field(default="")
+
+    hide_fields = dynamic_hide(
+        "role_swap_completed_days",
+        "role_swap_last_complete_date",
+    )
+
     check_enable: bool = Field(default=True, description='是否检查契忆数量')
     limit_num: int = Field(default=2000, description='契忆数量限制,到达此限制将自动结束任务(仅在任务开始时判断)')
 
