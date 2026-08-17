@@ -5,7 +5,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar
 
-from module.exception import RequestHumanTakeover, TaskEnd
+from module.exception import (
+    GameNotRunningError,
+    GamePageUnknownError,
+    GameStuckError,
+    GameTooManyClickError,
+    RequestHumanTakeover,
+    TaskEnd,
+)
 from module.logger import logger
 from tasks.Component.MultiAccount.account_library import resolve_shared_account
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
@@ -318,7 +325,14 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         self._last_switch_error = None
         try:
             return SwitchAccount(self.config, self.device, account).switchAccount()
-        except RequestHumanTakeover:
+        except (
+            GameNotRunningError,
+            GamePageUnknownError,
+            GameStuckError,
+            GameTooManyClickError,
+            RequestHumanTakeover,
+        ):
+            # 游戏环境异常必须交给全局恢复流程重启。
             raise
         except Exception as exc:
             self._last_switch_error = exc
