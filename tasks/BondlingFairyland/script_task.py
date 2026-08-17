@@ -35,6 +35,16 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
     last_plate_count: int = None  # 上一次识别到的契灵盘子数量
     plate_interval: int = None  # 契灵盘子数量间隔(一般为1)
 
+    def screenshot(self):
+        """契灵结算页与协作邀请重叠时，先让结算流程处理底层页面。"""
+        self.device.screenshot()
+        # 协作邀请出现在“放弃结契”/“再次结契”结算页上时，直接点接受不会生效。
+        # 此时不触发全局协作处理，等结算操作移除底层页面后再处理邀请。
+        if self.appear(self.I_BATTLE_FAIL_ABANDON) or self.appear(self.I_CAP_AGAIN):
+            return self.device.image
+        self._burst()
+        return self.device.image
+
     def _exit_matcher(self) -> ExitMatcher | None:
         return any_of(self.I_BALL_FIRE, self.I_CHECK_BONDLING_FAIRYLAND, self.I_GI_EMOJI_1, self.I_GI_EMOJI_2)
 
