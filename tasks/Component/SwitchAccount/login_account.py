@@ -317,6 +317,9 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                     for retry in range(MAX_RETRY):
                         logger.info("selectAccount attempt %d/%d", retry + 1, MAX_RETRY)
 
+                        # 每一轮扫描账号列表都重置连续操作记录，避免上一轮的上滑次数使本轮无法滑到底部。
+                        self.device.click_record_clear()
+
                         # 重置 OCR 区域为默认值，避免上次残留
                         self.O_SA_ACCOUNT_ACCOUNT_LIST.area = self.O_SA_ACCOUNT_ACCOUNT_LIST.roi
                         self.screenshot()
