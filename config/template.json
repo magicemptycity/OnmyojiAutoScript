@@ -568,7 +568,9 @@
     "talisman": {
       "get_flower": false,
       "level_reward": "金币/勾玉",
-      "harvest_soul": false
+      "harvest_soul": false,
+      "get_accomplishments": false,
+      "get_nawu": false
     }
   },
   "pets": {
