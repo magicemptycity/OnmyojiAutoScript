@@ -249,6 +249,9 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
         self.device.app_stop()
         self.device.app_start()
         self.device.wait_app_start_ready()
+        # 与单独调度任务一致：进入任务前先走一次正式截图，刷新图片服务帧缓存。
+        # 避免启动就绪探测后的页面识别复用重启前已过期的截图帧。
+        self.device.screenshot()
 
     def _is_account_in_scope(self, account_info) -> bool:
         """判断循环任务账号是否属于外层传入的当前账号。"""
