@@ -75,6 +75,9 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
             if self.appear_then_click(self.I_WATCH_VIDEO_CANCEL, interval=0.6):
                 logger.info('Close video')
                 continue
+            if self.appear_then_click(self.I_CHOOSE, interval=0.6):
+                logger.info('Choose option')
+                continue
             if self.appear_then_click(self.I_LOGIN_RED_CLOSE, interval=0.6):
                 logger.info('Close red close')
                 continue
