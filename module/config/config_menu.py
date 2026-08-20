@@ -49,6 +49,7 @@ class ConfigMenu:
             'MultiAccountRepeat',
             'MultiAccountRepeatMorning',
             'MultiAccountRepeatAfternoon',
+            'MultiAccountRepeatMidnight',
             'MultiAccountRepeatDay',
             'MultiAccountRepeatWeek',
             'MultiAccountRepeatMonth',

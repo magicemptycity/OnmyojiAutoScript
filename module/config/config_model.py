@@ -98,6 +98,7 @@ from tasks.MultiAccountHunt.config import MultiAccountHunt
 from tasks.MultiAccountRepeat.config import MultiAccountRepeat
 from tasks.MultiAccountRepeatMorning.config import MultiAccountRepeatMorning
 from tasks.MultiAccountRepeatAfternoon.config import MultiAccountRepeatAfternoon
+from tasks.MultiAccountRepeatMidnight.config import MultiAccountRepeatMidnight
 from tasks.MultiAccountRepeatDay.config import MultiAccountRepeatDay
 from tasks.MultiAccountRepeatWeek.config import MultiAccountRepeatWeek
 from tasks.MultiAccountRepeatMonth.config import MultiAccountRepeatMonth
@@ -181,6 +182,7 @@ class ConfigModel(ConfigBase):
     multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
     multi_account_repeat_morning: MultiAccountRepeatMorning = Field(default_factory=MultiAccountRepeatMorning)
     multi_account_repeat_afternoon: MultiAccountRepeatAfternoon = Field(default_factory=MultiAccountRepeatAfternoon)
+    multi_account_repeat_midnight: MultiAccountRepeatMidnight = Field(default_factory=MultiAccountRepeatMidnight)
     multi_account_repeat_day: MultiAccountRepeatDay = Field(default_factory=MultiAccountRepeatDay)
     multi_account_repeat_week: MultiAccountRepeatWeek = Field(default_factory=MultiAccountRepeatWeek)
     multi_account_repeat_month: MultiAccountRepeatMonth = Field(default_factory=MultiAccountRepeatMonth)

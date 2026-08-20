@@ -28,6 +28,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
         "MultiAccountRepeat": "多账号多任务",
         "MultiAccountRepeatMorning": "多账号多任务上午",
         "MultiAccountRepeatAfternoon": "多账号多任务下午",
+        "MultiAccountRepeatMidnight": "多账号多任务凌晨",
         "MultiAccountRepeatDay": "多账号多任务每日",
         "MultiAccountRepeatWeek": "多账号多任务每周",
         "MultiAccountRepeatMonth": "多账号多任务每月",
