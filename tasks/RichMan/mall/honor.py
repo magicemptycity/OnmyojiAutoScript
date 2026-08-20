@@ -47,7 +47,7 @@ class Honor(Special):
             if swipe_count >= max_swipes:
                 break
             # 如果滑动到底了
-            if self.appear(self.I_SP_SWIPE_CHECK):
+            if self.appear(self.I_HONOR_SWIPE_CHECK):
                 break
 
             # 向下滑动寻找商品
