@@ -43,6 +43,7 @@ TASK_NAME_ALIASES = {
     'MultiAccountKekkaiActivation': ['多账号挂卡', '多账号结界挂卡'],
     'MultiAccountKekkaiUtilize': ['多账号蹭卡', '多账号结界蹭卡'],
     'MultiAccountAreaBoss': ['多账号地域鬼王', '多账号鬼王'],
+    'MultiAccountHunt': ['多账号狩猎战', '多账号狩猎'],
     'KekkaiUtilize': ['结界蹭卡'],
     'KekkaiActivation': ['结界挂卡'],
     'RealmRaid': ['个人突破'],

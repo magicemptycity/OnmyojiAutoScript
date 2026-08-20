@@ -45,6 +45,7 @@ class ConfigMenu:
             'MultiAccountKekkaiActivation',
             'MultiAccountDelegation',
             'MultiAccountAreaBoss',
+            'MultiAccountHunt',
             'MultiAccountRepeat',
             'MultiAccountRepeatMorning',
             'MultiAccountRepeatAfternoon',

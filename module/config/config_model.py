@@ -94,6 +94,7 @@ from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
 from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
 from tasks.MultiAccountDelegation.config import MultiAccountDelegation
 from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
+from tasks.MultiAccountHunt.config import MultiAccountHunt
 from tasks.MultiAccountRepeat.config import MultiAccountRepeat
 from tasks.MultiAccountRepeatMorning.config import MultiAccountRepeatMorning
 from tasks.MultiAccountRepeatAfternoon.config import MultiAccountRepeatAfternoon
@@ -176,6 +177,7 @@ class ConfigModel(ConfigBase):
     multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
     multi_account_delegation: MultiAccountDelegation = Field(default_factory=MultiAccountDelegation)
     multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)
+    multi_account_hunt: MultiAccountHunt = Field(default_factory=MultiAccountHunt)
     multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
     multi_account_repeat_morning: MultiAccountRepeatMorning = Field(default_factory=MultiAccountRepeatMorning)
     multi_account_repeat_afternoon: MultiAccountRepeatAfternoon = Field(default_factory=MultiAccountRepeatAfternoon)

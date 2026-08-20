@@ -39,6 +39,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         "MultiAccountKekkaiActivation": "多账号挂卡",
         "MultiAccountDelegation": "多账号式神委派",
         "MultiAccountAreaBoss": "多账号地域鬼王",
+        "MultiAccountHunt": "多账号狩猎战",
     }
     inner_task_display_name: ClassVar[str] = ""
     current_account_info: Any = None
@@ -70,6 +71,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             raise TaskEnd(self.task_name)
 
         overall_failed = False
+        nested_exception: Exception | None = None
         for index, account in pending_accounts:
             self._set_account_context(index, account)
             logger.info("开始处理账号 %s-%s", account.character, account.svr)
@@ -77,11 +79,13 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             if not self._switch_account(account):
                 overall_failed = True
                 logger.warning("切换到账号 %s-%s 失败", account.character, account.svr)
-                self._push_error_notification(
-                    account,
-                    "切换账号",
-                    getattr(self, "_last_switch_error", None),
-                )
+                if not self._is_nested_multi_account_task():
+                    self._push_error_notification(
+                        account,
+                        "切换账号",
+                        getattr(self, "_last_switch_error", None),
+                    )
+                nested_exception = getattr(self, "_last_switch_error", None)
                 self.on_account_failure(index, account, "切换账号失败")
                 self.save_multi_account_config()
                 self._clear_account_context()
@@ -97,8 +101,12 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                 account_success = True
             except RequestHumanTakeover:
                 raise
+            except (GameNotRunningError, GamePageUnknownError, GameStuckError, GameTooManyClickError):
+                # 环境异常必须上抛给外层调度器；多账号多任务会据此重启游戏并重试当前任务。
+                raise
             except Exception as exc:
                 self.save_error_log()
+                nested_exception = exc
                 overall_failed = True
                 logger.exception(
                     "执行%s失败（%s-%s）：%s",
@@ -107,14 +115,19 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                     account.svr,
                     exc,
                 )
-                self._push_error_notification(account, self._failed_task_display_name(), exc)
+                if not self._is_nested_multi_account_task():
+                    self._push_error_notification(account, self._failed_task_display_name(), exc)
             finally:
                 try:
                     self.cleanup_account(index, account, account_success)
                 except RequestHumanTakeover:
                     raise
+                except (GameNotRunningError, GamePageUnknownError, GameStuckError, GameTooManyClickError):
+                    # 清理阶段出现环境异常同样交给外层恢复，不能带着异常页面继续下一个账号。
+                    raise
                 except Exception as exc:
                     self.save_error_log()
+                    nested_exception = exc
                     account_success = False
                     overall_failed = True
                     logger.exception(
@@ -124,7 +137,8 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                         account.svr,
                         exc,
                     )
-                    self._push_error_notification(account, "清理账号上下文", exc)
+                    if not self._is_nested_multi_account_task():
+                        self._push_error_notification(account, "清理账号上下文", exc)
 
             if account_success:
                 try:
@@ -133,6 +147,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                     raise
                 except Exception as exc:
                     self.save_error_log()
+                    nested_exception = exc
                     success_result = False
                     logger.exception(
                         "更新%s账号状态失败（%s-%s）：%s",
@@ -141,7 +156,8 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
                         account.svr,
                         exc,
                     )
-                    self._push_error_notification(account, "更新账号状态", exc)
+                    if not self._is_nested_multi_account_task():
+                        self._push_error_notification(account, "更新账号状态", exc)
                 if success_result is False:
                     account_success = False
                     overall_failed = True
@@ -159,7 +175,17 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
             server=self.server_schedule,
             target=self.get_next_run_time(),
         )
+        if overall_failed and self._is_nested_multi_account_task():
+            # 被多账号多任务调用时，必须让外层识别失败并执行其三次重启重试。
+            # 有原始异常时保留其类型，便于外层通知准确显示报错类型。
+            if nested_exception is not None:
+                raise nested_exception
+            raise RuntimeError(f"{self._task_display_name()}当前账号执行失败")
         raise TaskEnd(self.task_name)
+
+    def _is_nested_multi_account_task(self) -> bool:
+        """判断当前是否由多账号多任务传入单个账号范围调用。"""
+        return getattr(self, "_account_scope", None) is not None
 
     def _failed_task_display_name(self) -> str:
         return self.inner_task_display_name or self._task_display_name()
@@ -225,12 +251,14 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         """账号执行失败后的状态钩子。"""
 
     def get_next_run_time(self) -> datetime | None:
-        """返回外层任务下一次运行时间，子类可按账号状态覆盖。"""
+        """返回仍在未来的外层计划时间，子类可按账号状态覆盖。"""
         scheduler = getattr(self.fade_conf, "scheduler", None)
         next_run = getattr(scheduler, "next_run", None) if scheduler else None
-        if isinstance(next_run, datetime):
+        if isinstance(next_run, datetime) and next_run > datetime.now():
             return next_run
-        return datetime.now() + timedelta(hours=1)
+        # 已到期的旧调度时间不能再作为 target 传回 task_delay，
+        # 否则会覆盖成功/失败间隔，导致任务立即循环运行。
+        return None
 
     def _get_account_scope(self) -> Any:
         """读取外层循环任务传入的当前账号。"""

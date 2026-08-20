@@ -2109,6 +2109,44 @@
     ],
     "private_config": []
   },
+  "multi_account_hunt": {
+    "scheduler": {
+      "enable": false,
+      "next_run": "2023-01-01 00:00:00",
+      "priority": 5,
+      "success_interval": "01 00:00:00",
+      "failure_interval": "01 00:00:00",
+      "server_update": "09:00:00",
+      "delay_date": 1,
+      "float_time": "00:00:00"
+    },
+    "multi_account_hunt_config": {
+      "account_count": 1
+    },
+    "common_config": {
+      "kirin_time": "19:00:00",
+      "kirin_switch_soul_enable": true,
+      "kirin_switch_team_enable": false,
+      "kirin_preset_public_enable": "-1,-1",
+      "kirin_battle_timeout": -1,
+      "netherworld_time": "19:00:00",
+      "netherworld_switch_soul_enable": true,
+      "netherworld_switch_team_enable": false,
+      "netherworld_preset_public_enable": "-1,-1",
+      "netherworld_battle_timeout": -1
+    },
+    "account_list_1": {
+      "character": "",
+      "svr": "",
+      "account": "",
+      "account_alias": "",
+      "apple_or_android": true,
+      "last_complete_time": "2023-01-01 00:00:00",
+      "shared_account_index": 0,
+      "next_hunt_time": "2023-01-01 00:00:00",
+      "enable_private_config": false
+    }
+  },
   "multi_account_repeat": {
     "scheduler": {
       "enable": false,
