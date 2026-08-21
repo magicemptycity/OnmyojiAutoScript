@@ -309,9 +309,10 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         ]
 
     def save_multi_account_config(self) -> None:
-        """保存外层多账号配置。"""
-        setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
-        self.config.save()
+        """只保存当前多账号任务状态，避免覆盖页面刚修改的其他配置。"""
+        self.config.save_selected_fields({
+            self.multi_account_config_attr: self.fade_conf,
+        })
 
     def create_task_object(
         self,

@@ -1,6 +1,8 @@
 import copy
 from typing import Any
 
+from pydantic import BaseModel
+
 from tasks.Component.MultiAccount.multi_account_task import MultiAccountTaskBase
 from tasks.MultiAccountAreaBoss.assets import MultiAccountAreaBossAssets
 from tasks.MultiAccountAreaBoss.config import (
@@ -77,5 +79,6 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountAreaBossAssets):
         backup = getattr(self, "_area_boss_config_backup", None)
         if backup is None:
             return
-        self.config.model.area_boss = backup
+        # 临时配置只用于本次内层运行，不能触发整份配置自动保存。
+        BaseModel.__setattr__(self.config.model, "area_boss", backup)
         del self._area_boss_config_backup

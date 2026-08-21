@@ -148,13 +148,18 @@ class ScriptTask(MultiAccountTaskBase):
         """把当前账号配置临时覆盖到内层蹭卡任务。"""
         self._utilize_config_backup = copy.deepcopy(self.config.kekkai_utilize.utilize_config)
         self._kekkai_scheduler_backup = copy.deepcopy(self.config.kekkai_utilize.scheduler)
+        self._config_save_fields_backup = getattr(
+            self.config,
+            "_save_selected_fields",
+            None,
+        )
+        # 内层任务设置下次运行时间时，只合并写回结界蹭卡配置。
+        self.config._save_selected_fields = {"kekkai_utilize"}
 
         selected_config = self._get_active_utilize_config(index)
         self.config.kekkai_utilize.utilize_config = UtilizeConfig(
             **selected_config.model_dump()
         )
-        # 内层任务设置下次调度时会重新加载配置，因此必须先保存临时账号配置。
-        self.config.save()
 
     def _restore_utilize_config(self):
         """恢复内层蹭卡配置和调度器，防止账号之间相互污染。"""
@@ -167,6 +172,13 @@ class ScriptTask(MultiAccountTaskBase):
         self.config.kekkai_utilize.scheduler = copy.deepcopy(self._kekkai_scheduler_backup)
         del self._utilize_config_backup
         del self._kekkai_scheduler_backup
+        self.config._save_selected_fields = getattr(
+            self,
+            "_config_save_fields_backup",
+            None,
+        )
+        if hasattr(self, "_config_save_fields_backup"):
+            del self._config_save_fields_backup
 
     def _get_active_forbid_windows(self, index: int):
         """获取当前账号实际使用的禁止蹭卡时段列表，私有配置优先于公共配置。"""

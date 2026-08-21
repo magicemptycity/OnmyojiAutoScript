@@ -59,9 +59,14 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountKekkaiActivationAssets):
             self.config.kekkai_activation.scheduler
         )
         self._current_next_activation_time = None
+        self._config_save_fields_backup = getattr(
+            self.config,
+            "_save_selected_fields",
+            None,
+        )
+        # 内层任务运行中可能保存未找到卡次数；仅合并写回结界挂卡配置。
+        self.config._save_selected_fields = {"kekkai_activation"}
         self._apply_account_activation_config(index, account_info)
-        # 内层任务设置下次调度时会重新加载配置，因此必须先保存临时账号配置。
-        self.config.save()
 
     def run_account(self, index: int, account_info: object) -> bool | None:
         """调用原有结界挂卡任务执行真实挂卡动作。"""
@@ -171,6 +176,17 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountKekkaiActivationAssets):
         )
         del self._activation_config_backup
         del self._kekkai_activation_scheduler_backup
+        # 内层任务可能为了记录未找到卡次数保存过临时配置，这里恢复用户原有配置。
+        self.config.save_selected_fields({
+            "kekkai_activation": self.config.kekkai_activation,
+        })
+        self.config._save_selected_fields = getattr(
+            self,
+            "_config_save_fields_backup",
+            None,
+        )
+        if hasattr(self, "_config_save_fields_backup"):
+            del self._config_save_fields_backup
 
     def get_next_run_time(self) -> datetime:
         return self._get_next_run_time()

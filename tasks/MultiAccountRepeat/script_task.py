@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
+from module.config.utils import convert_to_underscore
 from tasks.MultiAccountRepeat.task_name_resolver import TaskNameResolver
 from tasks.Component.MultiAccount.account_library import resolve_shared_account
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
@@ -83,8 +84,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     account_info.svr,
                 )
                 account_info.failed_task_list = ""
-                setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
-                self.config.save()
+                self._save_repeat_config()
                 continue
 
             current_failed_task_names = []
@@ -99,17 +99,21 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     self._task_display_name(task_name)
                     for task_name in current_failed_task_names
                 )
-                setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
-                self.config.save()
+                self._save_repeat_config()
                 continue
 
             account_info.failed_task_list = ""
             self.fade_conf.update_account_login_history(account_info)
-            setattr(self.config.model, self.multi_account_config_attr, self.fade_conf)
-            self.config.save()
+            self._save_repeat_config()
 
         self.set_next_run(self.task_name, success=not overall_failed)
         raise TaskEnd(self.task_name)
+
+    def _save_repeat_config(self) -> None:
+        """只保存当前循环任务状态，避免覆盖页面刚修改的其他配置。"""
+        self.config.save_selected_fields({
+            self.multi_account_config_attr: self.fade_conf,
+        })
 
     def _get_task_names_to_run(
         self,
@@ -203,6 +207,13 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                 attempt,
                 self.task_retry_limit,
             )
+            previous_save_fields = getattr(
+                self.config,
+                "_save_selected_fields",
+                None,
+            )
+            # 内层任务保存运行状态时，仅合并写回自身配置，不能覆盖其他多账号功能。
+            self.config._save_selected_fields = {convert_to_underscore(task_name)}
             try:
                 task_obj = self.create_task_object(
                     task_name,
@@ -234,6 +245,8 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
                     self.task_retry_limit,
                     exc,
                 )
+            finally:
+                self.config._save_selected_fields = previous_save_fields
 
         task_display_name = self._task_display_name(task_name)
         logger.error(

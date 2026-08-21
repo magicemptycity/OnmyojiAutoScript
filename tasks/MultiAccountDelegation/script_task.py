@@ -58,12 +58,17 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
         self._delegation_scheduler_backup = copy.deepcopy(
             self.config.delegation.scheduler
         )
+        self._config_save_fields_backup = getattr(
+            self.config,
+            "_save_selected_fields",
+            None,
+        )
+        # 内层任务设置下次运行时间时，只合并写回式神委派配置。
+        self.config._save_selected_fields = {"delegation"}
         selected_config = self.get_account_config(index, account_info)
         self.config.delegation.delegation_config = DelegationConfig(
             **selected_config.model_dump()
         )
-        # 内层任务设置下次调度时会重新加载配置，因此必须先保存临时账号配置。
-        self.config.save()
 
     def run_account(self, index: int, account_info: object) -> bool | None:
         """直接调用原式神委派任务，复用其全部逻辑和优化。"""
@@ -123,6 +128,13 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
         )
         del self._delegation_config_backup
         del self._delegation_scheduler_backup
+        self.config._save_selected_fields = getattr(
+            self,
+            "_config_save_fields_backup",
+            None,
+        )
+        if hasattr(self, "_config_save_fields_backup"):
+            del self._config_save_fields_backup
 
     @staticmethod
     def _calculate_next_delegation_time(
