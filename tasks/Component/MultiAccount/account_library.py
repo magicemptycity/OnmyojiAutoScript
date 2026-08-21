@@ -23,8 +23,32 @@ class SharedAccount(BaseModel):
     account_alias: str = Field(default="", description="account_alias_help")
     apple_or_android: bool = Field(default=True, description="apple_or_android_help")
 
+    @model_validator(mode="before")
+    @classmethod
+    def reset_dependent_fields_when_empty(cls, value: Any) -> Any:
+        """加载配置时，角色名为空则清空同一账号的其余信息。"""
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        if not str(data.get("character", "") or "").strip():
+            data["character"] = ""
+            data["svr"] = ""
+            data["account"] = ""
+            data["account_alias"] = ""
+            data["apple_or_android"] = True
+        return data
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """页面清空角色名时，立即恢复账号组默认值。"""
+        super().__setattr__(name, value)
+        if name == "character" and not str(value or "").strip():
+            super().__setattr__("svr", "")
+            super().__setattr__("account", "")
+            super().__setattr__("account_alias", "")
+            super().__setattr__("apple_or_android", True)
+
     def is_valid(self) -> bool:
-        return bool(self.character)
+        return bool(self.character and self.svr)
 
 
 class MultiAccountReference(AccountInfo):
