@@ -27,6 +27,7 @@ class MultiAccountKekkaiUtilizeAccount(MultiAccountReference):
     )
     enable_private_utilize_config: bool = Field(
         default=False,
+        title="是否启用私有配置",
         description="是否启用私有结界蹭卡配置",
     )
     enable_private_forbid_time: bool = Field(

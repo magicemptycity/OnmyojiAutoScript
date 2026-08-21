@@ -32,7 +32,8 @@ class MultiAccountDelegationAccount(MultiAccountReference):
     )
     enable_private_config: bool = Field(
         default=False,
-        description="是否启用该账号的私有式神委派配置",
+        title="是否启用私有配置",
+        description="是否启用私有式神委派配置",
     )
     _legacy_config: Any = PrivateAttr(default=None)
 

@@ -23,7 +23,11 @@ class MultiAccountHuntAccount(MultiAccountReference):
         default=DateTime.fromisoformat("2023-01-01 00:00:00"),
         description="该账号下一次狩猎战运行时间",
     )
-    enable_private_config: bool = Field(default=False, description="是否启用私有配置")
+    enable_private_config: bool = Field(
+        default=False,
+        title="是否启用私有配置",
+        description="是否启用私有狩猎战配置",
+    )
 
 
 class MultiAccountHuntPrivateConfig(ConfigBase):

@@ -20,7 +20,11 @@ from tasks.Component.config_scheduler import Scheduler
 class MultiAccountAreaBossAccount(MultiAccountReference):
     """多账号地域鬼王中的账号信息。"""
 
-    enable_private_config: bool = Field(default=False, description="是否启用私有配置")
+    enable_private_config: bool = Field(
+        default=False,
+        title="是否启用私有配置",
+        description="是否启用私有地域鬼王配置",
+    )
 
 
 class MultiAccountAreaBossPrivateConfig(ConfigBase):

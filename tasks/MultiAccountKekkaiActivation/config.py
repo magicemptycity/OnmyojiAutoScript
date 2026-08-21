@@ -28,7 +28,8 @@ class MultiAccountKekkaiActivationAccount(MultiAccountReference):
     )
     enable_private_config: bool = Field(
         default=False,
-        description="是否启用该账号的私有挂卡配置",
+        title="是否启用私有配置",
+        description="是否启用私有结界挂卡配置",
     )
     card_not_found_count: int = Field(
         default=0,
