@@ -216,8 +216,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                         continue
                     if self.appear(self.I_CREATE_TEAM, interval=1):
                         self.ensure_private()
-                        self.appear_then_click(self.I_CREATE_TEAM, interval=2)
-                        continue
+                        self.ui_click(self.I_CREATE_TEAM, self.I_GI_IN_ROOM, interval=1.5)
+                        return True
                     # 求援
                     if self.appear(self.I_BALL_AREA, interval=1):
                         return False
@@ -297,17 +297,21 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
     def run_member(self):
         logger.hr('Start run member', 2)
         # 开始等待队长拉人
-        wait_time = self.config.bondling_fairyland.invite_config.wait_time
+        wait_time = self.config.bondling_fairyland.bondling_config.member_wait_time
         wait_timer = Timer(wait_time.minute * 60)
         wait_timer.start()
         success = True
 
-        # 进入战斗流程
-        self.device.stuck_record_add('BATTLE_STATUS_S')
+        # 队员等待邀请属于正常等待，不启用战斗卡死检测。
+        # 真正进入战斗后由 run_general_battle() 负责启用卡死检测。
+        self.device.stuck_record_clear()
 
         while 1:
 
             self.screenshot()
+            # 等待邀请、等待队长开战期间，使用任务自己的计时器判断超时。
+            # 清除战斗卡死标记，避免无人邀请时被误判为游戏卡死并重启。
+            self.device.stuck_record_clear()
 
             if wait_timer.reached():
                 logger.info(f"队员等待超时:{wait_timer.current()}, 退出")
@@ -325,19 +329,21 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
 
             if self.is_in_room(False):
                 logger.info("契灵：已经在组队房间中")
+                # 房间内等待队长开战也由 wait_battle() 自己计时。
+                self.device.stuck_record_clear()
                 if self.wait_battle(wait_time=self.config.bondling_fairyland.invite_config.wait_time):
                     self.run_general_battle(self.config.bondling_fairyland.battle_config)
                     wait_timer.reset()
-                    # 进入战斗流程
-                    self.device.stuck_record_add('BATTLE_STATUS_S')
+                    # 战斗结束后回到等待邀请状态，不保留战斗卡死标记。
+                    self.device.stuck_record_clear()
                 else:
                     break
             # 队长秒开的时候，检测是否进入到战斗中
             elif self.is_in_battle(False):
                 self.run_general_battle(self.config.bondling_fairyland.battle_config)
                 wait_timer.reset()
-                # 进入战斗流程
-                self.device.stuck_record_add('BATTLE_STATUS_S')
+                # 战斗结束后回到等待邀请状态，不保留战斗卡死标记。
+                self.device.stuck_record_clear()
                 continue
 
         while 1:
@@ -723,6 +729,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         success = True
         while 1:
             self.screenshot()
+            # 房间内等待开战使用 wait_battle() 的计时器，不触发全局卡死检测。
+            self.device.stuck_record_clear()
 
             # 如果自己在探索界面或者是庭院，那就是房间已经被销毁了
             if self.appear(self.I_CHECK_MAIN) or self.appear(self.I_CHECK_EXPLORATION) or self.appear(

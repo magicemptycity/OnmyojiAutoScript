@@ -1390,6 +1390,7 @@
       "user_status": "alone",
       "bondling_mode": "只刷探查(仅限单刷)",
       "limit_time": "00:30:00",
+      "member_wait_time": "00:02:00",
       "limit_count": 30,
       "bondling_stone_class": "镇墓兽",
       "bondling_stone_enable": false,

@@ -56,6 +56,11 @@ class BondlingConfig(ConfigBase):
     bondling_mode: BondlingMode = Field(default=BondlingMode.MODE1,
                                         description='只刷探查:自动切换契灵对应地域\n低级式盘:自动切换非连续,非羁绊\n中级式盘:自动切换连续,羁绊')
     limit_time: Time = Field(default=Time(minute=30), description='limit_time_help')
+    member_wait_time: Time = Field(
+        default=Time(minute=2),
+        title='队员等待邀请时间',
+        description='队员模式下没有收到邀请时的最大等待时间。',
+    )
     limit_count: int = Field(default=30, description='limit_count_help')
     bondling_stone_class: BondlingClass = Field(default=BondlingClass.TOMB_GUARD, description='设置需要刷的契灵')
     bondling_stone_enable: bool = Field(default=False, description='没有契灵了是否使用鸣契石购买契灵')
