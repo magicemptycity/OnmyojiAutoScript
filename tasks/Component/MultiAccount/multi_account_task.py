@@ -15,12 +15,13 @@ from module.exception import (
 )
 from module.logger import logger
 from tasks.Component.MultiAccount.account_library import resolve_shared_account
+from tasks.Component.MultiAccount.multi_account_priority import MultiAccountPriorityMixin
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.GameUi.game_ui import GameUi
 
 
-class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
+class MultiAccountTaskBase(MultiAccountPriorityMixin, GameUi, SwitchAccountAssets):
     """多账号任务的通用调度基类。
 
     子类只需要实现账号筛选、账号执行和账号级状态更新，公共的切号、异常隔离、
@@ -42,6 +43,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         "MultiAccountHunt": "多账号狩猎战",
     }
     inner_task_display_name: ClassVar[str] = ""
+    priority_config_attr: ClassVar[str] = ""
     current_account_info: Any = None
     current_account_config: Any = None
 
@@ -73,6 +75,7 @@ class MultiAccountTaskBase(GameUi, SwitchAccountAssets):
         overall_failed = False
         nested_exception: Exception | None = None
         for index, account in pending_accounts:
+            self._yield_to_higher_priority_task()
             self._set_account_context(index, account)
             logger.info("开始处理账号 %s-%s", account.character, account.svr)
 

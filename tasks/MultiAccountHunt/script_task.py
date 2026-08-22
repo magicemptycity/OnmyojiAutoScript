@@ -23,6 +23,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountHuntAssets):
     """多账号狩猎战的外层调度器。"""
 
     task_name = "MultiAccountHunt"
+    priority_config_attr = "multi_account_hunt_config"
     multi_account_config_attr = "multi_account_hunt"
     inner_task_display_name = "狩猎战"
     server_schedule = False

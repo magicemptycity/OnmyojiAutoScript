@@ -1927,6 +1927,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_kekkai_count_config": {
+      "check_higher_priority_task": false,
       "account_count": 1
     },
     "multi_account_kekkai_forbid_config": {
@@ -1998,6 +1999,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_kekkai_activation_count_config": {
+      "check_higher_priority_task": false,
       "account_count": 1
     },
     "multi_account_kekkai_activation_config": {
@@ -2047,6 +2049,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_delegation_config": {
+      "check_higher_priority_task": false,
       "account_count": 1,
       "delegation_interval": "六小时循环",
       "miyoshino_painting": false,
@@ -2083,6 +2086,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_area_boss_config": {
+      "check_higher_priority_task": false,
       "account_count": 1
     },
     "common_config": {
@@ -2122,6 +2126,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_hunt_config": {
+      "check_higher_priority_task": false,
       "account_count": 1
     },
     "common_config": {
@@ -2160,6 +2165,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_repeat_config": {
+      "check_higher_priority_task": false,
       "account_count": 1,
       "skip_if_logged_today": true
     },
@@ -2187,6 +2193,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_repeat_config": {
+      "check_higher_priority_task": false,
       "account_count": 1,
       "skip_if_logged_today": true
     },
@@ -2214,6 +2221,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_repeat_config": {
+      "check_higher_priority_task": false,
       "account_count": 1,
       "skip_if_logged_today": true
     },
@@ -2241,6 +2249,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_repeat_config": {
+      "check_higher_priority_task": false,
       "account_count": 1,
       "skip_if_logged_today": true
     },
@@ -2268,6 +2277,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_repeat_config": {
+      "check_higher_priority_task": false,
       "account_count": 1,
       "skip_if_logged_today": true
     },
@@ -2295,6 +2305,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_repeat_config": {
+      "check_higher_priority_task": false,
       "account_count": 1,
       "skip_if_logged_today": true
     },
@@ -2322,6 +2333,7 @@
       "float_time": "00:00:00"
     },
     "multi_account_repeat_config": {
+      "check_higher_priority_task": false,
       "account_count": 1,
       "skip_if_logged_today": true
     },

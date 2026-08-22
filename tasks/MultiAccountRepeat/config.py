@@ -19,6 +19,11 @@ from tasks.MultiAccountRepeat.task_name_resolver import TaskNameResolver
 class MultiAccountRepeatConfig(ConfigBase, extra="allow"):
     """多账号多任务的公共调度配置。"""
 
+    check_higher_priority_task: bool = Field(
+        default=False,
+        title="是否检查更高优先级任务",
+        description="发现已到期的更高优先级任务时，先结束当前多账号任务，待高优先级任务完成后继续执行。",
+    )
     account_count: int = Field(
         default=1,
         ge=1,

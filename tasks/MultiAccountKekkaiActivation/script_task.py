@@ -14,6 +14,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountKekkaiActivationAssets):
     """多账号结界挂卡任务。"""
 
     task_name = "MultiAccountKekkaiActivation"
+    priority_config_attr = "multi_account_kekkai_activation_count_config"
     multi_account_config_attr = "multi_account_kekkai_activation"
     inner_task_display_name = "结界挂卡"
     server_schedule = False

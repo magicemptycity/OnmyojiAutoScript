@@ -11,6 +11,7 @@ class ScriptTask(MultiAccountTaskBase):
     """多账号结界蹭卡任务。"""
 
     task_name = "MultiAccountKekkaiUtilize"
+    priority_config_attr = "multi_account_kekkai_count_config"
     multi_account_config_attr = "multi_account_kekkai_utilize"
     inner_task_display_name = "结界蹭卡"
     fade_conf: MultiAccountKekkaiUtilize = None

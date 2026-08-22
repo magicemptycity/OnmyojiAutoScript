@@ -8,6 +8,7 @@ from module.logger import logger
 from module.config.utils import convert_to_underscore
 from tasks.MultiAccountRepeat.task_name_resolver import TaskNameResolver
 from tasks.Component.MultiAccount.account_library import resolve_shared_account
+from tasks.Component.MultiAccount.multi_account_priority import MultiAccountPriorityMixin
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.switch_account import SwitchAccount
 from tasks.GameUi.game_ui import GameUi
@@ -18,11 +19,12 @@ from tasks.MultiAccountRepeat.config import (
 )
 
 
-class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
+class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
     """多账号多任务的统一执行器。"""
 
     task_name: ClassVar[str] = "MultiAccountRepeat"
     multi_account_config_attr: ClassVar[str] = "multi_account_repeat"
+    priority_config_attr: ClassVar[str] = "multi_account_repeat_config"
     fade_conf: MultiAccountRepeat = None
     task_retry_limit: ClassVar[int] = 3
     task_display_names: ClassVar[dict[str, str]] = {
@@ -41,6 +43,7 @@ class ScriptTask(GameUi, MultiAccountRepeatAssets, SwitchAccountAssets):
         overall_failed = False
 
         for account_info in self.fade_conf.account_list:
+            self._yield_to_higher_priority_task()
             if not resolve_shared_account(self.config, account_info):
                 logger.error("公共账号序号无效：%s", getattr(account_info, "shared_account_index", 0))
                 overall_failed = True

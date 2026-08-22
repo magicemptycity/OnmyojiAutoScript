@@ -15,6 +15,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
     """多账号式神委派任务。"""
 
     task_name = "MultiAccountDelegation"
+    priority_config_attr = "multi_account_delegation_count_config"
     multi_account_config_attr = "multi_account_delegation"
     inner_task_display_name = "式神委派"
     server_schedule = False

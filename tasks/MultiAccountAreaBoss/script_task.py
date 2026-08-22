@@ -15,6 +15,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountAreaBossAssets):
     """多账号地域鬼王的外层调度器。"""
 
     task_name = "MultiAccountAreaBoss"
+    priority_config_attr = "multi_account_area_boss_config"
     multi_account_config_attr = "multi_account_area_boss"
     inner_task_display_name = "地域鬼王"
     fade_conf: MultiAccountAreaBoss = None
