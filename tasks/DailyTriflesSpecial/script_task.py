@@ -89,6 +89,14 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
 
         self.goto_page(page_main)
 
+        sleep(1)
+        
+        if self.appear(self.I_I_GET_REWARD, interval=1):
+            self.ui_click(self.I_I_GET_REWARD, stop=self.I_UI_BACK_RED, interval=1)
+            self.ui_click_until_disappear(self.I_UI_BACK_RED, interval=1)
+            logger.info('领取同心队奖励成功')
+
+
         self.goto_page(page_same_heart_team, confirm_wait=2)
 
         if not self.appear(self.I_I_PRE_DEPOSIT):

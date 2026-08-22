@@ -25,5 +25,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "一键预存"
+  },
+  {
+    "itemName": "i_get_reward",
+    "imageName": "sameheartteam_i_get_reward.png",
+    "roiFront": "96,326,43,41",
+    "roiBack": "0,239,327,371",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "同心队的领取奖励图标"
   }
 ]

@@ -139,6 +139,8 @@ class DailyTriflesAssets:
 	I_I_PRE_DEPOSIT = RuleImage(roi_front=(925,263,49,49), roi_back=(900,196,110,482), threshold=0.8, method="Template matching", file="./tasks/DailyTrifles/sameheartteam/sameheartteam_i_pre_deposit.png")
 	# 一键预存 
 	I_I_ONE_CLICK_PRE_DEPOSIT = RuleImage(roi_front=(1190,531,42,74), roi_back=(1124,451,156,269), threshold=0.8, method="Template matching", file="./tasks/DailyTrifles/sameheartteam/sameheartteam_i_one_click_pre_deposit.png")
+	# 同心队的领取奖励图标 
+	I_I_GET_REWARD = RuleImage(roi_front=(96,326,43,41), roi_back=(0,239,327,371), threshold=0.8, method="Template matching", file="./tasks/DailyTrifles/sameheartteam/sameheartteam_i_get_reward.png")
 
 
 	# Image Rule Assets
