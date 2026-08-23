@@ -25,6 +25,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
     name = 'SameHeartTeamAwaken'
 
     def run(self):
+        logger.hr('同心队觉醒', 1)
         # 从配置读取当前任务的觉醒同心队设置
         config: SameHeartTeamAwaken = self.config.same_heart_team_awaken
         active_config: SameHeartTeamAwakenConfig = config.same_heart_team_awaken_config

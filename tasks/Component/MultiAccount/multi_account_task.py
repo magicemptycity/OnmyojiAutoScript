@@ -48,6 +48,7 @@ class MultiAccountTaskBase(MultiAccountPriorityMixin, GameUi, SwitchAccountAsset
     current_account_config: Any = None
 
     def run(self):
+        logger.hr(self._task_display_name(), 1)
         self.fade_conf = self.get_multi_account_config()
         # 多账号任务被“多账号多任务”调用时，只处理外层传入的当前账号。
         self._account_scope = self._get_account_scope()
@@ -77,6 +78,7 @@ class MultiAccountTaskBase(MultiAccountPriorityMixin, GameUi, SwitchAccountAsset
         for index, account in pending_accounts:
             self._yield_to_higher_priority_task()
             self._set_account_context(index, account)
+            logger.hr(f"处理账号 {account.character}-{account.svr}", 2)
             logger.info("开始处理账号 %s-%s", account.character, account.svr)
 
             if not self._switch_account(account):

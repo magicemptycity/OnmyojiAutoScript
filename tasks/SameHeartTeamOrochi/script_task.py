@@ -31,6 +31,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
         raise TaskEnd(self.task_name)
 
     def run(self):
+        logger.hr('同心队御魂', 1)
         # 从配置读取当前任务的御魂同心队设置
         config: SameHeartTeamOrochi = self.config.same_heart_team_orochi
         active_config: SameHeartTeamOrochiConfig = config.same_heart_team_orochi_config

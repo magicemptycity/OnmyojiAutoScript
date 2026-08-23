@@ -38,6 +38,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
     }
 
     def run(self):
+        logger.hr(self._current_task_display_name(), 1)
         self.fade_conf = getattr(self.config, self.multi_account_config_attr)
         self._account_scope = getattr(self, "current_account_info", None)
         overall_failed = False
@@ -52,6 +53,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
                 continue
             if not self._is_account_in_scope(account_info):
                 continue
+            logger.hr(f"处理账号 {account_info.character}-{account_info.svr}", 2)
             logger.info("开始处理账号 %s-%s", account_info.character, account_info.svr)
 
             failed_task_names = account_info.failed_task_names

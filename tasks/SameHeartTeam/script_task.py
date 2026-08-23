@@ -30,6 +30,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
     """
 
     def run(self):
+        logger.hr('同心队', 1)
         con = self.config.same_heart_team
 
         # 每日完成检查已禁用，确保每次都会执行任务
