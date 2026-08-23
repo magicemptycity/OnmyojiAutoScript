@@ -33,6 +33,11 @@ class MultiAccountRepeatConfig(ConfigBase, extra="allow"):
         default=True,
         description="如果上次登录时间为今天，则跳过该账号的登录与任务执行",
     )
+    rerun_incomplete_accounts: bool = Field(
+        default=False,
+        title="未完成账号自动再执行一次",
+        description="本轮结束后按上次登录时间检查所有目标账号；若仍有账号今天未完成任务，整个多账号多任务再执行一次。需同时开启“今日已执行则跳过”。",
+    )
 
 
 class MultiAccountRepeatAccount(MultiAccountReference):
@@ -47,10 +52,14 @@ class MultiAccountRepeatAccount(MultiAccountReference):
 
     failed_task_list: MultiLine = Field(
         default="",
+        title="失败任务列表",
         description="自动记录连续重试仍失败的任务，下次仅重试这些任务。可手动清空。",
     )
-
-
+    unfinished_task_list: MultiLine = Field(
+        default="",
+        title="未完成任务列表",
+        description="自动记录本轮尚未完成的任务。每项任务开始前都会保存；脚本被手动停止后，下次从这里继续执行。可手动清空。",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -67,11 +76,11 @@ class MultiAccountRepeatAccount(MultiAccountReference):
             )
         return data
 
-    @property
-    def failed_task_names(self) -> list[str]:
-        """将失败任务列表转换为内部任务名。"""
+    @staticmethod
+    def _resolve_task_names(task_list: str) -> list[str]:
+        """将配置中的任务列表转换为内部任务名。"""
         names = []
-        for line in self.failed_task_list.split("\n"):
+        for line in task_list.split("\n"):
             raw = line.strip()
             if not raw:
                 continue
@@ -80,16 +89,19 @@ class MultiAccountRepeatAccount(MultiAccountReference):
         return names
 
     @property
+    def failed_task_names(self) -> list[str]:
+        """将失败任务列表转换为内部任务名。"""
+        return self._resolve_task_names(self.failed_task_list)
+
+    @property
+    def unfinished_task_names(self) -> list[str]:
+        """将上次中断时未完成的任务列表转换为内部任务名。"""
+        return self._resolve_task_names(self.unfinished_task_list)
+
+    @property
     def repeat_task_names(self) -> list[str]:
         """把账号配置中的任务名称转换为内部任务名。"""
-        names = []
-        for line in self.repeat_task_list.split("\n"):
-            raw = line.strip()
-            if not raw:
-                continue
-            resolved = TaskNameResolver.resolve(raw)
-            names.append(resolved or raw)
-        return names
+        return self._resolve_task_names(self.repeat_task_list)
 
 
 class MultiAccountRepeat(ConfigBase, extra="allow"):

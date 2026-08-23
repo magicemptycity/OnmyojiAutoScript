@@ -55,9 +55,11 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
             logger.info("开始处理账号 %s-%s", account_info.character, account_info.svr)
 
             failed_task_names = account_info.failed_task_names
+            unfinished_task_names = account_info.unfinished_task_names
             if (
                 self.fade_conf.multi_account_repeat_config.skip_if_logged_today
                 and not failed_task_names
+                and not unfinished_task_names
             ):
                 last_complete_time = account_info.last_complete_time
                 now = datetime.now()
@@ -79,7 +81,11 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
                 self._push_error_notification(account_info, "切换账号", getattr(self, "_last_switch_error", None))
                 continue
 
-            task_names = self._get_task_names_to_run(account_info, failed_task_names)
+            task_names = self._get_task_names_to_run(
+                account_info,
+                failed_task_names,
+                unfinished_task_names,
+            )
             if not task_names:
                 logger.warning(
                     "%s-%s 没有配置需要执行的任务",
@@ -87,20 +93,44 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
                     account_info.svr,
                 )
                 account_info.failed_task_list = ""
+                account_info.unfinished_task_list = ""
                 self._save_repeat_config()
                 continue
 
-            current_failed_task_names = []
-            for task_name in task_names:
+            remaining_failed_task_names = list(dict.fromkeys(failed_task_names))
+            for task_index, task_name in enumerate(task_names):
+                # 先保存当前任务及后续任务；手动停止或强制退出时可从此处继续。
+                self._save_unfinished_task_checkpoint(account_info, task_names[task_index:])
                 if self._run_task_with_retry(account_info, task_name):
+                    # 成功的失败重试任务也要立即从失败记录中移除。
+                    remaining_failed_task_names = [
+                        failed_task
+                        for failed_task in remaining_failed_task_names
+                        if failed_task != task_name
+                    ]
+                    account_info.failed_task_list = "\n".join(
+                        self._task_display_name(failed_task)
+                        for failed_task in remaining_failed_task_names
+                    )
+                    # 任务成功后立即移除检查点中的当前项，避免在两项任务交接时重复运行。
+                    self._save_unfinished_task_checkpoint(account_info, task_names[task_index + 1:])
                     continue
-                current_failed_task_names.append(task_name)
+                if task_name not in remaining_failed_task_names:
+                    remaining_failed_task_names.append(task_name)
+                # 失败任务也立即保存，避免后续任务被手动停止时丢失失败记录。
+                account_info.failed_task_list = "\n".join(
+                    self._task_display_name(failed_task)
+                    for failed_task in remaining_failed_task_names
+                )
+                self._save_repeat_config()
                 overall_failed = True
 
-            if current_failed_task_names:
+            # 所有已安排任务都已有明确结果，不再保留中断恢复检查点。
+            account_info.unfinished_task_list = ""
+            if remaining_failed_task_names:
                 account_info.failed_task_list = "\n".join(
                     self._task_display_name(task_name)
-                    for task_name in current_failed_task_names
+                    for task_name in remaining_failed_task_names
                 )
                 self._save_repeat_config()
                 continue
@@ -109,8 +139,40 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
             self.fade_conf.update_account_login_history(account_info)
             self._save_repeat_config()
 
+        incomplete_accounts = self._get_incomplete_accounts_today()
+        if (
+            self.fade_conf.multi_account_repeat_config.rerun_incomplete_accounts
+            and self.fade_conf.multi_account_repeat_config.skip_if_logged_today
+            and not getattr(self, "_rerun_incomplete_accounts_done", False)
+            and incomplete_accounts
+        ):
+            logger.warning(
+                "本轮结束后仍有账号今天未完成任务，重新执行一次多账号多任务: %s",
+                ", ".join(incomplete_accounts),
+            )
+            # 第二次直接复用完整流程，由“今日已执行则跳过”自动跳过已完成账号。
+            self._rerun_incomplete_accounts_done = True
+            return self.run()
+
         self.set_next_run(self.task_name, success=not overall_failed)
         raise TaskEnd(self.task_name)
+
+    @staticmethod
+    def _is_account_completed_today(account_info: MultiAccountRepeatAccount) -> bool:
+        """根据上次完整完成时间判断账号今天是否已完成。"""
+        return account_info.last_complete_time.date() == datetime.now().date()
+
+    def _get_incomplete_accounts_today(self) -> list[str]:
+        """返回当前执行范围内今天尚未完整完成任务的有效账号。"""
+        accounts = []
+        for account_info in self.fade_conf.account_list:
+            if not resolve_shared_account(self.config, account_info):
+                continue
+            if not account_info.is_valid() or not self._is_account_in_scope(account_info):
+                continue
+            if not self._is_account_completed_today(account_info):
+                accounts.append(f"{account_info.character}-{account_info.svr}")
+        return accounts
 
     def _save_repeat_config(self) -> None:
         """只保存当前循环任务状态，避免覆盖页面刚修改的其他配置。"""
@@ -118,40 +180,61 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
             self.multi_account_config_attr: self.fade_conf,
         })
 
+    def _save_unfinished_task_checkpoint(
+        self,
+        account_info: MultiAccountRepeatAccount,
+        task_names: list[str],
+    ) -> None:
+        """在任务开始前持久化未完成任务，供手动停止后的恢复使用。"""
+        account_info.unfinished_task_list = "\n".join(
+            self._task_display_name(task_name) for task_name in task_names
+        )
+        self._save_repeat_config()
+
     def _get_task_names_to_run(
         self,
         account_info: MultiAccountRepeatAccount,
         failed_task_names: list[str],
+        unfinished_task_names: list[str],
     ) -> list[str]:
-        """优先返回上次运行失败的任务，避免重复执行已成功任务。"""
+        """优先恢复上次失败或中断的任务，避免重复执行已成功任务。"""
         configured_task_names = account_info.repeat_task_names
-        if not failed_task_names:
+        recovery_task_names = [*failed_task_names, *unfinished_task_names]
+        if not recovery_task_names:
             return configured_task_names
 
         task_names = [
             task_name
-            for task_name in failed_task_names
-            if task_name in configured_task_names
+            for task_name in configured_task_names
+            if task_name in recovery_task_names
         ]
         removed_task_names = [
             task_name
-            for task_name in failed_task_names
+            for task_name in recovery_task_names
             if task_name not in configured_task_names
         ]
         if removed_task_names:
             logger.warning(
-                "%s-%s 失败任务已不在当前任务列表中，清除记录: %s",
+                "%s-%s 的失败或未完成任务已不在当前任务列表中，清除记录: %s",
                 account_info.character,
                 account_info.svr,
                 ", ".join(removed_task_names),
             )
             account_info.failed_task_list = "\n".join(
-                self._task_display_name(task_name) for task_name in task_names
+                self._task_display_name(task_name)
+                for task_name in failed_task_names
+                if task_name in configured_task_names
             )
+            account_info.unfinished_task_list = "\n".join(
+                self._task_display_name(task_name)
+                for task_name in unfinished_task_names
+                if task_name in configured_task_names
+            )
+            self._save_repeat_config()
 
         if task_names:
             logger.info(
-                "%s-%s 上次失败任务，本次仅重试: %s",
+                "%s-%s 上次失败或未完成任务，本次继续执行: %s",
                 account_info.character,
                 account_info.svr,
                 ", ".join(self._task_display_name(name) for name in task_names),

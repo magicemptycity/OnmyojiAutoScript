@@ -2168,7 +2168,8 @@
     "multi_account_repeat_config": {
       "check_higher_priority_task": false,
       "account_count": 1,
-      "skip_if_logged_today": true
+      "skip_if_logged_today": true,
+      "rerun_incomplete_accounts": false
     },
     "account_list_1": {
       "shared_account_identifier": "",
@@ -2179,7 +2180,8 @@
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
       "repeat_task_list": "",
-      "failed_task_list": ""
+      "failed_task_list": "",
+      "unfinished_task_list": ""
     }
   },
   "multi_account_repeat_morning": {
@@ -2196,7 +2198,8 @@
     "multi_account_repeat_config": {
       "check_higher_priority_task": false,
       "account_count": 1,
-      "skip_if_logged_today": true
+      "skip_if_logged_today": true,
+      "rerun_incomplete_accounts": false
     },
     "account_list_1": {
       "shared_account_identifier": "",
@@ -2207,7 +2210,8 @@
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
       "repeat_task_list": "",
-      "failed_task_list": ""
+      "failed_task_list": "",
+      "unfinished_task_list": ""
     }
   },
   "multi_account_repeat_afternoon": {
@@ -2224,7 +2228,8 @@
     "multi_account_repeat_config": {
       "check_higher_priority_task": false,
       "account_count": 1,
-      "skip_if_logged_today": true
+      "skip_if_logged_today": true,
+      "rerun_incomplete_accounts": false
     },
     "account_list_1": {
       "shared_account_identifier": "",
@@ -2235,7 +2240,8 @@
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
       "repeat_task_list": "",
-      "failed_task_list": ""
+      "failed_task_list": "",
+      "unfinished_task_list": ""
     }
   },
   "multi_account_repeat_midnight": {
@@ -2252,7 +2258,8 @@
     "multi_account_repeat_config": {
       "check_higher_priority_task": false,
       "account_count": 1,
-      "skip_if_logged_today": true
+      "skip_if_logged_today": true,
+      "rerun_incomplete_accounts": false
     },
     "account_list_1": {
       "character": "",
@@ -2263,7 +2270,8 @@
       "last_complete_time": "2023-01-01 00:00:00",
       "shared_account_identifier": "",
       "repeat_task_list": "",
-      "failed_task_list": ""
+      "failed_task_list": "",
+      "unfinished_task_list": ""
     }
   },
   "multi_account_repeat_day": {
@@ -2280,7 +2288,8 @@
     "multi_account_repeat_config": {
       "check_higher_priority_task": false,
       "account_count": 1,
-      "skip_if_logged_today": true
+      "skip_if_logged_today": true,
+      "rerun_incomplete_accounts": false
     },
     "account_list_1": {
       "shared_account_identifier": "",
@@ -2291,7 +2300,8 @@
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
       "repeat_task_list": "",
-      "failed_task_list": ""
+      "failed_task_list": "",
+      "unfinished_task_list": ""
     }
   },
   "multi_account_repeat_week": {
@@ -2308,7 +2318,8 @@
     "multi_account_repeat_config": {
       "check_higher_priority_task": false,
       "account_count": 1,
-      "skip_if_logged_today": true
+      "skip_if_logged_today": true,
+      "rerun_incomplete_accounts": false
     },
     "account_list_1": {
       "shared_account_identifier": "",
@@ -2319,7 +2330,8 @@
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
       "repeat_task_list": "",
-      "failed_task_list": ""
+      "failed_task_list": "",
+      "unfinished_task_list": ""
     }
   },
   "multi_account_repeat_month": {
@@ -2336,7 +2348,8 @@
     "multi_account_repeat_config": {
       "check_higher_priority_task": false,
       "account_count": 1,
-      "skip_if_logged_today": true
+      "skip_if_logged_today": true,
+      "rerun_incomplete_accounts": false
     },
     "account_list_1": {
       "shared_account_identifier": "",
@@ -2347,7 +2360,8 @@
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
       "repeat_task_list": "",
-      "failed_task_list": ""
+      "failed_task_list": "",
+      "unfinished_task_list": ""
     }
   },
   "collective_missions": {
