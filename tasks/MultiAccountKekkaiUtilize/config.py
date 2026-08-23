@@ -6,6 +6,7 @@ from pydantic import Field, model_serializer, model_validator
 from tasks.Component.MultiAccount.multi_account_config import (
     as_dict,
     dump_model,
+    compact_empty_account_models,
     load_indexed_models,
     pad_parallel_models,
     serialize_account_list,
@@ -393,6 +394,11 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
         for index, enabled in legacy_private_forbid_flags.items():
             if index < len(accounts) and index not in explicit_account_flags:
                 accounts[index].enable_private_forbid_time = enabled
+
+        compact_empty_account_models(
+            accounts,
+            [private_utilize, private_forbid],
+        )
 
         pad_parallel_models(
             {

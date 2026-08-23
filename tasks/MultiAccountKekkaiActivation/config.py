@@ -7,6 +7,7 @@ from pydantic import Field, PrivateAttr, model_serializer, model_validator
 from tasks.Component.MultiAccount.multi_account_config import (
     as_dict,
     dump_model,
+    compact_empty_account_models,
     load_indexed_models,
     pad_parallel_models,
     serialize_account_list,
@@ -246,6 +247,11 @@ class MultiAccountKekkaiActivation(ConfigBase, extra="allow"):
         for index in legacy_configs:
             if index < len(accounts) and index not in explicit_flags:
                 accounts[index].enable_private_config = True
+
+        compact_empty_account_models(
+            accounts,
+            [private_configs],
+        )
 
         pad_parallel_models(
             {

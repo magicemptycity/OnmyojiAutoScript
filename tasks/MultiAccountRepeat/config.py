@@ -148,6 +148,17 @@ class MultiAccountRepeat(ConfigBase, extra="allow"):
             "account_list",
             MultiAccountRepeatAccount,
         )
+        # 只压缩多账号多任务自身的空账号行，不处理公共账号库。
+        # 公共账号序号保存在账号对象内部，账号对象整体移动后，序号值不会改变。
+        accounts = [
+            account
+            for account in accounts
+            if not (
+                not str(account.character or "").strip()
+                and not str(account.svr or "").strip()
+                and account.shared_account_index == 0
+            )
+        ]
         pad_parallel_models(
             {"account_list": accounts},
             public_model.account_count,

@@ -7,6 +7,7 @@ from tasks.AreaBoss.config_boss import AreaBossFloor
 from tasks.Component.MultiAccount.multi_account_config import (
     as_dict,
     dump_model,
+    compact_empty_account_models,
     load_indexed_models,
     pad_parallel_models,
     serialize_account_list,
@@ -121,6 +122,11 @@ class MultiAccountAreaBoss(ConfigBase, extra="allow"):
             data,
             "private_config",
             MultiAccountAreaBossPrivateConfig,
+        )
+
+        compact_empty_account_models(
+            accounts,
+            [private_configs],
         )
 
         pad_parallel_models(

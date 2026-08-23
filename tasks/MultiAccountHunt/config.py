@@ -7,6 +7,7 @@ from tasks.Component.MultiAccount.account_library import MultiAccountReference
 from tasks.Component.MultiAccount.multi_account_config import (
     as_dict,
     dump_model,
+    compact_empty_account_models,
     load_indexed_models,
     pad_parallel_models,
     serialize_account_list,
@@ -111,6 +112,11 @@ class MultiAccountHunt(ConfigBase, extra="allow"):
             "private_config",
             MultiAccountHuntPrivateConfig,
         )
+        compact_empty_account_models(
+            accounts,
+            [private_configs],
+        )
+
         pad_parallel_models(
             {"account_list": accounts, "private_config": private_configs},
             count_model.account_count,

@@ -72,6 +72,36 @@ def load_indexed_models(
     return normalized
 
 
+def compact_empty_account_models(
+    accounts: list[BaseModel],
+    parallel_lists: list[list[BaseModel]],
+) -> None:
+    """移除真正的空账号，并同步移动其下标对应的私有配置。
+
+    公共账号库不参与此处理。公共账号序号大于 0 的账号行即使当前引用无效，
+    也必须保留，避免误删或改变公共账号引用关系。
+    """
+    keep_indexes = [
+        index
+        for index, account in enumerate(accounts)
+        if not (
+            not str(getattr(account, "character", "") or "").strip()
+            and not str(getattr(account, "svr", "") or "").strip()
+            and getattr(account, "shared_account_index", 0) == 0
+        )
+    ]
+    if len(keep_indexes) == len(accounts):
+        return
+
+    accounts[:] = [accounts[index] for index in keep_indexes]
+    for values in parallel_lists:
+        values[:] = [
+            values[index]
+            for index in keep_indexes
+            if index < len(values)
+        ]
+
+
 def pad_parallel_models(
     model_lists: dict[str, list[BaseModel]],
     count: int,
