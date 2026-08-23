@@ -86,8 +86,8 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
         task_names = ', '.join(task.command for task in higher_priority_tasks)
         logger.info(f'发现更高优先级待执行任务: {task_names}，结束本次斗技并让出调度')
         self.goto_page(page_main)
-        # 保持斗技为待执行状态；高优先级任务完成后，调度器会继续选择斗技。
-        self.set_next_run('Duel', finish=True, server=False, target=datetime.now())
+        # 不修改斗技原有的 next_run，避免高优先级任务完成后斗技被重新排到队尾。
+        # 斗技仍保持到期状态，调度器会在高优先级任务完成后继续选择斗技。
         raise TaskEnd('Duel')
 
     def can_start_duel(self) -> bool:

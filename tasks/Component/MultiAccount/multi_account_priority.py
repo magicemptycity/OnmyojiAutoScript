@@ -1,7 +1,5 @@
 """多账号任务的高优先级任务让出机制。"""
 
-from datetime import datetime
-
 from module.exception import TaskEnd
 from module.logger import logger
 
@@ -50,12 +48,6 @@ class MultiAccountPriorityMixin:
             "发现更高优先级待执行任务: %s，结束当前多账号任务并让出调度",
             task_names,
         )
-        # 目标时间设为当前时间，高优先级任务完成后会继续调度本任务。
-        self.set_next_run(
-            self.task_name,
-            finish=True,
-            success=True,
-            server=False,
-            target=datetime.now(),
-        )
+        # 不修改当前任务原有的 next_run，避免它在高优先级任务完成后被重新排到队尾。
+        # 当前任务仍保持到期状态；高优先级任务完成后，调度器会继续选择它。
         raise TaskEnd(self.task_name)
