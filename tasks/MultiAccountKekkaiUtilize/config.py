@@ -26,7 +26,7 @@ class MultiAccountKekkaiUtilizeAccount(MultiAccountReference):
         default=DateTime.fromisoformat("2023-01-01 00:00:00"),
         description="每个账号下一次蹭卡时间",
     )
-    enable_private_utilize_config: bool = Field(
+    enable_private_config: bool = Field(
         default=False,
         title="是否启用私有配置",
         description="是否启用私有结界蹭卡配置",
@@ -35,6 +35,18 @@ class MultiAccountKekkaiUtilizeAccount(MultiAccountReference):
         default=False,
         description="是否启用私有禁止蹭卡时段",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_private_config_flag(cls, value: Any) -> Any:
+        """兼容旧版的私有蹭卡配置开关字段。"""
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        if "enable_private_config" not in data and "enable_private_utilize_config" in data:
+            data["enable_private_config"] = data["enable_private_utilize_config"]
+        data.pop("enable_private_utilize_config", None)
+        return data
 
 
 class MultiAccountKekkaiUtilizeBaseConfig(ConfigBase):
@@ -136,7 +148,7 @@ class MultiAccountKekkaiUtilizeForbidConfig(ConfigBase, extra="allow"):
         return data
 
 
-class MultiAccountKekkaiUtilizePrivateUtilizeConfig(MultiAccountKekkaiUtilizeBaseConfig):
+class MultiAccountKekkaiUtilizePrivateConfig(MultiAccountKekkaiUtilizeBaseConfig):
     """多账号蹭卡的账号私有配置。"""
 
 
@@ -188,6 +200,17 @@ class MultiAccountKekkaiUtilizePrivateForbidConfig(ConfigBase):
         if "utilize_forbidden_time_end_1" not in data and legacy_end is not None:
             data["utilize_forbidden_time_end_1"] = legacy_end
         return data
+
+
+def _migrate_legacy_private_config_fields(data: dict) -> None:
+    """将旧的私有蹭卡配置字段名迁移为统一字段名。"""
+    legacy_name = "private_utilize_config"
+    for key in list(data):
+        if key != legacy_name and not key.startswith(f"{legacy_name}_"):
+            continue
+        new_key = f"private_config{key[len(legacy_name):]}"
+        data.setdefault(new_key, data[key])
+        data.pop(key, None)
 
 
 def _collect_indexed_values(data: dict, field_name: str) -> dict[int, Any]:
@@ -244,7 +267,7 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
         description="多账号蹭卡的共享结界蹭卡参数",
     )
     account_list: list[MultiAccountKekkaiUtilizeAccount] = Field(default_factory=list)
-    private_utilize_config: list[MultiAccountKekkaiUtilizePrivateUtilizeConfig] = Field(
+    private_config: list[MultiAccountKekkaiUtilizePrivateConfig] = Field(
         default_factory=list,
     )
     private_forbid_config: list[MultiAccountKekkaiUtilizePrivateForbidConfig] = Field(
@@ -277,8 +300,9 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
             return value
 
         data = dict(value)
+        _migrate_legacy_private_config_fields(data)
         data.setdefault("account_list", [])
-        data.setdefault("private_utilize_config", [])
+        data.setdefault("private_config", [])
         data.setdefault("private_forbid_config", [])
         legacy_private_forbid_flags, explicit_account_flags = (
             _collect_legacy_private_forbid_flags(data)
@@ -382,8 +406,8 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
         )
         private_utilize = load_indexed_models(
             data,
-            "private_utilize_config",
-            MultiAccountKekkaiUtilizePrivateUtilizeConfig,
+            "private_config",
+            MultiAccountKekkaiUtilizePrivateConfig,
         )
         private_forbid = load_indexed_models(
             data,
@@ -403,26 +427,26 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
         pad_parallel_models(
             {
                 "account_list": accounts,
-                "private_utilize_config": private_utilize,
+                "private_config": private_utilize,
                 "private_forbid_config": private_forbid,
             },
             count_model.account_count,
             {
                 "account_list": MultiAccountKekkaiUtilizeAccount,
-                "private_utilize_config": MultiAccountKekkaiUtilizePrivateUtilizeConfig,
+                "private_config": MultiAccountKekkaiUtilizePrivateConfig,
                 "private_forbid_config": MultiAccountKekkaiUtilizePrivateForbidConfig,
             },
         )
 
         # 未启用私有配置的账号始终回退到公共配置。
         for index, account in enumerate(accounts):
-            if not account.enable_private_utilize_config:
-                private_utilize[index] = MultiAccountKekkaiUtilizePrivateUtilizeConfig()
+            if not account.enable_private_config:
+                private_utilize[index] = MultiAccountKekkaiUtilizePrivateConfig()
             if not account.enable_private_forbid_time:
                 private_forbid[index] = MultiAccountKekkaiUtilizePrivateForbidConfig()
 
         data["account_list"] = accounts
-        data["private_utilize_config"] = private_utilize
+        data["private_config"] = private_utilize
         data["private_forbid_config"] = private_forbid
         return data
 
@@ -437,10 +461,10 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
                     key,
                     current_value,
                     {
-                        "private_utilize_config": (
-                            self.private_utilize_config,
-                            "enable_private_utilize_config",
-                            MultiAccountKekkaiUtilizePrivateUtilizeConfig,
+                        "private_config": (
+                            self.private_config,
+                            "enable_private_config",
+                            MultiAccountKekkaiUtilizePrivateConfig,
                         ),
                         "private_forbid_config": (
                             self.private_forbid_config,
@@ -451,7 +475,7 @@ class MultiAccountKekkaiUtilize(ConfigBase, extra="allow"):
                 )
                 continue
 
-            if key in {"private_utilize_config", "private_forbid_config"}:
+            if key in {"private_config", "private_forbid_config"}:
                 continue
 
             if isinstance(current_value, list):

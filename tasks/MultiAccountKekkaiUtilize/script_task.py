@@ -136,10 +136,10 @@ class ScriptTask(MultiAccountTaskBase):
         """按账号下标选择私有蹭卡配置或公共配置。"""
         account_info = self.fade_conf.account_list[index]
         if (
-            account_info.enable_private_utilize_config
-            and index < len(self.fade_conf.private_utilize_config)
+            account_info.enable_private_config
+            and index < len(self.fade_conf.private_config)
         ):
-            return self.fade_conf.private_utilize_config[index]
+            return self.fade_conf.private_config[index]
         return self.fade_conf.multi_account_kekkai_utilize_config
 
     def _get_active_forbid_config(self, index: int):

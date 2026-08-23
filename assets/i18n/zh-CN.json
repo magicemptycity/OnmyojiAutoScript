@@ -193,8 +193,6 @@
   "utilize_enable": "是否蹭卡",
   "utilize_enable_help": "关闭则不会蹭卡, 但是其他操作会执行(例如收取寮奖励等)",
   "utilize_harvest_help": "关闭则不领取, 可以屯奖励",
-  "enable_private_utilize_config": "是否启用私有配置",
-  "enable_private_utilize_config_help": "是否启用私有结界蹭卡配置",
   "enable_private_config": "是否启用私有配置",
   "enable_private_config_help": "是否启用私有（对应功能）配置",
   "enable_private_forbid_time": "启用私有禁止蹭卡时段",

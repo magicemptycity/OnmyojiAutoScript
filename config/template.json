@@ -1960,11 +1960,11 @@
         "account_alias": "",
         "apple_or_android": true,
         "last_complete_time": "2023-01-01 00:00:00",
-        "enable_private_utilize_config": false,
+        "enable_private_config": false,
         "enable_private_forbid_time": false
       }
     ],
-    "private_utilize_config": [
+    "private_config": [
       {
         "utilize_rule": "default",
         "select_friend_list": "same_server",
