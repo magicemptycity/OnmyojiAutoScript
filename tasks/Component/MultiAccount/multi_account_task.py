@@ -58,7 +58,7 @@ class MultiAccountTaskBase(MultiAccountPriorityMixin, GameUi, SwitchAccountAsset
         }
         for account in self.fade_conf.account_list:
             if id(account) in self._invalid_shared_account_ids:
-                logger.error("公共账号序号无效：%s", getattr(account, "shared_account_index", 0))
+                logger.error("公共账号标识无效：%s", getattr(account, "shared_account_identifier", ""))
         pending_accounts = self.collect_pending_accounts(datetime.now())
         pending_accounts = self._filter_scoped_accounts(pending_accounts)
 

@@ -23,7 +23,7 @@ class ScriptTask(MultiAccountTaskBase):
         """筛选到达执行时间且不处于禁止时段的账号。"""
         pending_accounts = []
         for index, account_info in enumerate(self.fade_conf.account_list):
-            # 公共账号序号无效时不能继续使用账号组中残留的旧登录信息。
+            # 公共账号标识无效时不能继续使用账号组中残留的旧登录信息。
             if id(account_info) in getattr(self, "_invalid_shared_account_ids", set()):
                 continue
             if not account_info.is_valid():

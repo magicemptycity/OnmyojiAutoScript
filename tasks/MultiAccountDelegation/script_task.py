@@ -26,7 +26,7 @@ class ScriptTask(MultiAccountTaskBase, MultiAccountDelegationAssets):
         """筛选已经到达下一次委派时间的账号。"""
         pending_accounts = []
         for index, account_info in enumerate(self.fade_conf.account_list):
-            # 公共账号序号无效时不能继续使用账号组中残留的旧登录信息。
+            # 公共账号标识无效时不能继续使用账号组中残留的旧登录信息。
             if id(account_info) in getattr(self, "_invalid_shared_account_ids", set()):
                 continue
             if not account_info.is_valid():

@@ -1,6 +1,7 @@
+import re
 from typing import Any
 
-from pydantic import BaseModel, Field, model_serializer, model_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 from tasks.Component.SwitchAccount.switch_account_config import AccountInfo
 from tasks.Component.config_base import ConfigBase, dynamic_hide
@@ -21,7 +22,24 @@ class SharedAccount(BaseModel):
     svr: str = Field(default="", description="svr_help")
     account: str = Field(default="", description="account_help")
     account_alias: str = Field(default="", description="account_alias_help")
+    account_identifier: str = Field(
+        default="",
+        max_length=32,
+        title="自定义账号标识",
+        description="只能填写字母和数字，且必须同时包含字母和数字；留空时默认使用本账号在公共账号列表中的序号。",
+    )
     apple_or_android: bool = Field(default=True, description="apple_or_android_help")
+
+    @field_validator("account_identifier", mode="before")
+    @classmethod
+    def validate_account_identifier(cls, value: Any) -> str:
+        """校验公共账号的自定义标识。"""
+        identifier = str(value or "").strip()
+        if not identifier:
+            return ""
+        if not re.fullmatch(r"(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]+", identifier):
+            raise ValueError("自定义账号标识只能由字母和数字组成，且必须同时包含字母和数字")
+        return identifier
 
     @model_validator(mode="before")
     @classmethod
@@ -35,6 +53,7 @@ class SharedAccount(BaseModel):
             data["svr"] = ""
             data["account"] = ""
             data["account_alias"] = ""
+            data["account_identifier"] = ""
             data["apple_or_android"] = True
         return data
 
@@ -45,6 +64,7 @@ class SharedAccount(BaseModel):
             super().__setattr__("svr", "")
             super().__setattr__("account", "")
             super().__setattr__("account_alias", "")
+            super().__setattr__("account_identifier", "")
             super().__setattr__("apple_or_android", True)
 
     def is_valid(self) -> bool:
@@ -52,22 +72,48 @@ class SharedAccount(BaseModel):
 
 
 class MultiAccountReference(AccountInfo):
-    """多账号任务的账号引用；0 表示继续使用本任务内填写的旧账号信息。"""
+    """多账号任务的账号引用；兼容旧配置中的公共账号序号。"""
 
-    shared_account_index: int = Field(
-        default=0,
-        ge=0,
-        le=99,
-        description="公共账号序号；填写后自动使用公共账号库对应账号，0 表示使用本任务内旧账号信息",
+    shared_account_identifier: str = Field(
+        default="",
+        max_length=32,
+        title="公共账号标识",
+        description="填写公共账号的自定义标识；公共账号未填写自定义标识时，填写其列表序号。留空则使用本任务内旧账号信息。",
     )
 
-    # 账号信息由公共账号库统一维护，任务页面只显示公共账号序号。
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_shared_account_index(cls, value: Any) -> Any:
+        """将旧的公共账号序号转换为新的公共账号标识。"""
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        identifier = data.get("shared_account_identifier")
+        if identifier is None:
+            legacy_index = data.get("shared_account_index", 0)
+            identifier = "" if str(legacy_index or "").strip() in {"", "0"} else str(legacy_index).strip()
+        data["shared_account_identifier"] = str(identifier or "").strip()
+        data.pop("shared_account_index", None)
+        return data
+
+    @field_validator("shared_account_identifier", mode="before")
+    @classmethod
+    def validate_shared_account_identifier(cls, value: Any) -> str:
+        """公共账号引用允许字母数字标识，纯数字表示旧的列表序号。"""
+        identifier = str(value or "").strip()
+        if not identifier or identifier == "0":
+            return ""
+        if not re.fullmatch(r"[A-Za-z0-9]+", identifier):
+            raise ValueError("公共账号标识只能由字母和数字组成")
+        return identifier
+
+    # 账号信息由公共账号库统一维护，任务页面只显示公共账号标识。
     hide_fields = dynamic_hide(
         "character", "svr", "account", "account_alias", "apple_or_android"
     )
 
     def is_valid(self):
-        return self.shared_account_index > 0 or super().is_valid()
+        return bool(self.shared_account_identifier) or super().is_valid()
 
 
 class MultiAccountAccountsConfig(ConfigBase):
@@ -102,6 +148,24 @@ class MultiAccountAccounts(ConfigBase, extra="allow"):
     def validator_all(cls, value: Any) -> Any:
         return cls._normalize(value)
 
+    @field_validator("account_list")
+    @classmethod
+    def validate_unique_account_identifiers(cls, accounts: list[SharedAccount]) -> list[SharedAccount]:
+        """有效公共账号的实际标识必须唯一，避免引用到错误账号。"""
+        identifiers: dict[str, int] = {}
+        for index, account in enumerate(accounts, start=1):
+            if not account.is_valid():
+                continue
+            identifier = get_shared_account_identifier(account, index)
+            normalized_identifier = identifier.casefold()
+            if normalized_identifier in identifiers:
+                previous_index = identifiers[normalized_identifier]
+                raise ValueError(
+                    f"公共账号标识重复：第 {previous_index} 个和第 {index} 个账号均为 {identifier}"
+                )
+            identifiers[normalized_identifier] = index
+        return accounts
+
     @model_serializer()
     def serializer_model(self, value: Any) -> dict[str, Any]:
         data = {}
@@ -113,18 +177,30 @@ class MultiAccountAccounts(ConfigBase, extra="allow"):
         return data
 
 
+def get_shared_account_identifier(account: SharedAccount, index: int) -> str:
+    """返回公共账号的实际标识：优先自定义标识，否则使用列表序号。"""
+    return account.account_identifier or str(index)
+
+
 def resolve_shared_account(config: Any, account: AccountInfo) -> bool:
-    """将公共账号库信息填充到任务账号对象；返回引用是否有效。"""
-    index = getattr(account, "shared_account_index", 0)
-    if not index:
+    """按公共账号标识填充登录信息；返回引用是否有效。"""
+    identifier = str(getattr(account, "shared_account_identifier", "") or "").strip()
+    if not identifier:
         return True
+
     library = getattr(config, "multi_account_accounts", None)
     accounts = getattr(library, "account_list", []) if library else []
-    if index < 1 or index > len(accounts):
+    matched_accounts = [
+        item
+        for index, item in enumerate(accounts, start=1)
+        if item.is_valid()
+        and get_shared_account_identifier(item, index).casefold() == identifier.casefold()
+    ]
+    # 即使配置页面尚未重新加载，也不能在重复标识中随意选择其中一个账号。
+    if len(matched_accounts) != 1:
         return False
-    shared = accounts[index - 1]
-    if not shared.is_valid():
-        return False
+    shared = matched_accounts[0]
+
     account.character = shared.character
     account.svr = shared.svr
     account.account = shared.account

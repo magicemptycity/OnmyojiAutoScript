@@ -1912,6 +1912,7 @@
       "svr": "",
       "account": "",
       "account_alias": "",
+      "account_identifier": "",
       "apple_or_android": true
     }
   },
@@ -1952,7 +1953,7 @@
     },
     "account_list": [
       {
-        "shared_account_index": 0,
+        "shared_account_identifier": "",
         "character": "",
         "svr": "",
         "account": "",
@@ -2013,7 +2014,7 @@
     },
     "account_list": [
       {
-        "shared_account_index": 0,
+        "shared_account_identifier": "",
         "character": "",
         "svr": "",
         "account": "",
@@ -2061,7 +2062,7 @@
     },
     "account_list": [
       {
-        "shared_account_index": 0,
+        "shared_account_identifier": "",
         "character": "",
         "svr": "",
         "account": "",
@@ -2102,7 +2103,7 @@
     },
     "account_list": [
       {
-        "shared_account_index": 0,
+        "shared_account_identifier": "",
         "character": "",
         "svr": "",
         "account": "",
@@ -2148,7 +2149,7 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
-      "shared_account_index": 0,
+      "shared_account_identifier": "",
       "next_hunt_time": "2023-01-01 00:00:00",
       "enable_private_config": false
     }
@@ -2170,7 +2171,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
-      "shared_account_index": 0,
+      "shared_account_identifier": "",
       "character": "",
       "svr": "",
       "account": "",
@@ -2198,7 +2199,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
-      "shared_account_index": 0,
+      "shared_account_identifier": "",
       "character": "",
       "svr": "",
       "account": "",
@@ -2226,7 +2227,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
-      "shared_account_index": 0,
+      "shared_account_identifier": "",
       "character": "",
       "svr": "",
       "account": "",
@@ -2260,7 +2261,7 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
-      "shared_account_index": 0,
+      "shared_account_identifier": "",
       "repeat_task_list": "",
       "failed_task_list": ""
     }
@@ -2282,7 +2283,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
-      "shared_account_index": 0,
+      "shared_account_identifier": "",
       "character": "",
       "svr": "",
       "account": "",
@@ -2310,7 +2311,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
-      "shared_account_index": 0,
+      "shared_account_identifier": "",
       "character": "",
       "svr": "",
       "account": "",
@@ -2338,7 +2339,7 @@
       "skip_if_logged_today": true
     },
     "account_list_1": {
-      "shared_account_index": 0,
+      "shared_account_identifier": "",
       "character": "",
       "svr": "",
       "account": "",

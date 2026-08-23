@@ -45,7 +45,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
         for account_info in self.fade_conf.account_list:
             self._yield_to_higher_priority_task()
             if not resolve_shared_account(self.config, account_info):
-                logger.error("公共账号序号无效：%s", getattr(account_info, "shared_account_index", 0))
+                logger.error("公共账号标识无效：%s", getattr(account_info, "shared_account_identifier", ""))
                 overall_failed = True
                 continue
             if not account_info.is_valid():

@@ -78,7 +78,7 @@ def compact_empty_account_models(
 ) -> None:
     """移除真正的空账号，并同步移动其下标对应的私有配置。
 
-    公共账号库不参与此处理。公共账号序号大于 0 的账号行即使当前引用无效，
+    公共账号库不参与此处理。公共账号标识非空的账号行即使当前引用无效，
     也必须保留，避免误删或改变公共账号引用关系。
     """
     keep_indexes = [
@@ -87,7 +87,7 @@ def compact_empty_account_models(
         if not (
             not str(getattr(account, "character", "") or "").strip()
             and not str(getattr(account, "svr", "") or "").strip()
-            and getattr(account, "shared_account_index", 0) == 0
+            and not str(getattr(account, "shared_account_identifier", "") or "").strip()
         )
     ]
     if len(keep_indexes) == len(accounts):
