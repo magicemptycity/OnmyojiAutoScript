@@ -76,17 +76,20 @@ def compact_empty_account_models(
     accounts: list[BaseModel],
     parallel_lists: list[list[BaseModel]],
 ) -> None:
-    """移除真正的空账号，并同步移动其下标对应的私有配置。
+    """移除不完整的本地账号，并同步移动其下标对应的私有配置。
 
-    公共账号库不参与此处理。公共账号标识非空的账号行即使当前引用无效，
-    也必须保留，避免误删或改变公共账号引用关系。
+    角色名或服务器名任一为空，且公共账号标识为空时视为已移除。
+    公共账号标识非空的账号行即使当前引用无效，也必须保留，
+    避免误删或改变公共账号引用关系。公共账号库不参与此处理。
     """
     keep_indexes = [
         index
         for index, account in enumerate(accounts)
         if not (
-            not str(getattr(account, "character", "") or "").strip()
-            and not str(getattr(account, "svr", "") or "").strip()
+            (
+                not str(getattr(account, "character", "") or "").strip()
+                or not str(getattr(account, "svr", "") or "").strip()
+            )
             and not str(getattr(account, "shared_account_identifier", "") or "").strip()
         )
     ]

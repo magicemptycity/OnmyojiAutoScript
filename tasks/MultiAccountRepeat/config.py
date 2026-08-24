@@ -160,14 +160,17 @@ class MultiAccountRepeat(ConfigBase, extra="allow"):
             "account_list",
             MultiAccountRepeatAccount,
         )
-        # 只压缩多账号多任务自身的空账号行，不处理公共账号库。
+        # 只压缩多账号多任务自身的不完整本地账号，不处理公共账号库。
+        # 角色名或服务器名任一为空且公共账号标识为空时，移除该账号行。
         # 公共账号标识保存在账号对象内部，账号对象整体移动后，标识值不会改变。
         accounts = [
             account
             for account in accounts
             if not (
-                not str(account.character or "").strip()
-                and not str(account.svr or "").strip()
+                (
+                    not str(account.character or "").strip()
+                    or not str(account.svr or "").strip()
+                )
                 and not str(account.shared_account_identifier or "").strip()
             )
         ]
