@@ -27,11 +27,13 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
 
     def _finish_task_failure(self) -> None:
         """记录失败并结束任务，避免被外层任务误判为成功。"""
+        self._task_success = False
         self.set_next_run(self.task_name, finish=False, success=False)
         raise TaskEnd(self.task_name)
 
     def run(self):
         logger.hr('同心队御魂', 1)
+        self._task_success = False
         # 从配置读取当前任务的御魂同心队设置
         config: SameHeartTeamOrochi = self.config.same_heart_team_orochi
         active_config: SameHeartTeamOrochiConfig = config.same_heart_team_orochi_config
@@ -180,6 +182,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
             self.soul(is_open=False)
             self.close_buff()
 
+        self._task_success = success
         if success:
             self.set_next_run('SameHeartTeamOrochi', finish=True, success=True)
         else:

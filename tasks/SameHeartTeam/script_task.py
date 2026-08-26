@@ -31,6 +31,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
 
     def run(self):
         logger.hr('同心队', 1)
+        self._task_success = False
         con = self.config.same_heart_team
 
         # 每日完成检查已禁用，确保每次都会执行任务
@@ -217,6 +218,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
             self.close_buff()
 
         # 18. 记录完成状态
+        self._task_success = success
         if success:
             self.set_next_run('SameHeartTeam', finish=True, success=True)
         else:
@@ -225,6 +227,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
 
     def _finish_task_failure(self, task_name: str = 'SameHeartTeam') -> None:
         """记录失败并结束任务，避免失败分支被外层任务误判为成功。"""
+        self._task_success = False
         self.set_next_run(task_name, finish=False, success=False)
         raise TaskEnd(task_name)
 

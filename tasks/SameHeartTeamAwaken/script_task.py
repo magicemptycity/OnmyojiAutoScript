@@ -26,6 +26,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
 
     def run(self):
         logger.hr('同心队觉醒', 1)
+        self._task_success = False
         # 从配置读取当前任务的觉醒同心队设置
         config: SameHeartTeamAwaken = self.config.same_heart_team_awaken
         active_config: SameHeartTeamAwakenConfig = config.same_heart_team_awaken_config
@@ -73,15 +74,13 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
         # 这里会在觉醒页面内点击指定麒麟图标，直到可以出现创建队伍入口或判断失败
         if not SameHeartTeamScriptTask._select_kirin(self, kirin_button):
             logger.warning('未能进入觉醒页面')
-            self.set_next_run(self.name, finish=False, success=False)
-            raise TaskEnd(self.name)
+            self._finish_task_failure()
 
         # 选择配置里的觉醒层数，进入目标副本层
         # 如果当前页面无法匹配到目标层，则直接结束任务，避免进入错误副本
         if not SameHeartTeamScriptTask._select_layer(self, active_config.layer, self.L_LAYER_LIST):
             logger.warning(f'未找到对应层数: {active_config.layer}')
-            self.set_next_run(self.name, finish=False, success=False)
-            raise TaskEnd(self.name)
+            self._finish_task_failure()
 
         # 如果配置要求锁定阵容，则在当前页面执行锁队操作
         # 这样可以防止在后续页面中误点队伍成员或阵容变动
@@ -101,33 +100,28 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
         # 进入同心队页面，开始同心队集结流程
         if not SameHeartTeamScriptTask._enter_same_heart_team_page(self):
             logger.warning('无法进入同心队页面')
-            self.set_next_run(self.name, finish=False, success=False)
-            raise TaskEnd(self.name)
+            self._finish_task_failure()
 
         # 进入集结页面，选择集结目标副本
         if not SameHeartTeamScriptTask._enter_gather_page(self):
             logger.warning('无法进入集结页面')
-            self.set_next_run(self.name, finish=False, success=False)
-            raise TaskEnd(self.name)
+            self._finish_task_failure()
 
         # 自动选择队员，默认2人，最低1人
         if not SameHeartTeamScriptTask._set_team_member_count(self):
             logger.warning('无法设置队员数量')
-            self.set_next_run(self.name, finish=False, success=False)
-            raise TaskEnd(self.name)
+            self._finish_task_failure()
 
         # 点击集结按钮，开始申请副本集结
         logger.info('点击集结按钮')
         if not SameHeartTeamScriptTask._confirm_gather(self):
             logger.warning('无法点击副本集结按钮')
-            self.set_next_run(self.name, finish=False, success=False)
-            raise TaskEnd(self.name)
+            self._finish_task_failure()
 
         # 等待集结成功并返回组队页面，只有成功进入组队页面才能继续创建房间
         if not SameHeartTeamScriptTask._wait_for_gather_success(self):
             logger.warning('集结失败')
-            self.set_next_run(self.name, finish=False, success=False)
-            raise TaskEnd(self.name)
+            self._finish_task_failure()
 
         logger.info('点击创建队伍图标')
         while True:
@@ -198,10 +192,17 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
             self.awake(is_open=False)
             self.close_buff()
 
+        self._task_success = success
         if success:
             self.set_next_run(self.name, finish=True, success=True)
         else:
             self.set_next_run(self.name, finish=False, success=False)
+        raise TaskEnd(self.name)
+
+    def _finish_task_failure(self) -> None:
+        """记录失败并结束任务，避免失败分支被外层任务误判为成功。"""
+        self._task_success = False
+        self.set_next_run(self.name, finish=False, success=False)
         raise TaskEnd(self.name)
 
 

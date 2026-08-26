@@ -312,13 +312,22 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
                 task_obj.run()
                 return True
             except TaskEnd:
-                logger.info(
-                    "%s-%s 的任务 %s 执行结束",
-                    account_info.character,
-                    account_info.svr,
-                    task_name,
-                )
-                return True
+                task_success = getattr(task_obj, "_task_success", True)
+                if task_success:
+                    logger.info(
+                        "%s-%s 的任务 %s 执行结束",
+                        account_info.character,
+                        account_info.svr,
+                        task_name,
+                    )
+                else:
+                    logger.warning(
+                        "%s-%s 的任务 %s 执行失败并结束",
+                        account_info.character,
+                        account_info.svr,
+                        task_name,
+                    )
+                return task_success
             except RequestHumanTakeover:
                 raise
             except Exception as exc:
