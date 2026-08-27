@@ -2,14 +2,18 @@
 # @author runhey
 # github https://github.com/runhey
 import asyncio
+import copy
 import json
+import re
 from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, ValidationError
 from fastapi.responses import Response, StreamingResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime
 from module.config.utils import convert_to_underscore
+from tasks.MultiAccountRepeat.config import MultiAccountRepeatTask
 
 from module.logger import logger
 from module.server.api_logger import ApiLoggingRoute, log_ws_event
@@ -242,6 +246,198 @@ async def task_group_copy(task_name: str, group_name: str, dest_config_name: str
     if source_task is None:
         return False
     return mm.config_cache(dest_config_name).model.copy_task_group(task_name, group_name, source_task)
+
+
+# ----------------------------------   多账号多任务专用接口   ----------------------------------
+def _get_repeat_section(script_name: str, repeat_task: str = "MultiAccountRepeat"):
+    """获取指定多账号多任务变体的配置。"""
+    task_key = convert_to_underscore(repeat_task.strip())
+    if not task_key.startswith("multi_account_repeat"):
+        raise HTTPException(status_code=400, detail="不是多账号多任务功能")
+    section = getattr(mm.config_cache(script_name).model, task_key, None)
+    if section is None:
+        raise HTTPException(status_code=404, detail="当前配置没有多账号多任务")
+    return section
+
+def _get_repeat_account(section, account_index: int):
+    """按 1 开始的账号序号读取账号。"""
+    if account_index < 1 or account_index > len(section.account_list):
+        raise HTTPException(status_code=404, detail="账号序号不存在")
+    return section.account_list[account_index - 1]
+
+
+def _find_repeat_task(account, task_name: str):
+    """在账号任务列表中查找指定任务。"""
+    for entry in account.task_entries:
+        if entry.task_name == task_name:
+            return entry
+    raise HTTPException(status_code=404, detail="账号没有配置该任务")
+
+
+def _find_task_group(task_config: BaseModel, group_name: str):
+    """按参数页面的分组名称查找普通分组或列表分组。"""
+    normalized = convert_to_underscore(group_name)
+    group = getattr(task_config, normalized, None)
+    if group is not None:
+        return group
+    matches = re.findall(r"\d+", normalized)
+    index = int(matches[-1]) - 1 if matches else -1
+    if index < 0:
+        return None
+    for field_name, value in task_config.__dict__.items():
+        if field_name in normalized and isinstance(value, list) and index < len(value):
+            return value[index]
+    return None
+
+
+def _set_task_argument(task_config: BaseModel, group_name: str, argument_name: str, value) -> None:
+    """把一个参数写入任务配置副本并交给 Pydantic 校验。"""
+    group = _find_task_group(task_config, group_name)
+    if group is None:
+        raise ValueError(f"找不到任务参数分组：{group_name}")
+    setattr(group, convert_to_underscore(argument_name), value)
+
+
+def _convert_repeat_argument(types: str, value):
+    """把 OASX 参数值转换为配置模型可以接受的类型。"""
+    if types == "integer":
+        return int(value)
+    if types == "number":
+        return float(value)
+    if types == "boolean":
+        if isinstance(value, str):
+            return value.lower() in {"true", "1"}
+        return bool(value)
+    return value
+
+
+@script_app.get('/{script_name}/multi_account_repeat/{repeat_task}/accounts')
+async def multi_account_repeat_accounts(script_name: str, repeat_task: str):
+    """返回多账号多任务的账号及其结构化任务列表。"""
+    section = _get_repeat_section(script_name, repeat_task)
+    accounts = []
+    for index, account in enumerate(section.account_list, start=1):
+        accounts.append({
+            "index": index,
+            "identifier": getattr(account, "shared_account_identifier", ""),
+            "character": account.character,
+            "svr": account.svr,
+            "tasks": [
+                {
+                    "task_name": entry.task_name,
+                    "has_private_config": bool(entry.private_config),
+                }
+                for entry in account.task_entries
+                if entry.task_name
+            ],
+        })
+    return {
+        "supported": True,
+        "account_count": section.multi_account_repeat_config.account_count,
+        "accounts": accounts,
+    }
+
+
+@script_app.post('/{script_name}/multi_account_repeat/{repeat_task}/accounts/{account_index}/tasks')
+async def multi_account_repeat_add_task(script_name: str, repeat_task: str, account_index: int, task_name: str):
+    """给指定账号添加一个任务。"""
+    section = _get_repeat_section(script_name, repeat_task)
+    account = _get_repeat_account(section, account_index)
+    task_key = convert_to_underscore(task_name.strip())
+    if not task_key or getattr(mm.config_cache(script_name).model, task_key, None) is None:
+        raise HTTPException(status_code=400, detail="任务不存在")
+    entries = account.task_entries
+    if any(entry.task_name == task_key for entry in entries):
+        return True
+    if not account.task_list:
+        account.task_list = entries
+        account.repeat_task_list = ""
+    account.task_list.append(MultiAccountRepeatTask(task_name=task_key))
+    mm.config_cache(script_name).save_selected_fields({convert_to_underscore(repeat_task): section})
+    return True
+
+
+@script_app.delete('/{script_name}/multi_account_repeat/{repeat_task}/accounts/{account_index}/tasks/{task_name}')
+async def multi_account_repeat_delete_task(script_name: str, repeat_task: str, account_index: int, task_name: str):
+    """删除指定账号的任务及其私有配置。"""
+    section = _get_repeat_section(script_name, repeat_task)
+    account = _get_repeat_account(section, account_index)
+    task_key = convert_to_underscore(task_name.strip())
+    entries = account.task_entries
+    if not any(entry.task_name == task_key for entry in entries):
+        return True
+    account.task_list = [entry for entry in entries if entry.task_name != task_key]
+    account.repeat_task_list = ""
+    mm.config_cache(script_name).save_selected_fields({convert_to_underscore(repeat_task): section})
+    return True
+
+
+@script_app.get('/{script_name}/multi_account_repeat/{repeat_task}/accounts/{account_index}/tasks/{task_name}/args')
+async def multi_account_repeat_task_args(script_name: str, repeat_task: str, account_index: int, task_name: str):
+    """返回指定账号任务的有效参数，私有参数覆盖公共参数。"""
+    section = _get_repeat_section(script_name, repeat_task)
+    account = _get_repeat_account(section, account_index)
+    entry = _find_repeat_task(account, convert_to_underscore(task_name.strip()))
+    task_args = copy.deepcopy(mm.config_cache(script_name).model.script_task(entry.task_name))
+    # 账号私有配置只覆盖业务参数，调度时间和启用状态仍由公共任务管理。
+    task_args.pop("scheduler", None)
+    for group_name, arguments in entry.private_config.items():
+        if not isinstance(arguments, dict) or group_name not in task_args:
+            continue
+        for argument in task_args[group_name]:
+            if argument.get("name") in arguments:
+                argument["value"] = arguments[argument["name"]]
+    return task_args
+
+
+@script_app.put('/{script_name}/multi_account_repeat/{repeat_task}/accounts/{account_index}/tasks/{task_name}/{group}/{argument}/value')
+async def multi_account_repeat_set_task_arg(
+    script_name: str,
+    repeat_task: str,
+    account_index: int,
+    task_name: str,
+    group: str,
+    argument: str,
+    types: str,
+    value,
+):
+    """保存指定账号任务的一个私有参数，不修改公共任务配置。"""
+    section = _get_repeat_section(script_name, repeat_task)
+    account = _get_repeat_account(section, account_index)
+    entry = _find_repeat_task(account, convert_to_underscore(task_name.strip()))
+    task_config = getattr(mm.config_cache(script_name).model, entry.task_name, None)
+    if not isinstance(task_config, BaseModel):
+        raise HTTPException(status_code=400, detail="任务配置不存在")
+    if convert_to_underscore(group) == "scheduler":
+        raise HTTPException(status_code=400, detail="不能在账号私有配置中修改调度参数")
+    value = _convert_repeat_argument(types, value)
+    private_config = copy.deepcopy(entry.private_config)
+    group_values = private_config.setdefault(convert_to_underscore(group), {})
+    group_values[convert_to_underscore(argument)] = value
+    test_config = copy.deepcopy(task_config)
+    try:
+        for group_name, arguments in private_config.items():
+            if not isinstance(arguments, dict):
+                continue
+            for argument_name, argument_value in arguments.items():
+                _set_task_argument(test_config, group_name, argument_name, argument_value)
+        test_config = test_config.__class__.model_validate(test_config.model_dump())
+    except (ValidationError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"私有参数无效：{exc}") from exc
+    entry.private_config = private_config
+    mm.config_cache(script_name).save_selected_fields({convert_to_underscore(repeat_task): section})
+    return True
+
+
+@script_app.delete('/{script_name}/multi_account_repeat/{repeat_task}/accounts/{account_index}/tasks/{task_name}/private')
+async def multi_account_repeat_clear_private(script_name: str, repeat_task: str, account_index: int, task_name: str):
+    """清除指定账号任务的私有参数，恢复使用公共配置。"""
+    section = _get_repeat_section(script_name, repeat_task)
+    account = _get_repeat_account(section, account_index)
+    entry = _find_repeat_task(account, convert_to_underscore(task_name.strip()))
+    entry.private_config = {}
+    mm.config_cache(script_name).save_selected_fields({convert_to_underscore(repeat_task): section})
+    return True
 
 
 # ---------------------------------   脚本实例管理   ----------------------------------

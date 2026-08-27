@@ -384,7 +384,8 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         logger.info('开始处理解散同心队')
 
         # 第一阶段：当前页面尝试10秒
-        if self._try_dissolve_in_scene(10):
+        # 子任务通过本类方法复用解散流程，但没有继承本类，需显式调用辅助方法。
+        if ScriptTask._try_dissolve_in_scene(self, 10):
             return True
 
         # 第二阶段：回到庭院
@@ -398,7 +399,8 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
             return False
 
         # 有目标元素，再尝试10秒
-        if self._try_dissolve_in_scene(10):
+        # 子任务通过本类方法复用解散流程，但没有继承本类，需显式调用辅助方法。
+        if ScriptTask._try_dissolve_in_scene(self, 10):
             return True
 
         logger.warning('解散同心队超时')

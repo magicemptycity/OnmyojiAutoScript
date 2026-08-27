@@ -2179,6 +2179,7 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
+      "task_list": [],
       "repeat_task_list": "",
       "failed_task_list": "",
       "unfinished_task_list": ""
@@ -2209,6 +2210,7 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
+      "task_list": [],
       "repeat_task_list": "",
       "failed_task_list": "",
       "unfinished_task_list": ""
@@ -2239,6 +2241,7 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
+      "task_list": [],
       "repeat_task_list": "",
       "failed_task_list": "",
       "unfinished_task_list": ""
@@ -2269,6 +2272,7 @@
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
       "shared_account_identifier": "",
+      "task_list": [],
       "repeat_task_list": "",
       "failed_task_list": "",
       "unfinished_task_list": ""
@@ -2299,6 +2303,7 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
+      "task_list": [],
       "repeat_task_list": "",
       "failed_task_list": "",
       "unfinished_task_list": ""
@@ -2329,6 +2334,7 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
+      "task_list": [],
       "repeat_task_list": "",
       "failed_task_list": "",
       "unfinished_task_list": ""
@@ -2359,6 +2365,7 @@
       "account_alias": "",
       "apple_or_android": true,
       "last_complete_time": "2023-01-01 00:00:00",
+      "task_list": [],
       "repeat_task_list": "",
       "failed_task_list": "",
       "unfinished_task_list": ""

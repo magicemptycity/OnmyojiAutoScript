@@ -1,10 +1,13 @@
+import copy
 import importlib.util
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
+from pydantic import BaseModel, ValidationError
 from module.config.utils import convert_to_underscore
 from tasks.MultiAccountRepeat.task_name_resolver import TaskNameResolver
 from tasks.Component.MultiAccount.account_library import resolve_shared_account
@@ -16,6 +19,7 @@ from tasks.MultiAccountRepeat.assets import MultiAccountRepeatAssets
 from tasks.MultiAccountRepeat.config import (
     MultiAccountRepeat,
     MultiAccountRepeatAccount,
+    MultiAccountRepeatTask,
 )
 
 
@@ -103,7 +107,8 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
             for task_index, task_name in enumerate(task_names):
                 # 先保存当前任务及后续任务；手动停止或强制退出时可从此处继续。
                 self._save_unfinished_task_checkpoint(account_info, task_names[task_index:])
-                if self._run_task_with_retry(account_info, task_name):
+                task_entry = self._get_task_entry(account_info, task_name)
+                if self._run_task_with_retry(account_info, task_name, task_entry):
                     # 成功的失败重试任务也要立即从失败记录中移除。
                     remaining_failed_task_names = [
                         failed_task
@@ -271,6 +276,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
         self,
         account_info: MultiAccountRepeatAccount,
         task_name: str,
+        task_entry: MultiAccountRepeatTask | None = None,
     ) -> bool:
         """执行单个任务；失败后重启游戏并最多重试三次。"""
         last_exception: Exception | None = None
@@ -302,6 +308,10 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
             )
             # 内层任务保存运行状态时，仅合并写回自身配置，不能覆盖其他多账号功能。
             self.config._save_selected_fields = {convert_to_underscore(task_name)}
+            task_config_backup = self._apply_private_task_config(
+                task_name,
+                task_entry,
+            )
             try:
                 task_obj = self.create_task_object(
                     task_name,
@@ -351,6 +361,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
                     exc,
                 )
             finally:
+                self._restore_private_task_config(task_config_backup)
                 self.config._save_selected_fields = previous_save_fields
 
         task_display_name = self._task_display_name(task_name)
@@ -361,6 +372,104 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
         self._push_error_notification(account_info, task_display_name, last_exception)
         self._restart_game()
         return False
+
+    def _get_task_entry(
+        self,
+        account_info: MultiAccountRepeatAccount,
+        task_name: str,
+    ) -> MultiAccountRepeatTask | None:
+        """取得当前账号对应的结构化任务配置。"""
+        for entry in account_info.task_entries:
+            if entry.task_name == task_name:
+                return entry
+        return None
+
+    @staticmethod
+    def _find_task_group(task_config: BaseModel, group_name: str) -> Any:
+        """按照参数页面使用的分组名称找到普通分组或列表分组。"""
+        group_name = convert_to_underscore(group_name)
+        group = getattr(task_config, group_name, None)
+        if group is not None:
+            return group
+        matches = re.findall(r"\d+", group_name)
+        index = int(matches[-1]) - 1 if matches else -1
+        if index < 0:
+            return None
+        for field_name, value in task_config.__dict__.items():
+            if field_name in group_name and isinstance(value, list) and index < len(value):
+                return value[index]
+        return None
+
+    @classmethod
+    def _set_task_argument(
+        cls,
+        task_config: BaseModel,
+        group_name: str,
+        argument_name: str,
+        value: Any,
+    ) -> None:
+        group = cls._find_task_group(task_config, group_name)
+        if group is None:
+            raise ValueError(f"找不到任务参数分组：{group_name}")
+        setattr(group, convert_to_underscore(argument_name), value)
+
+    def _apply_private_task_config(
+        self,
+        task_name: str,
+        task_entry: MultiAccountRepeatTask | None,
+    ) -> tuple[str, str, BaseModel, BaseModel] | None:
+        """临时套用账号私有配置，并保留公共配置供任务结束后恢复。"""
+        if task_entry is None or not task_entry.private_config:
+            return None
+        task_key = convert_to_underscore(task_name)
+        public_config = getattr(self.config.model, task_key, None)
+        if not isinstance(public_config, BaseModel):
+            raise ValueError(f"找不到任务配置：{task_name}")
+        backup = copy.deepcopy(public_config)
+        active = copy.deepcopy(public_config)
+        for group_name, arguments in task_entry.private_config.items():
+            if not isinstance(arguments, dict):
+                continue
+            for argument_name, value in arguments.items():
+                self._set_task_argument(active, group_name, argument_name, value)
+        try:
+            active = active.__class__.model_validate(active.model_dump())
+        except ValidationError as exc:
+            raise ValueError(f"账号私有配置无效：{task_name}: {exc}") from exc
+        BaseModel.__setattr__(self.config.model, task_key, active)
+        logger.info("为账号 %s-%s 套用任务 %s 的私有配置", self.current_account_info.character, self.current_account_info.svr, task_name)
+        return task_name, task_key, backup, active
+
+    def _restore_private_task_config(
+        self,
+        backup_info: tuple[str, str, BaseModel, BaseModel] | None,
+    ) -> None:
+        """恢复私有参数，保留任务运行期间产生的公共状态变化。"""
+        if backup_info is None:
+            return
+        task_name, task_key, backup, active = backup_info
+        current = getattr(self.config.model, task_key, active)
+        current = copy.deepcopy(current)
+        # 只还原账号私有覆盖过的字段，其余运行状态沿用当前值。
+        # 任务项在调用前已绑定到当前账号，恢复时从配置对象中重新读取覆盖路径。
+        # 这里通过当前任务记录保存的覆盖路径定位原始值。
+        task_entry = self._get_task_entry(self.current_account_info, task_name)
+        if task_entry is not None:
+            for group_name, arguments in task_entry.private_config.items():
+                if not isinstance(arguments, dict):
+                    continue
+                source_group = self._find_task_group(backup, group_name)
+                if source_group is None:
+                    continue
+                for argument_name in arguments:
+                    original = getattr(source_group, convert_to_underscore(argument_name))
+                    self._set_task_argument(current, group_name, argument_name, original)
+        try:
+            current = current.__class__.model_validate(current.model_dump())
+        except ValidationError:
+            current = backup
+        BaseModel.__setattr__(self.config.model, task_key, current)
+        self.config.save_selected_fields({task_key: current})
 
     def _restart_game(self) -> None:
         """重启游戏并等待启动就绪，供任务失败后的恢复流程使用。"""

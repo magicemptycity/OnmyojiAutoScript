@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Any
 
@@ -40,9 +41,24 @@ class MultiAccountRepeatConfig(ConfigBase, extra="allow"):
     )
 
 
+class MultiAccountRepeatTask(ConfigBase, extra="allow"):
+    """一个账号下配置的任务及其私有参数覆盖。"""
+
+    task_name: str = Field(default="", description="内部任务名称")
+    private_config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="该账号对本任务的私有参数覆盖；为空时使用公共配置",
+    )
+
+
 class MultiAccountRepeatAccount(MultiAccountReference):
     """多账号多任务中的账号和任务列表。"""
 
+    task_list: list[MultiAccountRepeatTask] = Field(
+        default_factory=list,
+        title="任务列表",
+        description="当前账号要执行的任务及其私有配置",
+    )
     repeat_task_list: MultiLine = Field(
         default="",
         description=(
@@ -99,9 +115,19 @@ class MultiAccountRepeatAccount(MultiAccountReference):
         return self._resolve_task_names(self.unfinished_task_list)
 
     @property
+    def task_entries(self) -> list[MultiAccountRepeatTask]:
+        """返回结构化任务列表；旧配置没有新列表时回退到旧文本列表。"""
+        if self.task_list:
+            return self.task_list
+        return [
+            MultiAccountRepeatTask(task_name=name)
+            for name in self._resolve_task_names(self.repeat_task_list)
+        ]
+
+    @property
     def repeat_task_names(self) -> list[str]:
         """把账号配置中的任务名称转换为内部任务名。"""
-        return self._resolve_task_names(self.repeat_task_list)
+        return [entry.task_name for entry in self.task_entries if entry.task_name]
 
 
 class MultiAccountRepeat(ConfigBase, extra="allow"):
