@@ -352,39 +352,54 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         else:
             return False
 
-    def _exit_same_heart_team(self) -> bool:
-        """先回到庭院，再确认并解散仍在进行的同心队集结。"""
-        logger.info('开始处理解散同心队')
-        self.goto_page(page_main)
 
-        close_buttons = (
-            self.I_I_SAME_HEART_TEAM_CLOSE,
-            self.I_UI_BACK_RED,
-        )
-        wait_timer = Timer(15).start()
-        while not wait_timer.reached():
+    def _try_dissolve_in_scene(self, timeout: int) -> bool:
+        """在当前场景下尝试解散同心队，超时时间内持续检测并处理确认弹窗或关闭按钮。"""
+        timer = Timer(timeout).start()
+        while not timer.reached():
             self.screenshot()
-            # 可能由回庭院过程中的通用关闭动作提前点开确认弹窗。
+            # 统一处理确认弹窗
             if self.appear(self.I_UI_CONFIRM):
                 self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
                 logger.info('解散成功')
                 return True
-            for close_button in close_buttons:
-                if not self.appear(close_button):
-                    continue
-                logger.info('发现关闭集结按钮 %s，点击至确认弹窗出现', close_button.name)
+            # 查找同心队关闭按钮
+            if self.appear(self.I_I_SAME_HEART_TEAM_CLOSE):
+                logger.info('点击同心队关闭按钮')
                 if self.ui_click_until_appear_or_timeout(
-                    close_button,
+                    self.I_I_SAME_HEART_TEAM_CLOSE,
                     stop=self.I_UI_CONFIRM,
                     interval=1,
                     timeout=5,
                 ):
-                    # 保持原有确认处理：点击确认直到确认弹窗消失。
-                    if self.appear(self.I_UI_CONFIRM):
-                        self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
-                        logger.info('解散成功')
-                        return True
-                logger.warning('点击关闭集结按钮后未出现确认弹窗，继续尝试其他识别图')
+                    # 点击成功，确认弹窗已出现，下一轮循环会自动处理
+                    continue
+                else:
+                    logger.warning('点击关闭按钮后未出现确认弹窗')
+        return False
 
-        logger.warning('等待同心队解散按钮或确认弹窗超时')
+
+    def _exit_same_heart_team(self) -> bool:
+        """先尝试在当前页面解散，若失败则回到庭院，确认有解散元素后再处理。"""
+        logger.info('开始处理解散同心队')
+
+        # 第一阶段：当前页面尝试10秒
+        if self._try_dissolve_in_scene(10):
+            return True
+
+        # 第二阶段：回到庭院
+        logger.info('当前页面未找到解散按钮，回到庭院')
+        self.goto_page(page_main)
+
+        # 先截图检查是否有解散相关元素
+        self.screenshot()
+        if not (self.appear(self.I_UI_CONFIRM) or self.appear(self.I_I_SAME_HEART_TEAM_CLOSE)):
+            logger.info('庭院中未发现解散相关元素，无需处理')
+            return False
+
+        # 有目标元素，再尝试10秒
+        if self._try_dissolve_in_scene(10):
+            return True
+
+        logger.warning('解散同心队超时')
         return False
