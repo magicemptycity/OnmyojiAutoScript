@@ -26,6 +26,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
 
     def run(self):
         logger.hr('同心队觉醒', 1)
+        self._restart_before_next_task = False
         self._task_success = False
         # 从配置读取当前任务的觉醒同心队设置
         config: SameHeartTeamAwaken = self.config.same_heart_team_awaken
@@ -184,7 +185,10 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
             pass
 
         # 退出同心队模式，解散集结并返回庭院
-        SameHeartTeamScriptTask._exit_same_heart_team(self)
+        if not SameHeartTeamScriptTask._exit_same_heart_team(self):
+            # 副本已完成，只标记收尾环境异常；多账号多任务会在下一项前重启游戏。
+            logger.warning('未能确认同心队已解散，后续任务前需要重启游戏')
+            self._restart_before_next_task = True
 
         # 关闭之前开启的觉醒加成
         if active_config.soul_buff_enable:

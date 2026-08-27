@@ -1,4 +1,4 @@
-﻿# This Python file uses the following encoding: utf-8
+# This Python file uses the following encoding: utf-8
 # @author runhey
 # github https://github.com/runhey
 from time import sleep
@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from module.exception import TaskEnd
 from module.logger import logger
+from module.base.timer import Timer
 from tasks.Component.GeneralBattle.general_battle import GeneralBattle
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
@@ -31,6 +32,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
 
     def run(self):
         logger.hr('同心队', 1)
+        self._restart_before_next_task = False
         self._task_success = False
         con = self.config.same_heart_team
 
@@ -206,7 +208,10 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
             pass
 
         # 16. 处理同心队解散
-        self._exit_same_heart_team()
+        if not self._exit_same_heart_team():
+            # 副本已完成，只标记收尾环境异常；多账号多任务会在下一项前重启游戏。
+            logger.warning('未能确认同心队已解散，后续任务前需要重启游戏')
+            self._restart_before_next_task = True
 
         # 17. 关闭加成（如果需要）
         if active_config.soul_buff_enable:
@@ -347,19 +352,39 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         else:
             return False
 
-    def _exit_same_heart_team(self):
-        """退出同心队，解散集结，返回庭院"""
+    def _exit_same_heart_team(self) -> bool:
+        """先回到庭院，再确认并解散仍在进行的同心队集结。"""
         logger.info('开始处理解散同心队')
+        self.goto_page(page_main)
 
-        if self.wait_until_appear(self.I_I_SAME_HEART_TEAM_CLOSE, wait_time=15):
-            logger.info('发现关闭集结按钮，点击关闭')
-            sleep(1)
-            self.ui_click(self.I_I_SAME_HEART_TEAM_CLOSE, stop=self.I_UI_CONFIRM, interval=1)
-
+        close_buttons = (
+            self.I_I_SAME_HEART_TEAM_CLOSE,
+            self.I_UI_BACK_RED,
+        )
+        wait_timer = Timer(15).start()
+        while not wait_timer.reached():
+            self.screenshot()
+            # 可能由回庭院过程中的通用关闭动作提前点开确认弹窗。
             if self.appear(self.I_UI_CONFIRM):
                 self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
                 logger.info('解散成功')
+                return True
+            for close_button in close_buttons:
+                if not self.appear(close_button):
+                    continue
+                logger.info('发现关闭集结按钮 %s，点击至确认弹窗出现', close_button.name)
+                if self.ui_click_until_appear_or_timeout(
+                    close_button,
+                    stop=self.I_UI_CONFIRM,
+                    interval=1,
+                    timeout=5,
+                ):
+                    # 保持原有确认处理：点击确认直到确认弹窗消失。
+                    if self.appear(self.I_UI_CONFIRM):
+                        self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
+                        logger.info('解散成功')
+                        return True
+                logger.warning('点击关闭集结按钮后未出现确认弹窗，继续尝试其他识别图')
 
-            self.click(self.I_UI_BACK_YELLOW)
-
-        self.goto_page(page_main)
+        logger.warning('等待同心队解散按钮或确认弹窗超时')
+        return False

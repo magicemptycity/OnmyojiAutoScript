@@ -320,6 +320,14 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatAssets, Sw
                         account_info.svr,
                         task_name,
                     )
+                    if getattr(task_obj, "_restart_before_next_task", False):
+                        logger.warning(
+                            "%s-%s 的任务 %s 已完成，但收尾环境未清理，重启游戏后执行下一项",
+                            account_info.character,
+                            account_info.svr,
+                            task_name,
+                        )
+                        self._restart_game()
                 else:
                     logger.warning(
                         "%s-%s 的任务 %s 执行失败并结束",
