@@ -1,6 +1,5 @@
 """百鬼棋局运行时专用的按住并拖动操作。"""
 
-import random
 import time
 
 import numpy as np
@@ -93,19 +92,11 @@ def _press_and_drag_minitouch(
     p1, p2 = _randomized_points(p1, p2, point_random)
     points = insert_swipe(p0=p1, p3=p2, speed=20)
     builder = device.minitouch_builder
-    pressure_getter = getattr(device, '_humanized_pressure', None)
-    pressure = pressure_getter() if callable(pressure_getter) else 100
 
-    builder.down(
-        *points[0],
-        pressure=pressure,
-    ).commit().wait(int(hold_duration * 1000))
+    builder.down(*points[0]).commit().wait(int(hold_duration * 1000))
     device.minitouch_send()
     for point in points[1:]:
-        builder.move(
-            *point,
-            pressure=pressure,
-        ).commit().wait(random.randint(6, 15))
+        builder.move(*point).commit().wait(10)
     device.minitouch_send()
     builder.move(*p2).commit().wait(140)
     builder.move(*p2).commit().wait(140)
@@ -148,7 +139,7 @@ def _press_and_drag_scrcpy(
         device.sleep(hold_duration)
         for point in points[1:-1]:
             device._scrcpy_control.touch(*point, scrcpy_const.ACTION_MOVE)
-            device.sleep(random.uniform(0.001, 0.004))
+            device.sleep(0.002)
         device._scrcpy_control.touch(*p2, scrcpy_const.ACTION_MOVE)
         device.sleep(0.14)
         device._scrcpy_control.touch(*p2, scrcpy_const.ACTION_UP)

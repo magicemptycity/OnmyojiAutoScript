@@ -60,12 +60,55 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                 clicked = True
             self.device.click_record_clear()
         else:
-            if self.appear_then_click(self.I_BATTLE_FAIL_ABANDON, interval=1):
-                clicked = True
+            clicked = self._handle_battle_fail_abandon()
         context.is_win = self.appear(self.I_CAP_SUCCESS) or self.appear(self.I_BATTLE_SUCCESS)
         if not clicked:
             self.click(random_click(), interval=1.2)
         return BattleAction.CONTINUE
+
+    def _handle_battle_fail_abandon(self, timeout: float = 3.0, max_attempts: int = 3) -> bool:
+        """等待并点击“放弃结契”，确认按钮消失后再继续处理结算页。"""
+        # 成功结算没有“放弃结契”，不要为正常成功页面增加等待。
+        if self.appear(self.I_CAP_SUCCESS) or self.appear(self.I_BATTLE_SUCCESS):
+            return False
+
+        logger.info('Wait for battle fail abandon')
+        timeout_timer = Timer(timeout).start()
+        attempts = 0
+        while not timeout_timer.reached():
+            if attempts == 0 and (
+                self.appear(self.I_CAP_SUCCESS)
+                or self.appear(self.I_BATTLE_SUCCESS)
+            ):
+                logger.info('Bondling result confirmed successful, skip abandon')
+                return False
+            if not self.appear(self.I_BATTLE_FAIL_ABANDON):
+                if attempts > 0:
+                    logger.info('Battle fail abandon disappeared')
+                    return True
+            elif attempts < max_attempts and self.appear_then_click(
+                self.I_BATTLE_FAIL_ABANDON,
+                interval=0.5,
+            ):
+                attempts += 1
+                logger.info(f'Click battle fail abandon: {attempts}/{max_attempts}')
+            self.screenshot()
+
+        if attempts > 0:
+            if self.appear(self.I_BATTLE_FAIL_ABANDON):
+                logger.warning(
+                    'Battle fail abandon did not disappear after '
+                    f'{attempts} click(s)'
+                )
+            else:
+                logger.info('Battle fail abandon disappeared')
+            # 已点击过时禁止同一轮再执行安全区随机点击，避免误触其他结算操作。
+            return True
+
+        logger.warning(
+            f'Battle fail abandon did not appear within {timeout:g} seconds'
+        )
+        return False
 
     def _handle_reward(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
         is_win = context.is_win

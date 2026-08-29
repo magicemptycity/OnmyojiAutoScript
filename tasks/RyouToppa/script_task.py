@@ -76,9 +76,6 @@ def random_delay(min_value: float = 1.0, max_value: float = 2.0, decimal: int = 
 
 class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
     medal_grid: ImageGrid = None
-    CLICK_REACTION_DELAY = (0.18, 0.22)
-    PREPARE_CLICK_DELAY_RANGE = (2.5, 3.5)
-    SETTLEMENT_CLICK_INTERVAL_RANGE = (0.65, 0.95)
 
     def run(self):
         """
