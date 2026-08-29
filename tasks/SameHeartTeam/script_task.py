@@ -386,6 +386,7 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         # 第一阶段：当前页面尝试10秒
         # 子任务通过本类方法复用解散流程，但没有继承本类，需显式调用辅助方法。
         if ScriptTask._try_dissolve_in_scene(self, 10):
+            self.goto_page(page_main)
             return True
 
         # 第二阶段：回到庭院
