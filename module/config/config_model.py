@@ -91,11 +91,17 @@ from tasks.Duel.config import Duel
 # 多账号专属---------------------------------------------------------------------------------------------------------------
 from tasks.Component.MultiAccount.account_library import MultiAccountAccounts
 from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
+from tasks.MultiAccountKekkaiUtilizeNew.config import MultiAccountKekkaiUtilizeNew
 from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
 from tasks.MultiAccountDelegation.config import MultiAccountDelegation
 from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
 from tasks.MultiAccountHunt.config import MultiAccountHunt
 from tasks.MultiAccountRepeat.config import MultiAccountRepeat
+from tasks.MultiAccountRepeatNew.config import MultiAccountRepeatNew
+from tasks.MultiAccountRepeatNewNormal.config import MultiAccountRepeatNewNormal
+from tasks.MultiAccountRepeatNewFixed.config import MultiAccountRepeatNewFixed
+from tasks.MultiAccountRepeatTimed.config import MultiAccountRepeatTimed
+from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccounts
 from tasks.MultiAccountRepeatMorning.config import MultiAccountRepeatMorning
 from tasks.MultiAccountRepeatAfternoon.config import MultiAccountRepeatAfternoon
 from tasks.MultiAccountRepeatMidnight.config import MultiAccountRepeatMidnight
@@ -175,11 +181,19 @@ class ConfigModel(ConfigBase):
     # 多账号专属
     multi_account_accounts: MultiAccountAccounts = Field(default_factory=MultiAccountAccounts)
     multi_account_kekkai_utilize: MultiAccountKekkaiUtilize = Field(default_factory=MultiAccountKekkaiUtilize)
+    multi_account_kekkai_utilize_new: MultiAccountKekkaiUtilizeNew = Field(default_factory=MultiAccountKekkaiUtilizeNew)
     multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
     multi_account_delegation: MultiAccountDelegation = Field(default_factory=MultiAccountDelegation)
     multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)
     multi_account_hunt: MultiAccountHunt = Field(default_factory=MultiAccountHunt)
     multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
+    # 兼容已创建过“多账号多任务新专属公共账号”的旧配置；新版功能只读取通用公共账号库。
+    multi_account_repeat_new_accounts: SharedPublicAccounts | None = None
+    multi_account_shared_accounts: SharedPublicAccounts = Field(default_factory=SharedPublicAccounts)
+    multi_account_repeat_new: MultiAccountRepeatNew = Field(default_factory=MultiAccountRepeatNew)
+    multi_account_repeat_new_normal: MultiAccountRepeatNewNormal = Field(default_factory=MultiAccountRepeatNewNormal)
+    multi_account_repeat_new_fixed: MultiAccountRepeatNewFixed = Field(default_factory=MultiAccountRepeatNewFixed)
+    multi_account_repeat_timed: MultiAccountRepeatTimed = Field(default_factory=MultiAccountRepeatTimed)
     multi_account_repeat_morning: MultiAccountRepeatMorning = Field(default_factory=MultiAccountRepeatMorning)
     multi_account_repeat_afternoon: MultiAccountRepeatAfternoon = Field(default_factory=MultiAccountRepeatAfternoon)
     multi_account_repeat_midnight: MultiAccountRepeatMidnight = Field(default_factory=MultiAccountRepeatMidnight)
@@ -372,7 +386,6 @@ class ConfigModel(ConfigBase):
                 # deal with exclude 
                 if key in jsons and jsons[key] == 0xABCDEF:
                     continue
-
                 item = {}
                 item["name"] = key
                 item["title"] = value["title"] if "title" in value else inflection.underscore(key)

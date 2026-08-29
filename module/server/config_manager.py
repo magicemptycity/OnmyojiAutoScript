@@ -120,7 +120,14 @@ class ConfigManager:
 
     @staticmethod
     def _is_model_type(annotation: Any) -> bool:
-        return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+        # Python 3.13 中 list[Model] 等泛型别名也可能被 isinstance(..., type) 识别为真，
+        # 直接传给 issubclass 会抛出 TypeError。泛型字段应由后续的列表处理逻辑处理。
+        if get_origin(annotation) is not None or not isinstance(annotation, type):
+            return False
+        try:
+            return issubclass(annotation, BaseModel)
+        except TypeError:
+            return False
 
     @staticmethod
     def _list_item_model(annotation: Any) -> type[BaseModel] | None:

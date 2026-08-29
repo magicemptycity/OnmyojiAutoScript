@@ -199,6 +199,11 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                 continue
         return
 
+    def is_account_selected(self, accountInfo: AccountInfo) -> bool:
+        """确认当前网易账号选择框是否已选中目标账号。"""
+        self.O_SA_ACCOUNT_ACCOUNT_SELECTED.keyword = accountInfo.account
+        return self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED)
+
     def selectAccount(self, accountInfo: AccountInfo):
         logger.info("start selectAccount")
         self.O_SA_ACCOUNT_ACCOUNT_LIST.keyword = accountInfo.account
@@ -309,7 +314,7 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                     logger.error("param account is None,cannot switch account")
                     return False
                 # 当前选择账号不是account
-                if not self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED):
+                if not self.is_account_selected(accountInfo):
                     # 没有找到account
                     MAX_RETRY = 3
                     found = False

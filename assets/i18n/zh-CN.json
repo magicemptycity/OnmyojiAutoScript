@@ -269,5 +269,11 @@
   "preset_public_enable": "队伍和御魂预设通用分组",
   "preset_public_enable_help": "御魂切换和队伍切换通用分组，例如 6,1 表示第6组的第1个队伍, 组号[1-7],队伍号[1-4]",
   "check_higher_priority_task": "检查更高优先级任务",
-  "check_higher_priority_task_help": "每场斗技结束回到斗技主界面后，若存在已到运行时间且优先级更高的任务，则先结束斗技；高优先级任务完成后会继续运行斗技"
+  "check_higher_priority_task_help": "每场斗技结束回到斗技主界面后，若存在已到运行时间且优先级更高的任务，则先结束斗技；高优先级任务完成后会继续运行斗技",
+  "MultiAccountRepeatNew": "多账号多任务新",
+  "MultiAccountRepeatTimed": "多账号多任务定时",
+  "MultiAccountRepeatNewNormal": "多账号多任务新普通",
+  "MultiAccountRepeatNewFixed": "多账号多任务新固定时间",
+  "MultiAccountKekkaiUtilizeNew": "多账号多任务蹭卡新",
+  "多账号多任务蹭卡新": "多账号多任务蹭卡新"
 }
