@@ -10,12 +10,13 @@ from module.atom.image import RuleImage
 from ppocronnx.predict_system import BoxedResult
 
 from tasks.Component.config_base import Time
-from tasks.DailyTrifles.page import page_store_gift_room, page_friends_luck, page_guild_wish
+from tasks.DailyTrifles.page import page_store_gift_room, page_friends_luck, page_guild_wish, page_one_click_pre_deposit, page_same_heart_team
 
 from tasks.GameUi.game_ui import GameUi
-from tasks.GameUi.page import page_main, page_summon, page_guild, page_mall, page_friends, page_courtyard_affairs
+from tasks.GameUi.page import page_main, page_team, page_summon, page_guild, page_mall, page_friends, page_courtyard_affairs
 from tasks.DailyTrifles.config import DailyTriflesConfig
 from tasks.DailyTrifles.assets import DailyTriflesAssets
+from tasks.SameHeartTeam.assets import SameHeartTeamAssets
 from tasks.Component.Summon.summon import Summon
 
 from module.logger import logger
@@ -26,19 +27,25 @@ import re
 from typing import Any, Optional, List, Callable
 
 
-class ScriptTask(GameUi, Summon, DailyTriflesAssets):
+class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
 
     def run(self):
         con = self.config.daily_trifles.trifles_config
         # 每日召唤
         if con.one_summon:
             self.run_one_summon()
+        # 庭院事务
         if con.courtyard_affairs:
             self.run_courtyard_affairs()
+        # 收取邮件
         if con.pickup_email:
             self.run_pickup_email()
+        # 寮祈愿
         if self.config.daily_trifles.guild_donate.enable:
             self.run_guild_donate()
+        # 一键预存
+        if con.one_click_pre_deposit:
+            self.one_click_pre_deposit()
         # 吉闻
         if con.luck_msg:
             self.run_luck_msg()
@@ -79,6 +86,64 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             # 如果还是在同一月份，则没必要再绘制神秘图案
             config.draw_mystery_pattern = False
         self.config.save()
+
+    def one_click_pre_deposit(self):
+        # 一键预存入口：从主界面进入组队页，再转到同心队并执行预存
+        logger.hr('one click pre deposit', 2)
+
+        self.goto_page(page_main)
+
+        sleep(1)
+        
+        if self.appear(self.I_I_GET_REWARD, interval=1):
+            self.ui_click(self.I_I_GET_REWARD, stop=self.I_UI_BACK_RED, interval=1)
+            self.ui_click_until_disappear(self.I_UI_BACK_RED, interval=1)
+            logger.info('领取奖励成功')
+
+        self.goto_page(page_same_heart_team, confirm_wait=2)
+
+        if not self.appear(self.I_I_PRE_DEPOSIT):
+            logger.warning('当前角色没有同心队，跳过一键预存')
+            return
+        else:
+            logger.info('当前角色有同心队，前往一键预存页面')
+            self.goto_page(page_one_click_pre_deposit, confirm_wait=2)
+
+            self.ui_click(self.I_I_ONE_CLICK_PRE_DEPOSIT, stop=self.I_UI_CONFIRM, interval=1)
+
+            if self.appear(self.I_UI_CONFIRM):
+                self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
+                logger.info('一键预存成功')
+
+        self.goto_page(page_main)
+        self.config.daily_trifles.done_record.one_click_pre_deposit_dt = datetime.now()
+
+    def _do_one_click_pre_deposit(self) -> bool:
+        # 当前已确认处于预存页面，执行一键预存并确认弹窗
+        if not self.appear(self.I_I_ONE_CLICK_PRE_DEPOSIT):
+            return False
+        self.appear_then_click(self.I_I_ONE_CLICK_PRE_DEPOSIT, interval=1)
+
+        for _ in range(10):
+            self.screenshot()
+
+            if self.appear(self.I_UI_CONFIRM):
+                sleep(1)
+                self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
+                logger.info('一键预存成功')
+                sleep(1)
+                self.screenshot()
+                if not self.appear(self.I_UI_CONFIRM):
+                    logger.info('一键预存成功')
+                    return True
+                else:
+                    logger.info('一键预存确认失败，尝试再次点击确认')
+                    self.appear_then_click(self.I_UI_CONFIRM, interval=1)
+                    logger.info('一键预存成功')
+                    return True
+
+            sleep(1)
+        return False
 
     def summon_recall(self):
         """
@@ -187,7 +252,13 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             all_done = all_done and donate_ret
         if self.config.daily_trifles.guild_donate.auto_get_rewards:
             self.guild_donate_get_reward()
-        self.config.daily_trifles.done_record.guild_donate_finish = all_done
+
+        # 完成标志必须和当天的时间戳一起写入，today_is_done() 才能在当天后续运行时跳过，
+        # 同时失败时不会被误判为完成，仍然可以重试。
+        done_record = self.config.daily_trifles.done_record
+        done_record.guild_donate_finish = all_done
+        if all_done:
+            done_record.guild_donate_dt = datetime.now()
         self.goto_page(page_main)
 
     def guild_donate_get_reward(self):
@@ -250,7 +321,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
                     all_done = False
                     continue
                 # 设置赠与按钮back与对应name同一行
-                donate_btn.roi_back = [name_roi[0]-5, name_roi[1] - 15, 850, 90]  # 设置赠与按钮back区域和对应name同一行
+                donate_btn.roi_back = [name_roi[0] - 5, name_roi[1] - 15, 850, 90]   # 设置赠与按钮back区域和对应name同一行
             self.I_DT_GW_FULL.roi_back = donate_btn.roi_back  # 设置已捐满标志back区域和赠与按钮同一行
             self.I_DT_GW_INSUFFICIENT.roi_back = donate_btn.roi_back  # 设置碎片不足标志back区域和赠与按钮同一行
             donate_ret = self.process_donate(donate_btn, name)
@@ -403,6 +474,8 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
         if self.config.daily_trifles.today_is_done('store_sign'):
             logger.info('Today is done, skip')
             return
+        # 当前没有“已领取”状态模板，进入签到流程即视为当天已处理，
+        # 这样玩家手动领取后不会在下一次调度中重复进入商店。
         self.config.daily_trifles.done_record.store_sign_dt = datetime.now()
         self.goto_page(page_store_gift_room)
         self.screenshot()
@@ -555,4 +628,3 @@ if __name__ == '__main__':
     t = ScriptTask(c, d)
 
     t.run_guild_donate()
-

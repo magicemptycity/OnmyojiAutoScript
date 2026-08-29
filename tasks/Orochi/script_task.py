@@ -126,7 +126,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         logger.info('Create team')
         while 1:
             self.screenshot()
-            if self.appear(self.I_CHECK_TEAM):
+            if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
                 break
             if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                 continue
@@ -290,7 +290,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
             logger.info('Create team')
             while 1:
                 self.screenshot()
-                if self.appear(self.I_CHECK_TEAM):
+                if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
                     break
                 if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                     continue
@@ -346,7 +346,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     self.run_general_battle(
                         config=self.config.orochi.general_battle_config,
                         battle_key=self._orochi_battle_key(),
-                        exit_matcher=any_of(self.I_OROCHI_WILD_FIRE, self.I_CHECK_TEAM),
+                        exit_matcher=any_of(self.I_OROCHI_WILD_FIRE, self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
                     break
 

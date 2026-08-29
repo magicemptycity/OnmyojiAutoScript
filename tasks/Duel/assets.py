@@ -15,6 +15,8 @@ class DuelAssets:
 	C_D_BATTLE_DATA = RuleClick(roi_front=(584,279,100,100), roi_back=(584,279,100,100), name="d_battle_data")
 	# 点击第五手上式神位置，获得式神名称 
 	C_DUEL_CLICK_5 = RuleClick(roi_front=(105,23,52,47), roi_back=(105,23,52,47), name="duel_click_5")
+	# 小白点击范围 
+	C_D_XIAOBAI_REWARD = RuleClick(roi_front=(7,199,235,507), roi_back=(988,120,271,575), name="d_xiaobai_reward")
 
 
 	# Image Rule Assets
@@ -60,6 +62,8 @@ class DuelAssets:
 	I_DUEL_HONOR = RuleImage(roi_front=(211,636,20,20), roi_back=(200,601,130,100), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_duel_honor.png")
 	# 胜利分享 
 	I_D_WIN_SHARE = RuleImage(roi_front=(1123,608,82,73), roi_back=(1123,608,82,73), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/d_win_share.png")
+	# 小白弹窗 
+	I_D_XIAOBAI = RuleImage(roi_front=(386,301,54,59), roi_back=(252,232,284,252), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_d_xiaobai.png")
 
 
 	# Ocr Rule Assets

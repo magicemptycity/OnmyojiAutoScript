@@ -127,6 +127,8 @@ class GameUiAssets:
 	I_MAIN_GOTO_GUILD = RuleImage(roi_front=(495,590,50,22), roi_back=(495,590,120,100), threshold=0.7, method="Template matching", file="./tasks/GameUi/page/page_main_goto_guild.png")
 	# 庭院前往组队 
 	I_MAIN_GOTO_TEAM = RuleImage(roi_front=(395,590,38,48), roi_back=(395,590,120,100), threshold=0.7, method="Template matching", file="./tasks/GameUi/page/page_main_goto_team.png")
+	# 庭院进入纳物库
+	I_MAIN_GOTO_NAWU = RuleImage(roi_front=(323,617,36,53), roi_back=(323,617,36,53), threshold=0.8, method="Template matching", file="./tasks/GameUi/page/page_main_goto_nawu.png")
 	# 庭院前往图鉴 
 	I_MAIN_GOTO_COLLECTION = RuleImage(roi_front=(70,590,36,41), roi_back=(70,590,120,100), threshold=0.7, method="Template matching", file="./tasks/GameUi/page/page_main_goto_collection.png")
 	# 庭院前往珍旅居 
@@ -149,6 +151,10 @@ class GameUiAssets:
 	I_CHECK_GUILD = RuleImage(roi_front=(1072,630,49,46), roi_back=(1072,630,49,46), threshold=0.8, method="Template matching", file="./tasks/GameUi/page/page_check_guild.png")
 	# 组队页面标志 
 	I_CHECK_TEAM = RuleImage(roi_front=(32,585,82,65), roi_back=(0,563,148,139), threshold=0.8, method="Template matching", file="./tasks/GameUi/page/page_check_team.png")
+	# 组队页面标志(新号) 
+	I_CHECK_TEAM_NEW = RuleImage(roi_front=(32,585,82,65), roi_back=(0,563,148,139), threshold=0.8, method="Template matching", file="./tasks/GameUi/page/page_check_team_new.png")
+	# 纳物库页面标志
+	I_CHECK_NAWU = RuleImage(roi_front=(94,21,95,37), roi_back=(94,21,95,37), threshold=0.8, method="Template matching", file="./tasks/GameUi/page/page_check_nawu.png")
 	# 图鉴页面标志 
 	I_CHECK_COLLECTION = RuleImage(roi_front=(380,620,100,100), roi_back=(371,608,880,112), threshold=0.8, method="Template matching", file="./tasks/GameUi/page/page_check_collection.png")
 	# 花合战退出标志 

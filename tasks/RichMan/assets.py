@@ -114,6 +114,8 @@ class RichManAssets:
 	I_HONOR_BLACK = RuleImage(roi_front=(645,406,100,100), roi_back=(145,96,883,491), threshold=0.8, method="Template matching", file="./tasks/RichMan/mall/honor/honor_honor_black.png")
 	# 三星白蛋 
 	I_HONOR_WHITE = RuleImage(roi_front=(424,399,100,100), roi_back=(155,127,841,388), threshold=0.8, method="Template matching", file="./tasks/RichMan/mall/honor/honor_honor_white.png")
+	# 判断是否滑动到底 
+	I_HONOR_SWIPE_CHECK = RuleImage(roi_front=(424,399,100,100), roi_back=(140,69,897,552), threshold=0.8, method="Template matching", file="./tasks/RichMan/mall/honor/honor_honor_SWIPE_CHECK.png")
 
 
 	# Ocr Rule Assets
@@ -289,6 +291,8 @@ class RichManAssets:
 	I_SP_BUY_LOW = RuleImage(roi_front=(176,148,144,108), roi_back=(128,142,902,449), threshold=0.8, method="Template matching", file="./tasks/RichMan/mall/special/special_sp_buy_low.png")
 	# 判断是否滑动到底 
 	I_SP_SWIPE_CHECK = RuleImage(roi_front=(900,164,42,61), roi_back=(173,144,840,379), threshold=0.8, method="Template matching", file="./tasks/RichMan/mall/special/special_sp_swipe_check.png")
+	# 判断是否滑动到底2
+	I_SP_SWIPE_CHECK2 = RuleImage(roi_front=(455,412,42,61), roi_back=(173,144,840,379), threshold=0.8, method="Template matching", file="./tasks/RichMan/mall/special/special_sp_swipe_check2.png")
 
 
 	# Ocr Rule Assets

@@ -6,6 +6,7 @@ import datetime
 import operator
 import threading
 import random
+from typing import Any
 
 from datetime import datetime, timedelta
 from cached_property import cached_property
@@ -167,11 +168,41 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
     def reload(self):
         self.model = ConfigModel(config_name=self.config_name)
 
+    def save_selected_fields(self, values: dict[str, Any] | None = None, *fields: str) -> None:
+        """只合并保存指定顶层配置，避免运行中的任务覆盖页面刚保存的其他配置。"""
+        values = values or {}
+        selected_fields = set(fields) | set(values)
+        if not selected_fields:
+            return
+
+        latest_data = ConfigModel.read_json(self.config_name)
+        # 配置文件本身也会保存 config_name，构造模型时避免重复传参。
+        latest_data.pop("config_name", None)
+        current_data = self.model.model_dump()
+        for field in selected_fields:
+            if field in values:
+                value = values[field]
+                current_data[field] = (
+                    value.model_dump() if hasattr(value, "model_dump") else value
+                )
+            if field not in current_data:
+                logger.warning("保存配置时未找到字段：%s", field)
+                continue
+            latest_data[field] = current_data[field]
+
+        # 写回前重新构造模型，保留页面在其他顶层配置中的最新修改。
+        self.model = ConfigModel(config_name=self.config_name, **latest_data)
+        self.model.save()
+
     def save(self) -> None:
         """
         保存配置文件
         :return:
         """
+        selected_fields = getattr(self, "_save_selected_fields", None)
+        if selected_fields:
+            self.save_selected_fields(None, *selected_fields)
+            return
         self.model.write_json(self.config_name, self.model.dict())
 
     def update_scheduler(self) -> None:
