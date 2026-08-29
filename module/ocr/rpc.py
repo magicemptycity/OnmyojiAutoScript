@@ -4,12 +4,17 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
+import json
 import multiprocessing
 import os
 import pickle
+import shutil
 import socket
+import tempfile
 import threading
 import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +34,7 @@ _OCR_SERVER_PROCESS: Optional[multiprocessing.Process] = None
 _OCR_CLIENT_CACHE: dict[str, "ModelProxy"] = {}
 _OCR_LOGGING_ENABLED = False
 _OCR_MODEL_SIZE = "medium"
+_OCR_LOW_SPEC_MODE = False
 
 _BUNDLED_MODEL_DIRS = (
     "PP-OCRv6_medium_det_onnx",
@@ -41,6 +47,206 @@ _BUNDLED_MODEL_FILES = (
 )
 _OCR_STARTUP_TIMEOUT_SECONDS = 90.0
 _OCR_REQUEST_TIMEOUT_SECONDS = 10.0
+_OCR_LOW_SPEC_REQUEST_TIMEOUT_SECONDS = 30.0
+_OCR_RESULT_CACHE_TTL_SECONDS = 2.0
+_OCR_RESULT_CACHE_MAX_COUNT = 128
+_OCR_CACHE_MISS = object()
+_OCR_MODEL_DOWNLOAD_TIMEOUT_SECONDS = 900.0
+_OCR_MODEL_MIN_FILE_SIZE = {
+    "inference.json": 1024,
+    "inference.onnx": 1024 * 1024,
+    "inference.yml": 128,
+}
+_OCR_DOWNLOAD_CONTEXT = multiprocessing.get_context("spawn")
+
+
+class _OcrResultCache:
+    """低配模式下复用短时间内完全相同的 OCR 请求结果。"""
+
+    def __init__(
+        self,
+        ttl_seconds: float = _OCR_RESULT_CACHE_TTL_SECONDS,
+        max_count: int = _OCR_RESULT_CACHE_MAX_COUNT,
+    ) -> None:
+        self.ttl_seconds = max(0.1, float(ttl_seconds))
+        self.max_count = max(1, int(max_count))
+        self._items: OrderedDict[tuple[Any, ...], tuple[float, Any]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: tuple[Any, ...]):
+        now = time.monotonic()
+        with self._lock:
+            self._discard_expired(now)
+            entry = self._items.get(key)
+            if entry is None:
+                return _OCR_CACHE_MISS
+            created_at, value = entry
+            if now - created_at > self.ttl_seconds:
+                self._items.pop(key, None)
+                return _OCR_CACHE_MISS
+            self._items.move_to_end(key)
+            return value
+
+    def put(self, key: tuple[Any, ...], value: Any) -> None:
+        now = time.monotonic()
+        with self._lock:
+            self._discard_expired(now)
+            self._items[key] = (now, value)
+            self._items.move_to_end(key)
+            while len(self._items) > self.max_count:
+                self._items.popitem(last=False)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+
+    def _discard_expired(self, now: float) -> None:
+        expired = [
+            key
+            for key, (created_at, _value) in self._items.items()
+            if now - created_at > self.ttl_seconds
+        ]
+        for key in expired:
+            self._items.pop(key, None)
+
+
+def _bundled_ocr_cache_home() -> Path:
+    return Path(__file__).resolve().parents[2] / "toolkit" / ".paddlex"
+
+
+def _bundled_ocr_model_issues(official_models: Path | None = None) -> list[str]:
+    """检查中模型所需文件是否存在、大小合理且JSON配置可解析。"""
+    if official_models is None:
+        official_models = _bundled_ocr_cache_home() / "official_models"
+
+    issues: list[str] = []
+    for model_dir in _BUNDLED_MODEL_DIRS:
+        for filename in _BUNDLED_MODEL_FILES:
+            path = official_models / model_dir / filename
+            relative_path = str(Path(model_dir) / filename)
+            if not path.is_file():
+                issues.append(f"missing:{relative_path}")
+                continue
+            minimum_size = _OCR_MODEL_MIN_FILE_SIZE[filename]
+            try:
+                actual_size = path.stat().st_size
+            except OSError as exc:
+                issues.append(f"unreadable:{relative_path}:{exc}")
+                continue
+            if actual_size < minimum_size:
+                issues.append(
+                    f"truncated:{relative_path}:{actual_size}<{minimum_size}"
+                )
+                continue
+            if filename == "inference.json":
+                try:
+                    json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    issues.append(f"invalid-json:{relative_path}:{exc}")
+    return issues
+
+
+def _download_bundled_ocr_models(cache_home: str) -> None:
+    """在独立进程中下载PaddleOCR medium ONNX模型到指定缓存。"""
+    os.environ["PADDLE_PDX_CACHE_HOME"] = cache_home
+    os.environ["PADDLE_PDX_MODEL_SOURCE"] = "bos"
+    os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
+    from paddleocr import PaddleOCR
+
+    PaddleOCR(
+        text_detection_model_name="PP-OCRv6_medium_det",
+        text_recognition_model_name="PP-OCRv6_medium_rec",
+        engine="onnxruntime",
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        use_textline_orientation=False,
+    )
+
+
+def _remove_model_path(path: Path) -> None:
+    if not path.exists():
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _install_repaired_ocr_models(repair_cache: Path) -> None:
+    """验证下载内容后，用完整模型目录替换损坏目录，失败则回滚。"""
+    repair_official_models = repair_cache / "official_models"
+    issues = _bundled_ocr_model_issues(repair_official_models)
+    if issues:
+        raise RuntimeError(f"Downloaded OCR models are incomplete: {issues}")
+
+    official_models = _bundled_ocr_cache_home() / "official_models"
+    official_models.mkdir(parents=True, exist_ok=True)
+    suffix = f".incomplete-{os.getpid()}-{time.time_ns()}"
+    backups: dict[Path, Path] = {}
+    installed: list[Path] = []
+    try:
+        for model_dir in _BUNDLED_MODEL_DIRS:
+            source = repair_official_models / model_dir
+            target = official_models / model_dir
+            backup = official_models / f"{model_dir}{suffix}"
+            if target.exists():
+                target.replace(backup)
+                backups[target] = backup
+            source.replace(target)
+            installed.append(target)
+
+        final_issues = _bundled_ocr_model_issues(official_models)
+        if final_issues:
+            raise RuntimeError(f"Installed OCR models are incomplete: {final_issues}")
+    except Exception:
+        for target in installed:
+            _remove_model_path(target)
+        for target, backup in backups.items():
+            if backup.exists():
+                backup.replace(target)
+        raise
+    else:
+        for backup in backups.values():
+            _remove_model_path(backup)
+
+
+def _repair_bundled_ocr_models() -> bool:
+    """下载并原子替换损坏的中模型资源。"""
+    toolkit_dir = _bundled_ocr_cache_home().parent
+    toolkit_dir.mkdir(parents=True, exist_ok=True)
+    repair_cache = Path(
+        tempfile.mkdtemp(prefix=".paddlex-repair-", dir=str(toolkit_dir))
+    )
+    process = _OCR_DOWNLOAD_CONTEXT.Process(
+        target=_download_bundled_ocr_models,
+        args=(str(repair_cache),),
+        name="ocr_model_downloader",
+        daemon=False,
+    )
+    try:
+        logger.warning("Downloading complete PaddleOCR medium model resources")
+        process.start()
+        process.join(timeout=_OCR_MODEL_DOWNLOAD_TIMEOUT_SECONDS)
+        if process.is_alive():
+            logger.error(
+                "OCR model download timed out after "
+                f"{_OCR_MODEL_DOWNLOAD_TIMEOUT_SECONDS:.0f}s"
+            )
+            process.terminate()
+            process.join(timeout=5.0)
+            return False
+        if process.exitcode != 0:
+            logger.error(f"OCR model downloader exited with code {process.exitcode}")
+            return False
+        _install_repaired_ocr_models(repair_cache)
+        logger.info("PaddleOCR medium model resources repaired successfully")
+        return True
+    except Exception as exc:
+        logger.exception(exc)
+        return False
+    finally:
+        shutil.rmtree(repair_cache, ignore_errors=True)
 
 
 def _configure_bundled_paddlex_cache() -> Path | None:
@@ -51,19 +257,14 @@ def _configure_bundled_paddlex_cache() -> Path | None:
     it carries the two medium OCR models beside its Python runtime instead.
     Environment variables must be set before importing PaddleOCR/PaddleX.
     """
-    cache_home = Path(__file__).resolve().parents[2] / "toolkit" / ".paddlex"
+    cache_home = _bundled_ocr_cache_home()
     official_models = cache_home / "official_models"
-    missing = [
-        str(Path(model_dir) / filename)
-        for model_dir in _BUNDLED_MODEL_DIRS
-        for filename in _BUNDLED_MODEL_FILES
-        if not (official_models / model_dir / filename).is_file()
-    ]
-    if missing:
+    issues = _bundled_ocr_model_issues(official_models)
+    if issues:
         if cache_home.exists():
             logger.warning(
                 "Bundled PaddleOCR models are incomplete; fallback to the "
-                f"default PaddleX cache (missing={missing})"
+                f"default PaddleX cache (issues={issues})"
             )
         return None
 
@@ -414,16 +615,44 @@ def ensure_ocr_server_ready() -> bool:
     from module.server.setting import State
 
     deploy_config = State.deploy_config
+    startup_succeeded = True
     if deploy_config.StartOcrServer:
-        ensure_ocr_server_started()
+        startup_succeeded = ensure_ocr_server_started()
 
     address = deploy_config.OcrClientAddress or "127.0.0.1:22268"
+    startup_error: Exception | None = None
     try:
+        if not startup_succeeded:
+            raise ScriptError(f"OCR server startup failed: {address}")
         get_ocr_client(address=address, refresh=True)
         logger.info(f"OCR server ready: {address}")
         return True
     except Exception as exc:
-        raise ScriptError(f"OCR server connection failed: {address}") from exc
+        startup_error = exc
+
+    # 仅在本进程负责OCR服务、启动确实失败且资源检查不通过时修复。
+    issues = _bundled_ocr_model_issues()
+    if deploy_config.StartOcrServer and issues:
+        logger.error(
+            "OCR startup failed and bundled model resources are incomplete: "
+            f"{issues}"
+        )
+        shutdown_ocr_server()
+        if _repair_bundled_ocr_models():
+            logger.info("Restarting OCR service after model resource repair")
+            if ensure_ocr_server_started():
+                try:
+                    get_ocr_client(address=address, refresh=True)
+                    logger.info(f"OCR server ready after model repair: {address}")
+                    return True
+                except Exception as exc:
+                    startup_error = exc
+            else:
+                startup_error = ScriptError(
+                    f"OCR server restart failed after model repair: {address}"
+                )
+
+    raise ScriptError(f"OCR server connection failed: {address}") from startup_error
 
 
 def shutdown_ocr_server(timeout: float = 2.0) -> bool:
@@ -476,12 +705,70 @@ class ModelProxy:
         self.address = _normalize_address(address)
         self.save_log = _OCR_LOGGING_ENABLED
         self.model_size = _OCR_MODEL_SIZE
-        self.client = zerorpc.Client(timeout=_ocr_request_timeout(self.model_size))
+        self.low_spec_mode = _OCR_LOW_SPEC_MODE
+        self._reconnect_lock = threading.Lock()
+        self._result_cache = _OcrResultCache()
         try:
-            self.client.connect(self.address)
-            self.client.ping()
+            self.client = self._create_client(probe=True)
         except Exception as e:
             raise ScriptError(f"OCR server connection failed: {self.address}") from e
+
+    def _create_client(self, *, probe: bool) -> zerorpc.Client:
+        client = zerorpc.Client(
+            timeout=_ocr_request_timeout(self.model_size, self.low_spec_mode)
+        )
+        try:
+            client.connect(self.address)
+            if probe:
+                client.ping()
+            return client
+        except Exception:
+            try:
+                client.close()
+            except Exception:
+                pass
+            raise
+
+    def _reconnect_after_timeout(self, failed_client) -> None:
+        """只在低配 OCR 请求超时后更换连接，避免重复重连。"""
+        with self._reconnect_lock:
+            if self.client is not failed_client:
+                return
+            replacement = self._create_client(probe=False)
+            self.client = replacement
+            try:
+                failed_client.close()
+            except Exception:
+                pass
+
+    def _call_with_timeout_retry(self, method_name: str, *args):
+        client = self.client
+        try:
+            return getattr(client, method_name)(*args)
+        except zerorpc.TimeoutExpired:
+            if not self.low_spec_mode:
+                raise
+            logger.warning(
+                'Low spec OCR request timed out; reconnecting and retrying once'
+            )
+            self._reconnect_after_timeout(client)
+            return getattr(self.client, method_name)(*args)
+
+    def _cache_key(self, operation: str, payload: bytes, *parameters) -> tuple[Any, ...]:
+        digest = hashlib.blake2b(payload, digest_size=16).digest()
+        return operation, self.model_size, digest, *parameters
+
+    def _cache_enabled(self) -> bool:
+        # 调试日志开启时不缓存，确保每次 OCR 输入都能被记录。
+        return self.low_spec_mode and not self.save_log
+
+    def set_low_spec_mode(self, enabled: bool) -> None:
+        self.low_spec_mode = bool(enabled)
+        self.client._timeout = _ocr_request_timeout(
+            self.model_size,
+            self.low_spec_mode,
+        )
+        self._result_cache.clear()
 
     def ping(self) -> bool:
         return bool(self.client.ping())
@@ -491,7 +778,22 @@ class ModelProxy:
 
     def ocr_single_line(self, image: np.ndarray):
         payload = pickle.dumps(image, protocol=4)
-        return self.client.ocr_single_line(payload, self.save_log, self.model_size)
+        cache_enabled = self._cache_enabled()
+        cache_key = None
+        if cache_enabled:
+            cache_key = self._cache_key('single', payload, self.save_log)
+            cached = self._result_cache.get(cache_key)
+            if cached is not _OCR_CACHE_MISS:
+                return cached
+        result = self._call_with_timeout_retry(
+            'ocr_single_line',
+            payload,
+            self.save_log,
+            self.model_size,
+        )
+        if cache_enabled:
+            self._result_cache.put(cache_key, result)
+        return result
 
     def detect_and_ocr(
         self,
@@ -502,15 +804,36 @@ class ModelProxy:
         vertical: bool = False,
     ):
         payload = pickle.dumps(image, protocol=4)
-        results = self.client.detect_and_ocr(
-            payload,
-            drop_score,
-            unclip_ratio,
-            box_thresh,
-            vertical,
-            self.save_log,
-            self.model_size,
-        )
+        cache_enabled = self._cache_enabled()
+        cache_key = None
+        if cache_enabled:
+            cache_key = self._cache_key(
+                'detect',
+                payload,
+                drop_score,
+                unclip_ratio,
+                box_thresh,
+                vertical,
+                self.save_log,
+            )
+            cached = self._result_cache.get(cache_key)
+        else:
+            cached = _OCR_CACHE_MISS
+        if cached is _OCR_CACHE_MISS:
+            results = self._call_with_timeout_retry(
+                'detect_and_ocr',
+                payload,
+                drop_score,
+                unclip_ratio,
+                box_thresh,
+                vertical,
+                self.save_log,
+                self.model_size,
+            )
+            if cache_enabled:
+                self._result_cache.put(cache_key, results)
+        else:
+            results = cached
         return [
             BoxedResult(np.array(item["box"]), None, item["ocr_text"], item["score"])
             for item in results
@@ -532,6 +855,7 @@ def set_ocr_logging_enabled(enabled: bool) -> None:
     _OCR_LOGGING_ENABLED = bool(enabled)
     for client in _OCR_CLIENT_CACHE.values():
         client.save_log = _OCR_LOGGING_ENABLED
+        client._result_cache.clear()
 
 
 def _normalize_model_size(model_size: str) -> str:
@@ -541,7 +865,14 @@ def _normalize_model_size(model_size: str) -> str:
     return normalized
 
 
-def _ocr_request_timeout(model_size: str) -> float:
+def _ocr_request_timeout(
+    model_size: str,
+    low_spec_mode: bool | None = None,
+) -> float:
+    if low_spec_mode is None:
+        low_spec_mode = _OCR_LOW_SPEC_MODE
+    if low_spec_mode:
+        return _OCR_LOW_SPEC_REQUEST_TIMEOUT_SECONDS
     # 小模型第一次使用时可能需要下载并初始化，给低配设备留出启动时间。
     if _normalize_model_size(model_size) == "small":
         return _OCR_STARTUP_TIMEOUT_SECONDS
@@ -554,7 +885,19 @@ def set_ocr_model_size(model_size: str) -> None:
     _OCR_MODEL_SIZE = _normalize_model_size(model_size)
     for client in _OCR_CLIENT_CACHE.values():
         client.model_size = _OCR_MODEL_SIZE
-        client.client._timeout = _ocr_request_timeout(_OCR_MODEL_SIZE)
+        client.client._timeout = _ocr_request_timeout(
+            _OCR_MODEL_SIZE,
+            client.low_spec_mode,
+        )
+        client._result_cache.clear()
+
+
+def set_ocr_low_spec_mode(enabled: bool) -> None:
+    """设置低配 OCR 客户端的超时、重连与短期结果缓存策略。"""
+    global _OCR_LOW_SPEC_MODE
+    _OCR_LOW_SPEC_MODE = bool(enabled)
+    for client in _OCR_CLIENT_CACHE.values():
+        client.set_low_spec_mode(_OCR_LOW_SPEC_MODE)
 
 
 atexit.register(shutdown_ocr_server)

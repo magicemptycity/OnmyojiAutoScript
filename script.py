@@ -33,6 +33,7 @@ from module.image.rpc import ensure_image_server_ready, set_image_low_spec_mode
 from module.ocr.rpc import (
     ensure_ocr_server_ready,
     set_ocr_logging_enabled,
+    set_ocr_low_spec_mode,
     set_ocr_model_size,
 )
 from module.script import ScriptRuntimeController, ScriptRuntimeDecision
@@ -63,11 +64,15 @@ class Script:
         # OASX 中途修改配置不会影响正在运行的脚本。
         self.low_spec_mode = bool(self.config.script.device.low_spec_mode)
         set_image_low_spec_mode(self.low_spec_mode)
-        set_ocr_model_size('small' if self.low_spec_mode else 'medium')
+        set_ocr_low_spec_mode(self.low_spec_mode)
+        # 低配模式与普通模式统一使用现有 PaddleOCR medium 模型，
+        # 避免小模型降低关键文字的识别稳定性。
+        set_ocr_model_size('medium')
         if self.low_spec_mode:
             logger.info(
                 'Low spec mode enabled: frame cache=10s, '
-                'OCR model=small, image threshold offset=-0.1'
+                'OCR model=medium, OCR timeout=30s, OCR cache=2s, '
+                'image threshold unchanged'
             )
 
     @cached_property

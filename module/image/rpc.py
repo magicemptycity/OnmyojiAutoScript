@@ -23,35 +23,15 @@ _IMAGE_SERVER_PROCESS: Optional[multiprocessing.Process] = None
 _IMAGE_CLIENT_CACHE: dict[str, "ImageClient"] = {}
 # 脚本进程级识别参数。由 Script 启动时设置，运行中不随配置热更新。
 _IMAGE_FRAME_CACHE_EXPIRE_SECONDS: float | None = None
-_IMAGE_THRESHOLD_OFFSET = 0.0
 
 
 def set_image_low_spec_mode(enabled: bool) -> None:
-    """设置当前脚本进程的低配图像识别参数。"""
-    global _IMAGE_FRAME_CACHE_EXPIRE_SECONDS, _IMAGE_THRESHOLD_OFFSET
+    """设置当前脚本进程的低配截图帧缓存时间。"""
+    global _IMAGE_FRAME_CACHE_EXPIRE_SECONDS
     if enabled:
         _IMAGE_FRAME_CACHE_EXPIRE_SECONDS = 10.0
-        _IMAGE_THRESHOLD_OFFSET = 0.1
     else:
         _IMAGE_FRAME_CACHE_EXPIRE_SECONDS = None
-        _IMAGE_THRESHOLD_OFFSET = 0.0
-
-
-def _adjust_threshold(threshold: float | None) -> float | None:
-    if threshold is None:
-        return None
-    return max(0.0, min(1.0, float(threshold) - _IMAGE_THRESHOLD_OFFSET))
-
-
-def _adjust_rule_threshold(rule_data: dict[str, Any]) -> dict[str, Any]:
-    adjusted = dict(rule_data)
-    if "threshold" in adjusted:
-        adjusted["threshold"] = _adjust_threshold(adjusted["threshold"])
-    return adjusted
-
-
-def _adjust_rules_threshold(rules_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [_adjust_rule_threshold(rule_data) for rule_data in rules_data]
 
 
 def _normalize_address(address: str) -> str:
@@ -337,10 +317,10 @@ class ImageClient:
         """
         payload = self._encode_image_payload(image=image, frame_id=frame_id)
         return self.client.match_rule(
-            _adjust_rule_threshold(rule_data),
+            rule_data,
             frame_id,
             payload,
-            _adjust_threshold(threshold),
+            threshold,
         )
 
     def match_rule_with_brightness_window(
@@ -357,10 +337,10 @@ class ImageClient:
         """
         payload = self._encode_image_payload(image=image, frame_id=frame_id)
         return self.client.match_rule_with_brightness_window(
-            _adjust_rule_threshold(rule_data),
+            rule_data,
             frame_id,
             payload,
-            _adjust_threshold(threshold),
+            threshold,
         )
 
     def match_many(
@@ -377,10 +357,10 @@ class ImageClient:
         """
         payload = self._encode_image_payload(image=image, frame_id=frame_id)
         return self.client.match_many(
-            _adjust_rules_threshold(rules_data),
+            rules_data,
             frame_id,
             payload,
-            _adjust_threshold(threshold),
+            threshold,
         )
 
     def match_all(
@@ -399,10 +379,10 @@ class ImageClient:
         """
         payload = self._encode_image_payload(image=image, frame_id=frame_id)
         return self.client.match_all(
-            _adjust_rule_threshold(rule_data),
+            rule_data,
             frame_id,
             payload,
-            _adjust_threshold(threshold),
+            threshold,
             roi,
         )
 
@@ -423,10 +403,10 @@ class ImageClient:
         """
         payload = self._encode_image_payload(image=image, frame_id=frame_id)
         return self.client.match_all_any(
-            _adjust_rule_threshold(rule_data),
+            rule_data,
             frame_id,
             payload,
-            _adjust_threshold(threshold),
+            threshold,
             roi,
             nms_threshold,
         )
@@ -446,10 +426,10 @@ class ImageClient:
         """
         payload = self._encode_image_payload(image=image, frame_id=frame_id)
         return self.client.match_all_any_many(
-            _adjust_rules_threshold(rules_data),
+            rules_data,
             frame_id,
             payload,
-            _adjust_threshold(threshold),
+            threshold,
             nms_threshold,
         )
 
@@ -480,7 +460,7 @@ class ImageClient:
             frame_id,
             image_payload,
             roi_back,
-            _adjust_threshold(threshold),
+            threshold,
             name,
         )
 
