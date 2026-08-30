@@ -9,7 +9,7 @@ from cached_property import cached_property
 from datetime import datetime, timedelta
 
 from module.logger import logger
-from module.exception import TaskEnd
+from module.exception import GameStuckError, TaskEnd
 from module.base.timer import Timer
 
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
@@ -35,6 +35,21 @@ class LanternClass(Enum):
 
 class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
     conf: DemonEncounter = None
+
+    def screenshot(self):
+        """逢魔长战斗超时时，确认仍在战斗则重置等待计时。"""
+        try:
+            return super().screenshot()
+        except GameStuckError:
+            if not self.exist_image() or not self.is_in_real_battle(False):
+                raise
+            logger.warning(
+                'Demon encounter wait timeout, but battle is still active; '
+                'reset stuck timer'
+            )
+            self.device.stuck_record_clear()
+            self.device.stuck_record_add('BATTLE_STATUS_S')
+            return super().screenshot()
 
     def run(self):
         self.conf = self.config.demon_encounter
