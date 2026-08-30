@@ -14,7 +14,11 @@ from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_secret_zones, page_shikigami_records, page_battle_result, any_of
 from tasks.Secret.config import SecretConfig, Secret
 from tasks.Secret.assets import SecretAssets
-from tasks.Component.GeneralBattle.general_battle import ExitMatcher, GeneralBattle
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleBehaviorScope,
+    ExitMatcher,
+    GeneralBattle,
+)
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.Component.GeneralBuff.config_buff import BuffClass
@@ -31,6 +35,18 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
 
     def _exit_matcher(self) -> ExitMatcher:
         return self.I_SE_FIRE
+
+    def _get_battle_behavior_scopes(
+        self,
+        config: GeneralBattleConfig,
+        battle_key: str,
+    ) -> dict[str, BattleBehaviorScope]:
+        """让秘闻每场战斗都处理本次传入的金币 Buff 配置。"""
+        scopes = super()._get_battle_behavior_scopes(config, battle_key)
+        if battle_key == 'secret':
+            # 第一层开启、第六层关闭必须分别执行，并且均发生在点击准备前。
+            scopes['buff'] = BattleBehaviorScope.CALL
+        return scopes
 
     @cached_property
     def match_layer(self) -> dict:
@@ -119,19 +135,19 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
                     buff.append(BuffClass.GOLD_50)
                 if con.secret_gold_100:
                     buff.append(BuffClass.GOLD_100)
-                if buff is []:
+                if not buff:
                     buff = None
                 self.click_battle()
                 success = self.run_general_battle(self.battle_config, buff=buff, battle_key="secret")
                 continue
             if not first_battle and layer == 6:
-                # 第六次关闭加成，但是发现没有这个接口。。。！！！居然没有注意到
+                # 第六层在准备页点击准备前关闭金币加成。
                 buff = []
                 if con.secret_gold_50:
                     buff.append(BuffClass.GOLD_50_CLOSE)
                 if con.secret_gold_100:
                     buff.append(BuffClass.GOLD_100_CLOSE)
-                if buff is []:
+                if not buff:
                     buff = None
                 self.click_battle()
                 success = self.run_general_battle(self.battle_config, buff=buff, battle_key="secret")
@@ -187,6 +203,13 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
             points = result.box
             title_left = roi_x + min(int(point[0]) for point in points)
             title_top = roi_y + min(int(point[1]) for point in points)
+            title_right = roi_x + max(int(point[0]) for point in points)
+            title_bottom = roi_y + max(int(point[1]) for point in points)
+            image_height, image_width = self.device.image.shape[:2]
+            click_left = max(0, title_left - 3)
+            click_top = max(0, title_top - 3)
+            click_right = min(image_width, title_right + 3)
+            click_bottom = min(image_height, title_bottom + 3)
             card_top = max(0, title_top - self.LAYER_TITLE_TOP_OFFSET)
             card_top = min(
                 self.device.image.shape[0] - self.LAYER_CARD_HEIGHT,
@@ -196,6 +219,12 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
                 'layer': layer,
                 'title': text,
                 'title_position': (title_left, title_top),
+                'title_click_roi': (
+                    click_left,
+                    click_top,
+                    max(1, click_right - click_left),
+                    max(1, click_bottom - click_top),
+                ),
                 'card_roi': (
                     self.LAYER_CARD_LEFT,
                     card_top,
@@ -247,7 +276,8 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
                 f'Secret layer candidate: '
                 f'layer={candidate["layer"]}, '
                 f'title=[{candidate["title"]}], '
-                f'status=[{status}], card={candidate["card_roi"]}'
+                f'status=[{status}], card={candidate["card_roi"]}, '
+                f'title_click={candidate["title_click_roi"]}'
             )
             if '未解锁' in status:
                 continue
@@ -255,20 +285,15 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
                 # 时间或其他完成信息都表示该层已经挑战过。
                 continue
 
-            # 点击卡片左侧内容区，避开右侧状态文字；按需求连续点击两次。
-            click_roi = (
-                card_x + 12,
-                card_y + 8,
-                216,
-                self.LAYER_CARD_HEIGHT - 16,
-            )
+            # 在 OCR 关卡文字框向外扩 3 像素的范围内随机点击两次。
+            click_roi = candidate['title_click_roi']
             click_rule = RuleClick(
                 roi_front=click_roi,
                 roi_back=click_roi,
-                name=f'secret_layer_{candidate["layer"]}_card',
+                name=f'secret_layer_{candidate["layer"]}_title',
             )
-            click_x, click_y = click_rule.center
             for click_index in range(1, 3):
+                click_x, click_y = click_rule.coord()
                 self.device.click(
                     x=click_x,
                     y=click_y,
