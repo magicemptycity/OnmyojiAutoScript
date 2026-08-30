@@ -249,21 +249,48 @@ class RichManAct:
 
     def _run_rob_task(self):
         logger.hr('RichMan rob task', 3)
-        choice = random.choice([
+        choices = [
             self.C_RM_ROB_CHOICE_1,
             self.C_RM_ROB_CHOICE_2,
             self.C_RM_ROB_CHOICE_3,
             self.C_RM_ROB_CHOICE_4,
-        ])
-        self.click(choice)
-        deadline = time.monotonic() + 10.0
-        while True:
-            if time.monotonic() >= deadline:
-                raise GameStuckError('RichMan rob mode timed out after 10 seconds')
+        ]
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            choice = random.choice(choices)
+            logger.info(
+                f'RichMan rob choice: {choice.name}, '
+                f'attempt={attempt}/{max_attempts}'
+            )
+            self.click(choice)
+
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                self.screenshot()
+                if self.appear(self.I_RM_THROW):
+                    logger.info(
+                        f'RichMan rob task finished: '
+                        f'attempt={attempt}/{max_attempts}'
+                    )
+                    return
+                time.sleep(0.3)
+
             self.screenshot()
-            if self.appear(self.I_RM_THROW):
-                return
-            time.sleep(0.3)
+            if self.appear(self.I_RM_MODE_ROB):
+                if attempt < max_attempts:
+                    logger.warning(
+                        'RichMan rob choice timed out and rob mode is '
+                        f'still active; retry attempt={attempt + 1}/'
+                        f'{max_attempts}'
+                    )
+                    continue
+                raise GameStuckError(
+                    'RichMan rob mode remained active after 3 attempts'
+                )
+
+            raise GameStuckError(
+                'RichMan rob mode timed out before returning to throw main'
+            )
 
     def _run_rich_man_fight(self, switch_loadout: bool):
         logger.hr('RichMan fight task', 3)
