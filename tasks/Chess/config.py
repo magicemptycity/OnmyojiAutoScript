@@ -19,7 +19,7 @@ class ChessConfig(ConfigBase):
     rank_protection: bool = Field(
         title='保段位',
         default=False,
-        description='开启后每完成前四名一局主动退出三局；退出局不计入执行次数',
+        description='开启后每完成前四名一局主动退出两局；退出局不计入执行次数',
     )
 
     run_count: int = Field(

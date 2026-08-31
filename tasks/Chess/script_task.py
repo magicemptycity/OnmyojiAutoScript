@@ -55,7 +55,7 @@ class ScriptTask(
         )
         strategy = self.select_lineup_strategy(selected_lineup)
 
-        # 启动恢复会主动退出遗留对局；正常循环只保留保段位退三局。
+        # 启动恢复会主动退出遗留对局；正常循环只保留保段位退两局。
         self._recover_interrupted_chess_game()
         self.goto_page(page_chess)
 
@@ -137,7 +137,8 @@ class ScriptTask(
                 rank_protection_exits_remaining -= 1
                 logger.info(
                     'Chess rank-protection exit completed: '
-                    f'remaining={rank_protection_exits_remaining}/3, '
+                    f'remaining={rank_protection_exits_remaining}/'
+                    f'{self.RANK_PROTECTION_EXIT_COUNT}, '
                     f'completed_games={completed}'
                 )
                 if rank_protection_exits_remaining > 0:
@@ -150,10 +151,13 @@ class ScriptTask(
 
             completed += 1
             if rank_protection and game_rank is not None and game_rank <= 4:
-                rank_protection_exits_remaining = 3
+                rank_protection_exits_remaining = (
+                    self.RANK_PROTECTION_EXIT_COUNT
+                )
                 logger.info(
                     'Chess rank protection activated: '
-                    f'last_rank=第{game_rank}名, schedule 3 active exits'
+                    f'last_rank=第{game_rank}名, schedule '
+                    f'{self.RANK_PROTECTION_EXIT_COUNT} active exits'
                 )
             else:
                 rank_protection_exits_remaining = 0
@@ -171,7 +175,7 @@ class ScriptTask(
                 f'{rank_protection_exits_remaining}'
             )
 
-            # “再来一局”只用于保段位的三次快速退出。正常对局即使还
+            # “再来一局”只用于保段位的两次快速退出。正常对局即使还
             # 有运行次数，也仍返回大厅，再由原大厅开局流程开始下一场。
             if rank_protection_exits_remaining > 0:
                 if datetime.now() - self.start_time >= self.limit_time:
@@ -189,7 +193,7 @@ class ScriptTask(
             self.return_to_chess_lobby()
 
             # 鼬乐币总数只在大厅可读；普通对局回到大厅后先核对，再
-            # 决定是否继续下一场。保段位三局一旦开始则连续执行完毕。
+            # 决定是否继续下一场。保段位两局一旦开始则连续执行完毕。
             if coin_full_exit:
                 self.screenshot()
                 if self._coin_is_full():
