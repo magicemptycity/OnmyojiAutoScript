@@ -125,8 +125,8 @@ class ChessBattleNavigationMixin:
 
         raise GameStuckError('Global Chess: failed to return to lobby after result')
 
-    def exit_chess_battle(self) -> bool:
-        """主动退出当前百鬼棋局并完成返回大厅流程。"""
+    def exit_chess_battle(self, return_to_lobby: bool = True) -> bool:
+        """主动退出当前百鬼棋局，可选择停在结算流程。"""
         logger.warning('Global Chess page handler: exit interrupted battle')
         deadline = time.monotonic() + self.CHESS_EXIT_TIMEOUT
         next_exit_click_at = 0.0
@@ -145,7 +145,9 @@ class ChessBattleNavigationMixin:
 
             if dialog_seen and confirm_clicked and not confirm_visible:
                 logger.debug('Global Chess page handler: exit confirmed')
-                return self.return_to_chess_lobby()
+                if return_to_lobby:
+                    return self.return_to_chess_lobby()
+                return True
 
             now = time.monotonic()
             if dialog_seen:

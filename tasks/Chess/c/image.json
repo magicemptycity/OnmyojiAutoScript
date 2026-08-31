@@ -205,5 +205,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": ""
+  },
+  {
+    "itemName": "restart_again",
+    "imageName": "c_restart_again.png",
+    "roiFront": "1065,644,178,48",
+    "roiBack": "1049,636,202,59",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": ""
   }
 ]
