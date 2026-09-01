@@ -60,6 +60,20 @@ def random_click(
     return [click for _ in range(random.randint(low, high))]
 
 
+def reward_random_click() -> RuleClick:
+    """按左10%、上10%、右40%、下40%选择奖励页面点击区域。"""
+    return random.choices(
+        (
+            GeneralBattleAssets.C_RANDOM_LEFT,
+            GeneralBattleAssets.C_RANDOM_TOP,
+            GeneralBattleAssets.C_RANDOM_RIGHT,
+            GeneralBattleAssets.C_RANDOM_BOTTOM,
+        ),
+        weights=(10, 10, 40, 40),
+        k=1,
+    )[0]
+
+
 def handle_login_page(task) -> bool:
     return LoginService(config=task.config, device=task.device).app_handle_login()
 
@@ -150,7 +164,7 @@ page_activity = Page(
 page_activity.add_enter_success_hooks(handle_activity_overlay)
 page_activity.add_enter_failure_hooks(
     find_activity_entry,
-    conditional_action(GlobalGameAssets.I_UI_REWARD, random_click),
+    conditional_action(GlobalGameAssets.I_UI_REWARD, reward_random_click),
     GlobalGameAssets.I_UI_BACK_RED,
     GameUiAssets.I_ACTIVITY_SKIP,
 )
@@ -499,7 +513,7 @@ def handle_battle_reward_page(task) -> bool:
     """
     if task.appear_then_click(GeneralBattleAssets.I_OVER_GHOST, interval=0.8):
         return True
-    return task.click(random_click(), interval=0.8)
+    return task.click(reward_random_click(), interval=0.8)
 
 page_reward.add_enter_success_hooks(handle_battle_reward_page)
 

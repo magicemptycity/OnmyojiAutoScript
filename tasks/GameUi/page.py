@@ -55,6 +55,7 @@ from tasks.GameUi.default_pages import (
     page_travel,
     page_shirin,
     random_click,
+    reward_random_click,
     page_battle_team,
     page_battle_team_exit,
     page_pet
@@ -126,6 +127,7 @@ __all__ = [
     "page_travel",
     "page_shirin",
     "random_click",
+    "reward_random_click",
     "sequence",
     "page_battle_team",
     "page_battle_team_exit",
