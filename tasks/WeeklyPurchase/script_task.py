@@ -12,11 +12,12 @@ from tasks.WeeklyPurchase.assets import WeeklyPurchaseAssets
 from tasks.WeeklyPurchase.config import WeeklyPurchase
 from tasks.WeeklyPurchase.mall.mall import Mall
 from tasks.WeeklyPurchase.guild import Guild
+from tasks.WeeklyPurchase.itachi_shop import ItachiCoinShop
 from tasks.WeeklyPurchase.shrine import Shrine
 from tasks.WeeklyPurchase.thousand_things import ThousandThings
 
 
-class ScriptTask(Mall, Guild, ThousandThings, Shrine):
+class ScriptTask(Mall, Guild, ThousandThings, Shrine, ItachiCoinShop):
 
     def run(self):
         con: WeeklyPurchase = self.config.weekly_purchase
@@ -26,6 +27,8 @@ class ScriptTask(Mall, Guild, ThousandThings, Shrine):
         self.execute_shrine(con.shrine)
         # 功勋商店
         self.execute_guild(con.guild_store)
+        # 鼬乐币商店
+        self.execute_itachi_coin_shop(con.itachi_coin_shop)
         # 商店
         self.execute_mall()
 
@@ -42,6 +45,5 @@ if __name__ == '__main__':
 
     t.run()
     # t.execute_mall()
-
 
 

@@ -49,6 +49,25 @@ class WeeklyPurchaseAssets:
 	S_GUILD_STORE = RuleSwipe(roi_front=(806,460,46,35), roi_back=(754,360,90,34), mode="default", name="guild_store")
 
 
+	# Click Rule Assets
+	#  
+	C_ITACHI_GIFT = RuleClick(roi_front=(731,250,153,55), roi_back=(731,250,153,55), name="itachi_gift")
+
+
+	# Image Rule Assets
+	#  
+	I_ITACHI_SHOP_ENTRY = RuleImage(roi_front=(47,635,45,40), roi_back=(42,630,55,50), threshold=0.8, method="Template matching", file="./tasks/WeeklyPurchase/itachi_shop/itachi_shop_itachi_shop_entry.png")
+	#  
+	I_ITACHI_SHOP_CHECK = RuleImage(roi_front=(121,37,78,39), roi_back=(116,33,88,49), threshold=0.8, method="Template matching", file="./tasks/WeeklyPurchase/itachi_shop/itachi_shop_itachi_shop_check.png")
+
+
+	# Ocr Rule Assets
+	#  
+	O_ITACHI_COIN = RuleOcr(roi=(1081,21,134,38), area=(1081,21,134,38), mode="DigitCounter", method="Default", keyword="", name="itachi_coin")
+	#  
+	O_ITACHI_BUY_COST = RuleOcr(roi=(634,530,70,41), area=(634,530,70,41), mode="Digit", method="Default", keyword="", name="itachi_buy_cost")
+
+
 	# Image Rule Assets
 	# 兑换随机御魂 
 	I_BL_BUY_SOULS = RuleImage(roi_front=(197,476,90,38), roi_back=(197,476,90,38), threshold=0.8, method="Template matching", file="./tasks/WeeklyPurchase/mall/bondlings/bondlings_bl_buy_souls.png")
@@ -189,8 +208,8 @@ class WeeklyPurchaseAssets:
 
 
 	# List Rule Assets
-	# 杂货铺侧边导航
-	L_RM_NAVBAR = RuleList(folder="./tasks/WeeklyPurchase/mall/navbar", direction="vertical", mode="image", roi_back=(1178,88,60,531), size=(45, 76),
+	# 杂货铺侧边导航 
+	L_RM_NAVBAR = RuleList(folder="./tasks/WeeklyPurchase/mall/navbar", direction="vertical", mode="image", roi_back=(1178,88,60,531), size=(45, 76), 
 					 array=["special", "duel", "friendship", "medal", "charm", "honor"])
 
 
@@ -389,4 +408,5 @@ class WeeklyPurchaseAssets:
 	O_TT_BUY = RuleOcr(roi=(602,509,104,61), area=(602,509,104,61), mode="Full", method="Default", keyword="", name="tt_buy")
 	# Ocr-description 
 	O_TT_NUMBER = RuleOcr(roi=(576,415,58,49), area=(576,415,58,49), mode="Digit", method="Default", keyword="", name="tt_number")
+
 

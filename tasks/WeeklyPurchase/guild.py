@@ -29,7 +29,12 @@ class Guild(Buy, GameUi, WeeklyPurchaseAssets):
         if not con.enable:
             return
         logger.hr('Start guild', 1)
-        self.goto_page(page_guild_store)
+        self._weekly_purchase_guild_navigation = True
+        self._weekly_purchase_shrine_random_clicked = False
+        try:
+            self.goto_page(page_guild_store)
+        finally:
+            self._weekly_purchase_guild_navigation = False
         logger.info('Enter guild store success')
         time.sleep(0.5)
         swipe_cnt, max_swipe = 0, random.randint(3, 5)
@@ -140,4 +145,3 @@ if __name__ == '__main__':
 
     # t._guild_skin_ticket(5)
     t._guild_honor_gift()
-
