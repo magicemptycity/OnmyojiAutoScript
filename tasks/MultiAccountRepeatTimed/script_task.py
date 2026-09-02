@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import copy
-from datetime import datetime, timedelta
+import random
+from datetime import datetime, time, timedelta
 from typing import Any, ClassVar
 
-from module.config.utils import convert_to_underscore
+from module.config.utils import (
+    convert_to_underscore,
+    parse_next_server_weekday,
+    parse_tomorrow_server,
+)
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
 from pydantic import BaseModel, ValidationError
-from tasks.MultiAccountRepeatNew.script_task import ScriptTask as MultiAccountRepeatNewBase
+from tasks.MultiAccountTaskOrchestration.script_task import ScriptTask as MultiAccountRepeatNewBase
 from tasks.Restart.server_update import (
     build_server_update_delay_target,
     is_server_update_window,
@@ -55,7 +60,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
 
         failed_account_ids: set[int] = set()
         current_account_id: int | None = None
-        for _, _, _, account, entry in due_plan:
+        for account_index, _, _, account, entry in due_plan:
             self._yield_to_higher_priority_task()
             account_id = id(account)
             if account_id in failed_account_ids:
@@ -90,8 +95,13 @@ class ScriptTask(MultiAccountRepeatNewBase):
                     continue
                 current_account_id = account_id
 
+            self._publish_multi_account_overview(
+                "timed",
+                {"account_index": account_index + 1, "task_name": entry.task_name},
+            )
             if not self._run_timed_task(account, entry):
                 overall_failed = True
+            self._publish_multi_account_overview("timed", None)
             # 每个账号任务结束后立即落盘，避免等待该账号其他任务结束，
             # 也避免外层调度器继续使用旧的 next_run 反复循环。
             self._refresh_outer_next_run(success=not overall_failed)
@@ -111,7 +121,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
             if not self._sync_account_from_public(account) or not account.is_valid():
                 continue
             for task_index, entry in enumerate(account.task_list):
-                if not entry.task_name or entry.next_run > now:
+                scheduler = self._entry_scheduler(entry.task_name, entry)
+                if not getattr(scheduler, "enable", False) or not entry.task_name or entry.next_run > now:
                     continue
                 priority = self._entry_priority(entry)
                 due_plan.append((account_index, task_index, priority, account, entry))
@@ -135,7 +146,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
         delayed_tasks: list[str] = []
         for account in self.fade_conf.account_list:
             for entry in account.task_list:
-                if not entry.task_name or entry.next_run >= delay_target:
+                scheduler = self._entry_scheduler(entry.task_name, entry)
+                if not getattr(scheduler, "enable", False) or not entry.task_name or entry.next_run >= delay_target:
                     continue
                 self._sync_entry_scheduler_next_run(entry, delay_target)
                 delayed_tasks.append(
@@ -160,7 +172,11 @@ class ScriptTask(MultiAccountRepeatNewBase):
             entry.next_run
             for account in self.fade_conf.account_list
             for entry in account.task_list
-            if entry.task_name and entry.next_run
+            if (
+                getattr(self._entry_scheduler(entry.task_name, entry), "enable", False)
+                and entry.task_name
+                and entry.next_run
+            )
         ]
         target = min(next_runs) if next_runs else None
         if target is not None:
@@ -208,7 +224,9 @@ class ScriptTask(MultiAccountRepeatNewBase):
         for group_name, arguments in private_config.items():
             if not isinstance(arguments, dict):
                 continue
-            if convert_to_underscore(group_name) == "scheduler" and set(arguments) <= {"next_run"}:
+            if convert_to_underscore(group_name) == "scheduler" and set(arguments) <= {"next_run", "enable"}:
+                # enable/next_run are account-local routing state, not a reason
+                # to discard the task's public interval/time defaults.
                 continue
             return True
         return False
@@ -287,19 +305,73 @@ class ScriptTask(MultiAccountRepeatNewBase):
             "%Y-%m-%d %H:%M:%S"
         )
 
+    def _next_run_from_scheduler(
+        self,
+        scheduler,
+        start_time: datetime,
+        success: bool | None,
+        server: bool,
+        target: datetime | None,
+    ) -> datetime:
+        """按 OAS 原生 Config.task_delay 规则计算账号任务下次运行时间。
+
+        账号任务虽然使用自己的 next_run 存储，但 scheduler 的所有时间字段
+        仍然必须保持和普通 OAS 实例一致：间隔、强制服务时间、日期间隔
+        和随机延迟都在这里统一处理。
+        """
+        candidates: list[datetime] = []
+        if success is not None:
+            interval = getattr(
+                scheduler,
+                "success_interval" if success else "failure_interval",
+                None,
+            )
+            if interval is None:
+                interval = timedelta(minutes=10)
+            candidates.append(start_time + interval)
+        if target is not None:
+            candidates.append(target)
+        if not candidates:
+            candidates.append(start_time + timedelta(minutes=10))
+
+        next_run = min(candidates).replace(microsecond=0)
+        if not server or scheduler is None or not hasattr(scheduler, "server_update"):
+            return next_run
+
+        float_time = getattr(scheduler, "float_time", time.min)
+        float_seconds = (
+            float_time.hour * 3600 + float_time.minute * 60 + float_time.second
+        )
+        random_float = random.randint(0, float_seconds)
+        server_update = scheduler.server_update
+        if server_update == time(hour=9):
+            # 与 OAS 默认 09:00 规则一致：在间隔结果上增加随机延迟。
+            return next_run + timedelta(seconds=random_float)
+
+        schedule_mode = getattr(scheduler, "schedule_mode", "interval_days")
+        schedule_mode = getattr(schedule_mode, "value", schedule_mode)
+        if schedule_mode == "weekday":
+            return parse_next_server_weekday(
+                server_update,
+                getattr(scheduler, "weekdays", list(range(1, 8))),
+                random_float,
+            )
+
+        # 间隔天数规则：指定日期间隔后的固定时刻。
+        return parse_tomorrow_server(
+            server_update,
+            getattr(scheduler, "delay_date", 1),
+            random_float,
+        )
+
     def _fallback_next_run(
         self, task_name: str, entry: MultiAccountRepeatTimedTask, success: bool
     ) -> datetime:
-        """任务未主动设置下次运行时间时，按该账号任务的调度间隔推算。"""
+        """任务未主动设置下次运行时间时，按 OAS 调度器规则推算。"""
         scheduler = self._entry_scheduler(task_name, entry)
-        interval = getattr(
-            scheduler,
-            "success_interval" if success else "failure_interval",
-            None,
+        return self._next_run_from_scheduler(
+            scheduler, datetime.now(), success, server=True, target=None
         )
-        if interval is None:
-            interval = timedelta(minutes=10)
-        return datetime.now() + interval
 
     def _run_timed_task(
         self,
@@ -347,15 +419,14 @@ class ScriptTask(MultiAccountRepeatNewBase):
                         "scheduler",
                         None,
                     )
-                    interval = getattr(
-                        scheduler,
-                        "success_interval" if interval_success else "failure_interval",
-                        None,
-                    )
-                    if interval is None:
-                        interval = timedelta(minutes=10)
                     start = datetime.now() if finish else task_obj.start_time
-                    captured["next_run"] = start + interval
+                    captured["next_run"] = self._next_run_from_scheduler(
+                        scheduler,
+                        start,
+                        interval_success,
+                        server=server,
+                        target=target,
+                    )
 
                 # 内层任务的 set_next_run 只更新当前账号当前任务，不改公共调度器。
                 task_obj.set_next_run = capture

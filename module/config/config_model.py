@@ -97,7 +97,7 @@ from tasks.MultiAccountDelegation.config import MultiAccountDelegation
 from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
 from tasks.MultiAccountHunt.config import MultiAccountHunt
 from tasks.MultiAccountRepeat.config import MultiAccountRepeat
-from tasks.MultiAccountRepeatNew.config import MultiAccountRepeatNew
+from tasks.MultiAccountTaskOrchestration.config import MultiAccountTaskOrchestration
 from tasks.MultiAccountRepeatNewNormal.config import MultiAccountRepeatNewNormal
 from tasks.MultiAccountRepeatNewFixed.config import MultiAccountRepeatNewFixed
 from tasks.MultiAccountRepeatTimed.config import MultiAccountRepeatTimed
@@ -190,7 +190,7 @@ class ConfigModel(ConfigBase):
     # 兼容已创建过“多账号多任务新专属公共账号”的旧配置；新版功能只读取通用公共账号库。
     multi_account_repeat_new_accounts: SharedPublicAccounts | None = None
     multi_account_shared_accounts: SharedPublicAccounts = Field(default_factory=SharedPublicAccounts)
-    multi_account_repeat_new: MultiAccountRepeatNew = Field(default_factory=MultiAccountRepeatNew)
+    multi_account_task_orchestration: MultiAccountTaskOrchestration = Field(default_factory=MultiAccountTaskOrchestration)
     multi_account_repeat_new_normal: MultiAccountRepeatNewNormal = Field(default_factory=MultiAccountRepeatNewNormal)
     multi_account_repeat_new_fixed: MultiAccountRepeatNewFixed = Field(default_factory=MultiAccountRepeatNewFixed)
     multi_account_repeat_timed: MultiAccountRepeatTimed = Field(default_factory=MultiAccountRepeatTimed)
@@ -216,6 +216,7 @@ class ConfigModel(ConfigBase):
         :param config_name:
         """
         if data:
+            data.pop("multi_account_repeat_new", None)
             if config_name:
                 data["config_name"] = config_name
             super().__init__(**data)
@@ -224,6 +225,7 @@ class ConfigModel(ConfigBase):
             super().__init__()
             return
         data = self.read_json(config_name)
+        data.pop("multi_account_repeat_new", None)
         data["config_name"] = config_name
         super().__init__(**data)
 

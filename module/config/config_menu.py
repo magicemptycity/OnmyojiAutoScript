@@ -48,7 +48,7 @@ class ConfigMenu:
             'MultiAccountAreaBoss',
             'MultiAccountHunt',
             'MultiAccountRepeat',
-            'MultiAccountRepeatNew',
+            'MultiAccountTaskOrchestration',
             'MultiAccountRepeatNewNormal',
             'MultiAccountRepeatNewFixed',
             'MultiAccountRepeatTimed',

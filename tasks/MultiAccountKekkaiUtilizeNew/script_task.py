@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import copy
-from datetime import datetime, timedelta
+import random
+from datetime import datetime, time, timedelta
 from typing import Any, ClassVar
 
-from module.config.utils import convert_to_underscore
+from module.config.utils import (
+    convert_to_underscore,
+    parse_next_server_weekday,
+    parse_tomorrow_server,
+)
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
 from pydantic import ValidationError
@@ -13,7 +18,7 @@ from tasks.MultiAccountKekkaiUtilizeNew.config import (
     MultiAccountKekkaiUtilizeNew,
     MultiAccountKekkaiUtilizeNewAccount,
 )
-from tasks.MultiAccountRepeatNew.script_task import ScriptTask as MultiAccountRepeatNewBase
+from tasks.MultiAccountTaskOrchestration.script_task import ScriptTask as MultiAccountRepeatNewBase
 from tasks.Restart.server_update import build_server_update_delay_target, is_server_update_window
 
 
@@ -37,6 +42,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
 
         if self._defer_for_server_update(now):
             self._refresh_outer_next_run()
+            self._publish_utilize_overview(None)
             raise TaskEnd(self.task_name)
 
         pending = self._collect_pending_accounts(now)
@@ -44,6 +50,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
         for index, account in pending:
             self._yield_to_higher_priority_task()
             self.current_account_info = account
+            self._publish_utilize_overview({"account_index": index + 1})
             logger.hr(f"处理账号 {account.character}-{account.svr}", 2)
 
             if not self._switch_account(account):
@@ -53,15 +60,18 @@ class ScriptTask(MultiAccountRepeatNewBase):
                     "切换账号",
                     getattr(self, "_last_switch_error", None),
                 )
-                account.next_utilize_time = datetime.now() + self.retry_delay
+                self._schedule_account_next_run(account, success=False, start_time=datetime.now())
                 self._refresh_outer_next_run()
+                self._publish_utilize_overview(None)
                 continue
 
             if not self._run_utilize_with_retry(account):
                 overall_failed = True
             self._refresh_outer_next_run()
+            self._publish_utilize_overview(None)
 
         self._refresh_outer_next_run()
+        self._publish_utilize_overview(None)
         if overall_failed:
             logger.warning("多账号多任务蹭卡新本轮存在失败账号，已分别安排重试")
         raise TaskEnd(self.task_name)
@@ -78,9 +88,12 @@ class ScriptTask(MultiAccountRepeatNewBase):
             if not self._is_account_in_scope(account):
                 continue
 
-            deferred = self._deferred_forbidden_time(account, account.next_utilize_time)
+            if not account.scheduler.enable:
+                continue
+            account.next_utilize_time = account.scheduler.next_run
+            deferred = self._deferred_forbidden_time(account, account.scheduler.next_run)
             if deferred is not None:
-                account.next_utilize_time = deferred
+                self._set_account_next_run(account, deferred)
                 logger.info(
                     "%s-%s 的下一次蹭卡时间位于禁止时段，顺延到 %s",
                     account.character,
@@ -88,13 +101,13 @@ class ScriptTask(MultiAccountRepeatNewBase):
                     deferred,
                 )
                 continue
-            if account.next_utilize_time > now:
+            if account.scheduler.next_run > now:
                 continue
 
             # 排队、模拟器启动较慢时，需再次按真实执行时间判断禁止时段。
             deferred = self._deferred_forbidden_time(account, now)
             if deferred is not None:
-                account.next_utilize_time = deferred
+                self._set_account_next_run(account, deferred)
                 logger.info(
                     "%s-%s 当前处于禁止蹭卡时段，顺延到 %s",
                     account.character,
@@ -103,6 +116,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
                 )
                 continue
             pending.append((index, account))
+        # 与 OAS Scheduler 一致：到期项优先级靠前，随后保持较早 next_run。
+        pending.sort(key=lambda item: (item[1].scheduler.priority, item[1].scheduler.next_run, item[0]))
         self._save_repeat_config()
         return pending
 
@@ -135,13 +150,11 @@ class ScriptTask(MultiAccountRepeatNewBase):
                     if isinstance(target, datetime):
                         captured["next_run"] = target
                         return
-                    interval = (
-                        self.fade_conf.scheduler.failure_interval
-                        if success is False
-                        else self.fade_conf.scheduler.success_interval
+                    captured["next_run"] = self._calculate_account_next_run(
+                        account,
+                        success=success is not False,
+                        start_time=datetime.now() if finish else task_obj.start_time,
                     )
-                    start = datetime.now() if finish else task_obj.start_time
-                    captured["next_run"] = start + interval
 
                 # 内层仅负责计算本账号下次蹭卡时间，不能写入公共结界蹭卡 scheduler。
                 task_obj.set_next_run = capture
@@ -165,9 +178,11 @@ class ScriptTask(MultiAccountRepeatNewBase):
                 self._restore_account_utilize_config(backup)
 
             if success:
-                next_time = captured["next_run"] or (datetime.now() + self.fade_conf.scheduler.success_interval)
+                next_time = captured["next_run"] or self._calculate_account_next_run(
+                    account, success=True, start_time=datetime.now()
+                )
                 deferred = self._deferred_forbidden_time(account, next_time)
-                account.next_utilize_time = deferred or next_time
+                self._set_account_next_run(account, deferred or next_time)
                 account.last_complete_time = datetime.now()
                 logger.info(
                     "%s-%s 蹭卡完成，下次运行：%s",
@@ -179,7 +194,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
             if attempt < self.task_retry_limit:
                 self._restart_game()
 
-        account.next_utilize_time = datetime.now() + self.retry_delay
+        self._schedule_account_next_run(account, success=False, start_time=datetime.now())
         self._push_error_notification(account, "结界蹭卡", last_exception)
         logger.warning(
             "%s-%s 蹭卡连续失败，安排在 %s 重试",
@@ -255,8 +270,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
         target = build_server_update_delay_target(now)
         delayed = 0
         for account in self.fade_conf.account_list:
-            if account.next_utilize_time < target:
-                account.next_utilize_time = target
+            if account.scheduler.enable and account.scheduler.next_run < target:
+                self._set_account_next_run(account, target)
                 delayed += 1
         if not delayed:
             return False
@@ -266,13 +281,68 @@ class ScriptTask(MultiAccountRepeatNewBase):
 
     def _refresh_outer_next_run(self) -> None:
         next_runs = [
-            account.next_utilize_time
+            account.scheduler.next_run
             for account in self.fade_conf.account_list
-            if account.is_valid() and account.next_utilize_time
+            if account.is_valid() and account.scheduler.enable
         ]
-        if next_runs:
-            self.fade_conf.scheduler.next_run = min(next_runs).replace(microsecond=0)
+        self.fade_conf.scheduler.next_run = (
+            min(next_runs).replace(microsecond=0)
+            if next_runs
+            else datetime.max.replace(microsecond=0)
+        )
         self._save_repeat_config()
+
+    def _set_account_next_run(
+        self, account: MultiAccountKekkaiUtilizeNewAccount, next_run: datetime
+    ) -> None:
+        next_run = next_run.replace(microsecond=0)
+        account.scheduler.next_run = next_run
+        account.next_utilize_time = next_run
+
+    def _calculate_account_next_run(
+        self,
+        account: MultiAccountKekkaiUtilizeNewAccount,
+        *,
+        success: bool,
+        start_time: datetime,
+        target: datetime | None = None,
+    ) -> datetime:
+        """将 OAS Config.task_delay 规则应用到账号虚拟 Scheduler。"""
+        scheduler = account.scheduler
+        next_run = (target or (start_time + (
+            scheduler.success_interval if success else scheduler.failure_interval
+        ))).replace(microsecond=0)
+        float_time = scheduler.float_time
+        random_float = random.randint(
+            0, float_time.hour * 3600 + float_time.minute * 60 + float_time.second
+        )
+        if scheduler.server_update == time(hour=9):
+            return next_run + timedelta(seconds=random_float)
+        schedule_mode = getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode)
+        if schedule_mode == "weekday":
+            return parse_next_server_weekday(
+                scheduler.server_update, scheduler.weekdays, random_float
+            )
+        return parse_tomorrow_server(
+            scheduler.server_update, scheduler.delay_date, random_float
+        )
+
+    def _schedule_account_next_run(
+        self, account: MultiAccountKekkaiUtilizeNewAccount, *, success: bool, start_time: datetime
+    ) -> None:
+        self._set_account_next_run(
+            account,
+            self._calculate_account_next_run(
+                account, success=success, start_time=start_time
+            ),
+        )
+
+    def _publish_utilize_overview(self, active: dict[str, int] | None) -> None:
+        state_queue = getattr(self, "state_queue", None)
+        if state_queue is not None:
+            state_queue.put({
+                "multi_account_overview": {"kind": "utilize", "active": active}
+            })
 
     def _sync_account_from_public(self, account: MultiAccountKekkaiUtilizeNewAccount) -> bool:
         library = getattr(self.config, "multi_account_shared_accounts", None)

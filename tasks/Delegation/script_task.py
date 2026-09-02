@@ -7,6 +7,7 @@ from datetime import time, datetime, timedelta
 from module.logger import logger
 from module.exception import TaskEnd
 from module.base.timer import Timer
+from module.base.utils.utils import random_normal_distribution_int
 
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_delegation
@@ -121,6 +122,27 @@ class ScriptTask(GameUi, DelegationAssets):
                 continue
             if check_timer.reached():
                 break
+            if self.ocr_appear(self.O_D_DONE):
+                # RuleOcr.ocr 已将识别到的“完成”文字真实位置写入 area。
+                # 在文字右侧 x+150、宽 90、高 65 的范围内正态随机点击。
+                x, y, _, _ = self.O_D_DONE.area
+                click_x = random_normal_distribution_int(x + 150, x + 240)
+                click_y = random_normal_distribution_int(y, y + 65)
+                logger.info(
+                    '领取完成奖励：识别区域=%s，偏移点击范围=(%s, %s, 90, 65)，实际=(%s, %s)',
+                    self.O_D_DONE.area,
+                    x + 150,
+                    y,
+                    click_x,
+                    click_y,
+                )
+                self.device.click(
+                    x=click_x,
+                    y=click_y,
+                    control_name='D_DONE_OFFSET',
+                )
+                check_timer.reset()
+                continue
             if self.ocr_appear_click(self.O_D_DONE, interval=1):
                 check_timer.reset()
                 continue

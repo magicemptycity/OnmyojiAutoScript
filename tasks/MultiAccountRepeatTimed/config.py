@@ -23,14 +23,36 @@ class MultiAccountRepeatTimedConfig(ConfigBase, extra="allow"):
         title="是否检查更高优先级任务",
         description="发现已到期的更高优先级任务时，先结束当前任务，待高优先级任务完成后继续执行。",
     )
-    rerun_incomplete_accounts: bool = Field(default=False, title="未完成账号自动再执行一次")
+    rerun_incomplete_accounts: bool = Field(
+        default=False,
+        title="未完成账号自动再执行一次",
+        description="本轮结束后检查今天仍未完整完成的账号，并仅额外再执行一轮；已完整完成的账号会自动跳过。",
+    )
 
 
 class MultiAccountRepeatTimedTask(ConfigBase, extra="allow"):
-    """一个账号下的任务和私有参数。"""
+    """一个账号下的任务和私有参数；启用状态使用任务自身 scheduler.enable。"""
 
     task_name: str = Field(default="")
     private_config: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_enable(cls, value: Any) -> Any:
+        """把过渡版本的独立 enable 字段迁移回任务 scheduler。"""
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        legacy_enable = data.pop("enable", None)
+        private = dict(data.get("private_config") or {})
+        scheduler = dict(private.get("scheduler") or {})
+        if legacy_enable is not None:
+            scheduler.setdefault("enable", bool(legacy_enable))
+        # 旧版本的任务项没有独立开关，默认等同于已启用。
+        scheduler.setdefault("enable", True)
+        private["scheduler"] = scheduler
+        data["private_config"] = private
+        return data
     # 自动保存的配置型运行记录（例如每日琐事的 done_record），按账号和任务隔离。
     runtime_record: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
     next_run: datetime = Field(default=datetime(2023, 1, 1), title="任务下次运行时间")

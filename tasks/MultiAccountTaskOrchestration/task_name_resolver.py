@@ -4,6 +4,7 @@ from module.config.utils import convert_to_underscore
 
 
 TASK_NAME_ALIASES = {
+    'MultiAccountTaskOrchestration': ['多账号任务编排'],
     'MultiAccountRepeatNew': ['多账号多任务新'],
     'MultiAccountRepeatNewNormal': ['多账号多任务新普通'],
     'MultiAccountRepeatNewFixed': ['多账号多任务新固定时间'],

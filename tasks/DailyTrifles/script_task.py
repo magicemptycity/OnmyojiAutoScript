@@ -280,7 +280,8 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
         while not timeout_timer.reached():
             self.screenshot()
             self.ui_reward_appear_click()
-            if self.appear_then_click(self.I_UI_CONFIRM, interval=0.6):
+            if self.appear(self.I_UI_CONFIRM):
+                self.ui_click_until_disappear(self.I_UI_CONFIRM, interval=1)
                 continue
             if self.appear_then_click(self.I_DT_GW_DONATE_RECORD_THANKS, interval=1.5):  # 受赠界面的一键感谢
                 timeout_timer.reset()

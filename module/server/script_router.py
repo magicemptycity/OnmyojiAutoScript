@@ -291,6 +291,14 @@ async def script_task(script_name: str, task: str, group: str, argument: str, ty
                 value = TimeDelta(days=day, hours=date_time.hour, minutes=date_time.minute, seconds=date_time.second)
             case 'time':
                 value = datetime.strptime(value, '%H:%M:%S').time()
+            case 'weekday_multi':
+                value = sorted({
+                    int(item.strip())
+                    for item in str(value).split(',')
+                    if item.strip()
+                })
+                if any(day < 1 or day > 7 for day in value):
+                    raise ValueError('weekday must be between 1 and 7')
             case _: pass
     except Exception as e:
         # 类型不正确

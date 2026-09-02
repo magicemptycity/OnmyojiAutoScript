@@ -241,6 +241,12 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 pass
         return True
 
+    def _is_in_evozone_ready(self) -> bool:
+        """确认当前是觉醒副本挑战页，而非仅误识别到“挑战”按钮局部图像。"""
+        return self.appear(self.I_EVOZONE_FIRE) and (
+            self.appear(self.I_EVOZONE_LOCK) or self.appear(self.I_EVOZONE_UNLOCK)
+        )
+
     def run_alone(self):
         logger.info('Start run alone')
         self.goto_page(page_awake_zones)
@@ -252,7 +258,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         def is_in_evozone(screenshot=False) -> bool:
             if screenshot:
                 self.screenshot()
-            return self.appear(self.I_EVOZONE_FIRE)
+            return self._is_in_evozone_ready()
 
         while 1:
             self.screenshot()
@@ -270,10 +276,12 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 if self.appear_then_click(self.I_EVOZONE_FIRE, interval=1):
                     pass
 
-                if not self.appear(self.I_EVOZONE_FIRE):
+                if not self._is_in_evozone_ready():
                     self.run_general_battle(
                         config=self.config.evo_zone.general_battle_config,
-                        exit_matcher=self.I_EVOZONE_FIRE,
+                        # 结算后必须同时回到挑战按钮和锁定状态区域，才算真正回到副本页。
+                        # 仅命中挑战按钮局部图像时（如奖励页误识别）不得提前退出。
+                        exit_matcher=lambda task: task._is_in_evozone_ready(),
                     )
                     break
 

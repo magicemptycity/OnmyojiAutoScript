@@ -1,8 +1,7 @@
 import copy
 import re
-from datetime import datetime, time
+from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
@@ -10,14 +9,12 @@ from pydantic import BaseModel, ValidationError
 from module.config.utils import convert_to_underscore
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
-from tasks.MultiAccountRepeatNew.config import (
+from tasks.MultiAccountTaskOrchestration.config import (
     MultiAccountRepeatNewAccount,
-    MultiAccountRepeatNewFixedTimeBatch,
-    MultiAccountRepeatNewFixedTimeBatchTask,
     MultiAccountRepeatNewTask,
 )
 from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
-from tasks.MultiAccountRepeatNew.task_name_resolver import TASK_NAME_ALIASES, TaskNameResolver
+from tasks.MultiAccountTaskOrchestration.task_name_resolver import TASK_NAME_ALIASES, TaskNameResolver
 
 
 multi_account_repeat_new_normal_app = APIRouter(route_class=ApiLoggingRoute)
@@ -53,41 +50,6 @@ def _has_task_script(task_name: str) -> bool:
         for directory in tasks_root.iterdir()
     )
 
-def _normalize_batch_task_names(script_name: str, task_names: str) -> list[str]:
-    """校验固定时间批次中的任务；批次只保存内部任务标识。"""
-    model = mm.config_cache(script_name).model
-    result: list[str] = []
-    for raw_name in re.split(r"[,\n]", task_names or ""):
-        task_key = convert_to_underscore(raw_name.strip())
-        if not task_key:
-            continue
-        if task_key.startswith("multi_account_repeat"):
-            raise HTTPException(status_code=400, detail="不能在固定时间批次中嵌套多账号任务")
-        if getattr(model, task_key, None) is None or not _has_task_script(task_key):
-            raise HTTPException(status_code=400, detail=f"任务不可执行：{raw_name.strip()}")
-        if task_key not in result:
-            result.append(task_key)
-    return result
-
-
-def _batch(account: MultiAccountRepeatNewAccount, batch_id: str) -> MultiAccountRepeatNewFixedTimeBatch:
-    for item in account.fixed_time_batch_list:
-        if item.batch_id == batch_id:
-            return item
-    raise HTTPException(status_code=404, detail="该账号没有此固定时间批次")
-
-
-def _batch_task_entry(
-    batch: MultiAccountRepeatNewFixedTimeBatch,
-    task_name: str,
-) -> MultiAccountRepeatNewFixedTimeBatchTask:
-    """确认任务属于该批次，并返回任务的独立配置项。"""
-    entry = batch.task_entry(task_name)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="该时间批次没有配置此任务")
-    return entry
-
-
 def _apply_private_args(task_args: dict, private: dict) -> dict:
     """将私有覆盖值套到 OASX 参数表单数据中。"""
     for group_name, arguments in private.items():
@@ -97,55 +59,6 @@ def _apply_private_args(task_args: dict, private: dict) -> dict:
             if argument.get("name") in arguments:
                 argument["value"] = arguments[argument["name"]]
     return task_args
-
-
-def _fixed_batch_target(section) -> datetime | None:
-    """配置变更后让任一账号新建/修改的已过点批次立即进入待运行队列。"""
-    now = datetime.now()
-    targets = [
-        datetime.combine(now.date(), batch.run_time)
-        for account in section.account_list
-        for batch in account.fixed_time_batch_list
-        if batch.enable and batch.task_names
-    ]
-    return min(targets) if targets else None
-
-
-def _refresh_fixed_batch_scheduler(section) -> None:
-    target = _fixed_batch_target(section)
-    if target is not None:
-        section.scheduler.next_run = target
-
-
-def _serialize_fixed_batch(
-    account: MultiAccountRepeatNewAccount,
-    batch: MultiAccountRepeatNewFixedTimeBatch,
-) -> dict:
-    progress = account.fixed_time_batch_progress.get(batch.batch_id)
-    progress_is_today = progress is not None and progress.progress_time.date() == datetime.now().date()
-    completed = set(progress.completed_task_names) if progress_is_today else set()
-    failed = set(progress.failed_task_names) if progress_is_today else set()
-    unfinished = set(progress.unfinished_task_names) if progress_is_today else set()
-    return {
-        "batch_id": batch.batch_id,
-        "enable": batch.enable,
-        "run_time": batch.run_time.strftime("%H:%M"),
-        "tasks": [
-            {
-                "task_name": task.task_name,
-                "task_display_name": _task_display_name(task.task_name),
-                "has_private_config": bool(task.private_config),
-                "status": (
-                    "failed" if task.task_name in failed
-                    else "unfinished" if task.task_name in unfinished
-                    else "completed" if task.task_name in completed
-                    else "pending"
-                ),
-            }
-            for task in batch.task_list
-            if task.task_name
-        ],
-    }
 
 
 def _task_display_name(task_name: str) -> str:
@@ -232,6 +145,11 @@ def _convert_argument(types: str, value):
         return float(value)
     if types == "boolean":
         return value.lower() in {"true", "1"} if isinstance(value, str) else bool(value)
+    if types == "weekday_multi":
+        days = sorted({int(item.strip()) for item in str(value).split(",") if item.strip()})
+        if any(day < 1 or day > 7 for day in days):
+            raise ValueError("weekday must be between 1 and 7")
+        return days
     return value
 
 
@@ -280,6 +198,56 @@ def _sync_task_account(account: MultiAccountRepeatNewAccount, source: SharedPubl
     account.sync_public_account(source)
 
 
+def _parse_account_progress_task_names(
+    account: MultiAccountRepeatNewAccount,
+    raw_names: str,
+    label: str,
+) -> list[str]:
+    """Parse Chinese aliases/internal names and only accept enabled tasks of this account."""
+    enabled_names = {
+        convert_to_underscore(task.task_name)
+        for task in account.task_list
+        if task.task_name and task.enable
+    }
+    names: list[str] = []
+    invalid: list[str] = []
+    for raw_name in re.split(r"[,\n]", raw_names or ""):
+        value = raw_name.strip()
+        if not value:
+            continue
+        task_key = convert_to_underscore(TaskNameResolver.resolve(value) or value)
+        if task_key not in enabled_names:
+            invalid.append(value)
+            continue
+        if task_key not in names:
+            names.append(task_key)
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label}包含当前账号未启用或不存在的任务：{', '.join(invalid)}",
+        )
+    return names
+
+
+def _save_account_task_progress(
+    account: MultiAccountRepeatNewAccount,
+    completed: list[str],
+    failed: list[str],
+    unfinished: list[str],
+) -> None:
+    """Persist the normal-mode recovery lists using the same display names as its runner."""
+    account.completed_task_list = "\n".join(
+        _task_display_name(name) for name in dict.fromkeys(completed)
+    )
+    account.failed_task_list = "\n".join(
+        _task_display_name(name) for name in dict.fromkeys(failed)
+    )
+    account.unfinished_task_list = "\n".join(
+        _task_display_name(name) for name in dict.fromkeys(unfinished)
+    )
+    account.task_progress_time = datetime.now()
+
+
 @multi_account_repeat_new_normal_app.get('/{script_name}/multi_account_repeat_new_normal/accounts')
 async def list_task_accounts(script_name: str):
     section = _section(script_name)
@@ -299,10 +267,18 @@ async def list_task_accounts(script_name: str):
             "account": item.account,
             "account_alias": item.account_alias,
             "apple_or_android": item.apple_or_android,
+            "last_complete_time": item.last_complete_time.isoformat(sep=" ", timespec="seconds"),
+            "task_progress_time": item.task_progress_time.isoformat(sep=" ", timespec="seconds"),
+            "task_progress": {
+                "completed_task_list": str(item.completed_task_list),
+                "failed_task_list": str(item.failed_task_list),
+                "unfinished_task_list": str(item.unfinished_task_list),
+            },
             "tasks": [
                 {
                     "task_name": task.task_name,
                     "task_display_name": _task_display_name(task.task_name),
+                    "enabled": task.enable,
                     "has_private_config": bool(task.private_config),
                     "status": (
                         "failed" if progress_is_today and task.task_name in failed
@@ -312,10 +288,6 @@ async def list_task_accounts(script_name: str):
                     ),
                 }
                 for task in item.task_list if task.task_name
-            ],
-            "fixed_time_batches": [
-                _serialize_fixed_batch(item, batch)
-                for batch in item.fixed_time_batch_list
             ],
         })
     return {"accounts": accounts}
@@ -355,9 +327,40 @@ async def add_task(script_name: str, account_index: int, task_name: str):
         raise HTTPException(status_code=400, detail="不能嵌套多账号多任务")
     if not _has_task_script(key):
         raise HTTPException(status_code=400, detail="该功能没有可执行任务，不能添加到多账号任务")
-    if any(convert_to_underscore(item.task_name) == key for item in account.task_list):
+    existing = next((item for item in account.task_list if convert_to_underscore(item.task_name) == key), None)
+    if existing is not None:
+        existing.enable = True
+        _save(script_name, multi_account_repeat_new_normal=section)
         return True
-    account.task_list.append(MultiAccountRepeatNewTask(task_name=key))
+    account.task_list.append(MultiAccountRepeatNewTask(task_name=key, enable=True))
+    _save(script_name, multi_account_repeat_new_normal=section)
+    return True
+
+
+@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/tasks/order')
+async def reorder_tasks(script_name: str, account_index: int, task_names: str):
+    """保存已启用任务的执行顺序，不触碰停用任务及其私有配置。"""
+    section = _section(script_name)
+    account = _task_account(section, account_index)
+    enabled = [item for item in account.task_list if item.enable]
+    requested_names = [
+        convert_to_underscore(name.strip())
+        for name in re.split(r'[,\n]', task_names)
+        if name.strip()
+    ]
+    enabled_names = [convert_to_underscore(item.task_name) for item in enabled]
+    if (
+        len(requested_names) != len(enabled_names)
+        or len(set(requested_names)) != len(requested_names)
+        or set(requested_names) != set(enabled_names)
+    ):
+        raise HTTPException(status_code=400, detail="排序任务必须与当前已启用任务完全一致")
+
+    enabled_by_name = {convert_to_underscore(item.task_name): item for item in enabled}
+    account.task_list = [
+        *(enabled_by_name[name] for name in requested_names),
+        *(item for item in account.task_list if not item.enable),
+    ]
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
@@ -367,155 +370,94 @@ async def delete_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
-    account.task_list.remove(entry)
+    entry.enable = False
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
 
-@multi_account_repeat_new_normal_app.get('/{script_name}/multi_account_repeat_new_normal/fixed-time-tasks')
-async def list_fixed_time_tasks(script_name: str):
-    """返回所有可执行的普通任务，固定时间任务不再依赖账号普通任务列表。"""
-    model = mm.config_cache(script_name).model
-    tasks_root = Path.cwd() / "tasks"
-    tasks = []
-    for directory in tasks_root.iterdir():
-        task_key = convert_to_underscore(directory.name)
-        if (
-            not directory.is_dir()
-            or task_key.startswith("multi_account_repeat")
-            or not (directory / "script_task.py").is_file()
-            or getattr(model, task_key, None) is None
-        ):
-            continue
-        tasks.append({
-            "task_name": task_key,
-            "task_display_name": _task_display_name(task_key),
-        })
-    tasks.sort(key=lambda item: item["task_display_name"])
-    return {"tasks": tasks}
+@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/tasks/{task_name}/enable')
+async def set_task_enable(script_name: str, account_index: int, task_name: str, value: str):
+    section = _section(script_name)
+    _task_entry(_task_account(section, account_index), task_name).enable = _convert_argument("boolean", value)
+    _save(script_name, multi_account_repeat_new_normal=section)
+    return True
 
 
-@multi_account_repeat_new_normal_app.post('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches')
-async def add_fixed_time_batch(script_name: str, account_index: int, run_time: str = "09:00"):
+@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/tasks/{task_name}/status')
+async def set_task_status(script_name: str, account_index: int, task_name: str, value: str):
+    """Manually correct one normal-mode task's recovery status without touching its private config."""
     section = _section(script_name)
     account = _task_account(section, account_index)
-    try:
-        parsed_time = time.fromisoformat(run_time)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="运行时间格式错误，应为 HH:MM") from exc
-    batch = MultiAccountRepeatNewFixedTimeBatch(batch_id=uuid4().hex, run_time=parsed_time)
-    account.fixed_time_batch_list.append(batch)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_normal=section)
-    return _serialize_fixed_batch(account, batch)
+    entry = _task_entry(account, task_name)
+    status = value.strip().lower()
+    if status not in {"completed", "failed", "unfinished", "pending"}:
+        raise HTTPException(status_code=400, detail="任务状态只能是 completed、failed、unfinished 或 pending")
 
+    task_key = convert_to_underscore(entry.task_name)
+    completed = [name for name in account.completed_task_names if name != task_key]
+    failed = [name for name in account.failed_task_names if name != task_key]
+    unfinished = [name for name in account.unfinished_task_names if name != task_key]
+    if status == "completed":
+        completed.append(task_key)
+    elif status == "failed":
+        failed.append(task_key)
+    elif status == "unfinished":
+        unfinished.append(task_key)
+    elif account.last_complete_time.date() == datetime.now().date():
+        # "未开始" must not leave the account silently skipped by today's completion marker.
+        account.last_complete_time = datetime(2023, 1, 1)
 
-@multi_account_repeat_new_normal_app.delete('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches/{batch_id}')
-async def delete_fixed_time_batch(script_name: str, account_index: int, batch_id: str):
-    section = _section(script_name)
-    account = _task_account(section, account_index)
-    batch = _batch(account, batch_id)
-    account.fixed_time_batch_list.remove(batch)
-    account.fixed_time_batch_progress.pop(batch_id, None)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_normal=section)
-    return True
-
-
-@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches/{batch_id}/enable')
-async def set_fixed_time_batch_enable(script_name: str, account_index: int, batch_id: str, value: str):
-    section = _section(script_name)
-    _batch(_task_account(section, account_index), batch_id).enable = _convert_argument("boolean", value)
-    _refresh_fixed_batch_scheduler(section)
+    _save_account_task_progress(account, completed, failed, unfinished)
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
 
-@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches/{batch_id}/run-time')
-async def set_fixed_time_batch_run_time(script_name: str, account_index: int, batch_id: str, value: str):
-    section = _section(script_name)
-    try:
-        _batch(_task_account(section, account_index), batch_id).run_time = time.fromisoformat(value)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="运行时间格式错误，应为 HH:MM") from exc
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_normal=section)
-    return True
-
-
-@multi_account_repeat_new_normal_app.post('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks')
-async def add_fixed_time_batch_task(script_name: str, account_index: int, batch_id: str, task_name: str):
-    section = _section(script_name)
-    account = _task_account(section, account_index)
-    batch = _batch(account, batch_id)
-    normalized = _normalize_batch_task_names(script_name, task_name)
-    if not normalized:
-        raise HTTPException(status_code=400, detail="请选择要添加的任务")
-    task_key = normalized[0]
-    if batch.task_entry(task_key) is None:
-        batch.task_list.append(MultiAccountRepeatNewFixedTimeBatchTask(task_name=task_key))
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_normal=section)
-    return True
-
-
-@multi_account_repeat_new_normal_app.delete('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}')
-async def delete_fixed_time_batch_task(script_name: str, account_index: int, batch_id: str, task_name: str):
-    section = _section(script_name)
-    account = _task_account(section, account_index)
-    batch = _batch(account, batch_id)
-    entry = _batch_task_entry(batch, task_name)
-    batch.task_list.remove(entry)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_normal=section)
-    return True
-
-
-@multi_account_repeat_new_normal_app.get('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/args')
-async def get_fixed_time_batch_task_args(script_name: str, account_index: int, batch_id: str, task_name: str):
-    account = _task_account(_section(script_name), account_index)
-    entry = _batch_task_entry(_batch(account, batch_id), task_name)
-    task_args = _default_task_args(script_name, entry.task_name, remove_scheduler=True)
-    return _apply_private_args(task_args, entry.private_config)
-
-
-@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/{group}/{argument}/value')
-async def set_fixed_time_batch_task_arg(
-        script_name: str, account_index: int, batch_id: str, task_name: str,
-        group: str, argument: str, types: str, value,
+@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/task-progress')
+async def set_account_task_progress(
+    script_name: str,
+    account_index: int,
+    completed_task_list: str = "",
+    failed_task_list: str = "",
+    unfinished_task_list: str = "",
 ):
+    """Bulk-edit normal-mode recovery lists with alias validation and exclusive task states."""
     section = _section(script_name)
     account = _task_account(section, account_index)
-    entry = _batch_task_entry(_batch(account, batch_id), task_name)
-    if convert_to_underscore(group) == "scheduler":
-        raise HTTPException(status_code=400, detail="不能在批次私有配置中修改调度参数")
-    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
-    if not isinstance(task_config, BaseModel):
-        raise HTTPException(status_code=400, detail="任务配置不存在")
+    completed = _parse_account_progress_task_names(account, completed_task_list, "已完成任务列表")
+    failed = _parse_account_progress_task_names(account, failed_task_list, "失败任务列表")
+    unfinished = _parse_account_progress_task_names(account, unfinished_task_list, "未完成任务列表")
 
-    private = copy.deepcopy(entry.private_config)
-    private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
-    candidate = task_config.__class__()
-    try:
-        for group_name, arguments in private.items():
-            if isinstance(arguments, dict):
-                for name, item_value in arguments.items():
-                    _set_argument(candidate, group_name, name, item_value)
-        candidate.__class__.model_validate(candidate.model_dump())
-    except (ValidationError, ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"批次私有参数无效：{exc}") from exc
-    entry.private_config = private
+    # A task has exactly one state. Recovery states win over completed state.
+    failed_set = set(failed)
+    unfinished = [name for name in unfinished if name not in failed_set]
+    recovery_set = failed_set | set(unfinished)
+    completed = [name for name in completed if name not in recovery_set]
+    _save_account_task_progress(account, completed, failed, unfinished)
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
 
-@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/private/default')
-async def reset_fixed_time_batch_task_private_config_to_default(script_name: str, account_index: int, batch_id: str, task_name: str):
-    # 恢复任务模型的默认值，而不是清空后继续继承公共配置。
+@multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/last-complete-time')
+async def set_account_last_complete_time(script_name: str, account_index: int, value: str):
+    section = _section(script_name)
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="完成时间格式错误，应为 YYYY-MM-DD HH:MM:SS") from exc
+    _task_account(section, account_index).last_complete_time = parsed
+    _save(script_name, multi_account_repeat_new_normal=section)
+    return True
+
+
+@multi_account_repeat_new_normal_app.post('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/rerun')
+async def rerun_account_tasks(script_name: str, account_index: int):
+    """Make one account eligible for a complete normal-mode run while retaining all task/private settings."""
     section = _section(script_name)
     account = _task_account(section, account_index)
-    entry = _batch_task_entry(_batch(account, batch_id), task_name)
-    entry.private_config = _default_private_config(script_name, entry.task_name)
+    account.last_complete_time = datetime(2023, 1, 1)
+    _save_account_task_progress(account, [], [], [])
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 

@@ -22,14 +22,31 @@ from tasks.Component.config_scheduler import ScheduleMode, Scheduler
 from tasks.MultiAccountTaskOrchestration.task_name_resolver import TASK_NAME_ALIASES, TaskNameResolver
 
 
-multi_account_repeat_new_fixed_app = APIRouter(route_class=ApiLoggingRoute)
+multi_account_task_orchestration_app = APIRouter(route_class=ApiLoggingRoute)
 
 
 def _section(script_name: str):
-    section = getattr(mm.config_cache(script_name).model, "multi_account_repeat_new_fixed", None)
+    section = getattr(mm.config_cache(script_name).model, "multi_account_task_orchestration", None)
     if section is None:
-        raise HTTPException(status_code=404, detail="当前配置没有多账号多任务新")
+        raise HTTPException(status_code=404, detail="当前配置没有多账号任务编排")
     return section
+
+
+def _all_shared_account_sections(script_name: str) -> dict[str, object]:
+    """公共账号库变更时，同步所有仍在使用通用账号库的多账号功能。"""
+    model = mm.config_cache(script_name).model
+    names = (
+        "multi_account_task_orchestration",
+        "multi_account_repeat_new_normal",
+        "multi_account_repeat_new_fixed",
+        "multi_account_kekkai_utilize_new",
+        "multi_account_repeat_timed",
+    )
+    return {
+        name: section
+        for name in names
+        if (section := getattr(model, name, None)) is not None
+    }
 
 
 def _library(script_name: str):
@@ -48,7 +65,7 @@ async def _broadcast_multi_account_overview(script_name: str) -> None:
     process = mm.script_process.get(script_name)
     if process is not None:
         await process.broadcast_state({
-            "multi_account_overview": {"kind": "fixed"},
+            "multi_account_overview": {"kind": "orchestration"},
         })
 
 
@@ -65,7 +82,7 @@ def _has_task_script(task_name: str) -> bool:
     )
 
 def _normalize_batch_task_names(script_name: str, task_names: str) -> list[str]:
-    """校验固定时间批次中的任务；批次只保存内部任务标识。"""
+    """校验顺序任务组中的任务；任务组只保存内部任务标识。"""
     model = mm.config_cache(script_name).model
     result: list[str] = []
     for raw_name in re.split(r"[,\n]", task_names or ""):
@@ -73,7 +90,7 @@ def _normalize_batch_task_names(script_name: str, task_names: str) -> list[str]:
         if not task_key:
             continue
         if task_key.startswith("multi_account_repeat") or task_key == "multi_account_task_orchestration":
-            raise HTTPException(status_code=400, detail="不能在固定时间批次中嵌套多账号任务")
+            raise HTTPException(status_code=400, detail="不能在顺序任务组中嵌套多账号任务")
         if getattr(model, task_key, None) is None or not _has_task_script(task_key):
             raise HTTPException(status_code=400, detail=f"任务不可执行：{raw_name.strip()}")
         if task_key not in result:
@@ -85,17 +102,17 @@ def _batch(account: MultiAccountRepeatNewAccount, batch_id: str) -> MultiAccount
     for item in account.fixed_time_batch_list:
         if item.batch_id == batch_id:
             return item
-    raise HTTPException(status_code=404, detail="该账号没有此固定时间批次")
+    raise HTTPException(status_code=404, detail="该账号没有此顺序任务组")
 
 
 def _batch_task_entry(
     batch: MultiAccountRepeatNewFixedTimeBatch,
     task_name: str,
 ) -> MultiAccountRepeatNewFixedTimeBatchTask:
-    """确认任务属于该批次，并返回任务的独立配置项。"""
+    """确认任务属于该顺序任务组，并返回任务的独立配置项。"""
     entry = batch.task_entry(task_name)
     if entry is None:
-        raise HTTPException(status_code=404, detail="该时间批次没有配置此任务")
+        raise HTTPException(status_code=404, detail="该顺序任务组没有配置此任务")
     return entry
 
 
@@ -125,26 +142,35 @@ def _scheduler_next_run(scheduler: Scheduler, *, run_now: bool) -> datetime:
     return parse_tomorrow_server(scheduler.server_update, scheduler.delay_date, random_float)
 
 
-def _fixed_batch_target(section) -> datetime | None:
+def _fixed_batch_target(section, script_name: str | None = None) -> datetime | None:
     targets = [
         batch.scheduler.next_run
         for account in section.account_list
         for batch in account.fixed_time_batch_list
         if batch.scheduler.enable and batch.task_names
     ]
+    if script_name is not None:
+        targets.extend(
+            scheduler.next_run
+            for account in section.account_list
+            for entry in account.task_list
+            if entry.task_name
+            and (scheduler := _single_task_scheduler(script_name, entry)) is not None
+            and scheduler.enable
+        )
     return min(targets) if targets else None
 
 
 def _refresh_fixed_batch_next_run(batch: MultiAccountRepeatNewFixedTimeBatch, *, now: datetime | None = None, force: bool = False) -> None:
-    """新特殊任务直接持有 Scheduler.NextRun；此函数保留为旧调用兼容。"""
+    """任务组直接持有 Scheduler.NextRun；此函数保留为旧调用兼容。"""
     if not batch.scheduler.enable or not batch.task_names:
         return
     if batch.scheduler.next_run.year <= 2023 and force:
         batch.scheduler.next_run = (now or datetime.now()).replace(microsecond=0)
 
 
-def _refresh_fixed_batch_scheduler(section) -> None:
-    target = _fixed_batch_target(section)
+def _refresh_fixed_batch_scheduler(section, script_name: str | None = None) -> None:
+    target = _fixed_batch_target(section, script_name)
     section.scheduler.next_run = (target or (datetime.now() + timedelta(days=1))).replace(microsecond=0)
 
 
@@ -165,8 +191,32 @@ def _fixed_batch_scheduler(account: MultiAccountRepeatNewAccount, batch: MultiAc
     return batch.scheduler
 
 
+def _single_task_scheduler(script_name: str, entry: MultiAccountRepeatNewTask) -> Scheduler | None:
+    """按定时任务的私有覆盖规则取得独立单任务的原生 Scheduler。"""
+    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
+    public_scheduler = getattr(task_config, "scheduler", None)
+    if not isinstance(public_scheduler, Scheduler):
+        return None
+    data = public_scheduler.model_dump(mode="json")
+    private = entry.private_config.get("scheduler", {})
+    if isinstance(private, dict):
+        data.update(private)
+    return Scheduler.model_validate(data)
+
+
 def _apply_fixed_batch_scheduler(batch: MultiAccountRepeatNewFixedTimeBatch, scheduler: Scheduler) -> None:
     batch.scheduler = scheduler
+
+
+def _has_private_task_overrides(private_config: dict) -> bool:
+    """只有 scheduler 的运行时间不算任务参数私有配置。"""
+    for group_name, arguments in private_config.items():
+        if not isinstance(arguments, dict):
+            continue
+        if convert_to_underscore(group_name) == "scheduler" and set(arguments) <= {"enable", "next_run"}:
+            continue
+        return True
+    return False
 
 
 def _serialize_fixed_batch(account: MultiAccountRepeatNewAccount, batch: MultiAccountRepeatNewFixedTimeBatch) -> dict:
@@ -179,7 +229,8 @@ def _serialize_fixed_batch(account: MultiAccountRepeatNewAccount, batch: MultiAc
     scheduler = batch.scheduler
     return {
         "batch_id": batch.batch_id,
-        "name": batch.name or "固定时间特殊任务",
+        "item_type": batch.item_type,
+        "name": batch.name or "未命名顺序任务组",
         "enable": scheduler.enable,
         "run_time": scheduler.server_update.strftime("%H:%M"),
         "schedule_mode": getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode),
@@ -209,6 +260,34 @@ def _serialize_fixed_batch(account: MultiAccountRepeatNewAccount, batch: MultiAc
             }
             for task in batch.task_list if task.task_name
         ],
+    }
+
+
+
+def _serialize_single_task(script_name: str, entry: MultiAccountRepeatNewTask) -> dict:
+    now = datetime.now()
+    scheduler = _single_task_scheduler(script_name, entry)
+    enabled = bool(scheduler and scheduler.enable)
+    next_run = scheduler.next_run if scheduler is not None else None
+    progress_is_today = entry.task_progress_time.date() == now.date()
+    return {
+        "task_name": entry.task_name,
+        "name": _task_display_name(entry.task_name),
+        "item_type": "single",
+        "enable": enabled,
+        "next_run": next_run.isoformat(sep=" ", timespec="seconds") if next_run else None,
+        "due": bool(enabled and next_run and next_run <= now),
+        "schedule_status": "pending" if enabled and next_run and next_run <= now else "waiting",
+        "priority": scheduler.priority if scheduler else 5,
+        "last_complete_time": entry.last_complete_time.isoformat(sep=" ", timespec="seconds"),
+        "task_progress": {"status": entry.status if progress_is_today else "pending"},
+        "tasks": [{
+            "task_name": entry.task_name,
+            "task_display_name": _task_display_name(entry.task_name),
+            "enable": enabled,
+            "has_private_config": _has_private_task_overrides(entry.private_config),
+            "status": entry.status if progress_is_today else "pending",
+        }],
     }
 
 
@@ -349,7 +428,152 @@ def _sync_task_account(account: MultiAccountRepeatNewAccount, source: SharedPubl
     account.sync_public_account(source)
 
 
-@multi_account_repeat_new_fixed_app.get('/{script_name}/multi_account_repeat_new_fixed/accounts')
+@multi_account_task_orchestration_app.get('/{script_name}/shared-accounts')
+async def list_public_accounts(script_name: str):
+    library = _library(script_name)
+    accounts = []
+    for item in library.account_list:
+        if not item.identifier.strip():
+            continue
+        accounts.append({
+            "identifier": item.identifier,
+            "character": item.character,
+            "svr": item.svr,
+            "account": item.account,
+            "account_alias": item.account_alias,
+            "apple_or_android": item.apple_or_android,
+        })
+    return {"accounts": accounts}
+
+
+@multi_account_task_orchestration_app.post('/{script_name}/shared-accounts')
+async def add_public_account(script_name: str, identifier: str):
+    library = _library(script_name)
+    normalized = identifier.strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="账号标识不能为空")
+    if library.find(normalized) is not None:
+        raise HTTPException(status_code=400, detail="账号标识已存在")
+    library.account_list = [item for item in library.account_list if item.identifier.strip()]
+    library.account_list.append(SharedPublicAccount(identifier=normalized))
+    library.account_count = max(1, len(library.account_list))
+    _save(script_name, multi_account_shared_accounts=library)
+    return True
+
+
+@multi_account_task_orchestration_app.put('/{script_name}/shared-accounts/{identifier}/{field}/value')
+async def set_public_account_value(script_name: str, identifier: str, field: str, types: str, value):
+    library = _library(script_name)
+    account = _public_account(library, identifier)
+    field_name = convert_to_underscore(field)
+    if field_name == "identifier":
+        new_identifier = str(value).strip()
+        if not new_identifier:
+            raise HTTPException(status_code=400, detail="账号标识不能为空")
+        other = library.find(new_identifier)
+        if other is not None and other is not account:
+            raise HTTPException(status_code=400, detail="账号标识已存在")
+        old_identifier = account.identifier
+        account.identifier = new_identifier
+        sections = _all_shared_account_sections(script_name)
+        for section in sections.values():
+            for task_account in section.account_list:
+                if task_account.public_account_identifier == old_identifier:
+                    task_account.public_account_identifier = new_identifier
+                    _sync_task_account(task_account, account)
+        _save(script_name, multi_account_shared_accounts=library, **sections)
+        return True
+    if field_name not in {"character", "svr", "account", "account_alias", "apple_or_android"}:
+        raise HTTPException(status_code=400, detail="不支持修改该字段")
+    setattr(account, field_name, _convert_argument(types, value))
+    try:
+        library.__class__.model_validate(library.model_dump())
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=f"公共账号参数无效：{exc}") from exc
+    sections = _all_shared_account_sections(script_name)
+    for section in sections.values():
+        for task_account in section.account_list:
+            if task_account.public_account_identifier == account.identifier:
+                _sync_task_account(task_account, account)
+    _save(script_name, multi_account_shared_accounts=library, **sections)
+    return True
+
+
+@multi_account_task_orchestration_app.post('/{script_name}/shared-accounts/copy')
+async def copy_public_accounts_to_scripts(
+        script_name: str,
+        identifiers: str,
+        target_script_names: str,
+):
+    """将选定公共账号复制到其他脚本实例，不复制任务、调度和运行记录。"""
+    source_library = _library(script_name)
+    source_identifiers = [
+        item.strip()
+        for item in identifiers.split(',')
+        if item.strip()
+    ]
+    # 保持界面选择顺序，同时去重。
+    source_identifiers = list(dict.fromkeys(source_identifiers))
+    if not source_identifiers:
+        raise HTTPException(status_code=400, detail="请至少选择一个公共账号")
+    source_accounts = [_public_account(source_library, identifier) for identifier in source_identifiers]
+
+    target_names = [
+        item.strip()
+        for item in target_script_names.split(',')
+        if item.strip() and item.strip() != script_name and item.strip() != "template"
+    ]
+    target_names = list(dict.fromkeys(target_names))
+    if not target_names:
+        raise HTTPException(status_code=400, detail="请至少选择一个其他脚本")
+    available_names = set(mm.all_script_files())
+    unknown_names = [name for name in target_names if name not in available_names]
+    if unknown_names:
+        raise HTTPException(status_code=404, detail=f"目标脚本不存在：{', '.join(unknown_names)}")
+
+    for target_name in target_names:
+        target_library = _library(target_name)
+        target_sections = _all_shared_account_sections(target_name)
+        for source_account in source_accounts:
+            target_account = target_library.find(source_account.identifier)
+            if target_account is None:
+                target_library.account_list.append(source_account.model_copy(deep=True))
+                target_account = target_library.account_list[-1]
+            else:
+                # 标识相同视为同一个公共账号，只更新登录和角色资料，保留引用关系。
+                target_account.character = source_account.character
+                target_account.svr = source_account.svr
+                target_account.account = source_account.account
+                target_account.account_alias = source_account.account_alias
+                target_account.apple_or_android = source_account.apple_or_android
+            for section in target_sections.values():
+                for task_account in section.account_list:
+                    if task_account.public_account_identifier == target_account.identifier:
+                        _sync_task_account(task_account, target_account)
+        target_library.account_list = [
+            item for item in target_library.account_list if item.identifier.strip()
+        ]
+        target_library.account_count = max(1, len(target_library.account_list))
+        _save(
+            target_name,
+            multi_account_shared_accounts=target_library,
+            **target_sections,
+        )
+    return {"target_count": len(target_names), "account_count": len(source_accounts)}
+@multi_account_task_orchestration_app.delete('/{script_name}/shared-accounts/{identifier}')
+async def delete_public_account(script_name: str, identifier: str):
+    library = _library(script_name)
+    _public_account(library, identifier)
+    sections = _all_shared_account_sections(script_name)
+    library.account_list = [item for item in library.account_list if item.identifier != identifier]
+    library.account_count = max(1, len(library.account_list))
+    for section in sections.values():
+        section.account_list = [item for item in section.account_list if item.public_account_identifier != identifier]
+    _save(script_name, multi_account_shared_accounts=library, **sections)
+    return True
+
+
+@multi_account_task_orchestration_app.get('/{script_name}/multi_account_task_orchestration/accounts')
 async def list_task_accounts(script_name: str):
     section = _section(script_name)
     accounts = []
@@ -362,7 +586,6 @@ async def list_task_accounts(script_name: str):
             "account": item.account,
             "account_alias": item.account_alias,
             "apple_or_android": item.apple_or_android,
-            # 固定时间版只读取每个时间段内的任务；普通 task_list 仅为旧配置兼容保留。
             "fixed_time_batches": [
                 _serialize_fixed_batch(item, batch)
                 for _, batch in sorted(
@@ -375,13 +598,18 @@ async def list_task_accounts(script_name: str):
                     ),
                 )
             ],
+            "single_tasks": [
+                _serialize_single_task(script_name, task)
+                for task in item.task_list
+                if task.task_name
+            ],
         })
-    # 旧配置首次打开时会补齐各时间段的 Scheduler.NextRun，之后与 OAS 实例一样持久化更新。
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    # 旧配置首次打开时会补齐各任务组的 Scheduler.NextRun，之后与 OAS 实例一样持久化更新。
+    _save(script_name, multi_account_task_orchestration=section)
     return {"accounts": accounts}
 
 
-@multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts')
+@multi_account_task_orchestration_app.post('/{script_name}/multi_account_task_orchestration/accounts')
 async def add_task_account(script_name: str, public_account_identifier: str):
     section = _section(script_name)
     source = _public_account(_library(script_name), public_account_identifier)
@@ -391,20 +619,20 @@ async def add_task_account(script_name: str, public_account_identifier: str):
     _sync_task_account(account, source)
     section.account_list = [item for item in section.account_list if item.public_account_identifier.strip()]
     section.account_list.append(account)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.delete('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}')
+@multi_account_task_orchestration_app.delete('/{script_name}/multi_account_task_orchestration/accounts/{account_index}')
 async def delete_task_account(script_name: str, account_index: int):
     section = _section(script_name)
     account = _task_account(section, account_index)
     section.account_list.remove(account)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/tasks')
+@multi_account_task_orchestration_app.post('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks')
 async def add_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
@@ -418,23 +646,55 @@ async def add_task(script_name: str, account_index: int, task_name: str):
     if any(convert_to_underscore(item.task_name) == key for item in account.task_list):
         return True
     account.task_list.append(MultiAccountRepeatNewTask(task_name=key))
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.delete('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/tasks/{task_name}')
+@multi_account_task_orchestration_app.post('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/single-tasks')
+async def add_single_task(script_name: str, account_index: int, task_name: str):
+    """新增独立单任务：一个任务、一份私有配置、一个原生 Scheduler。"""
+    section = _section(script_name)
+    account = _task_account(section, account_index)
+    normalized = _normalize_batch_task_names(script_name, task_name)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="请选择要添加的任务")
+    key = normalized[0]
+    entry = next((item for item in account.task_list if item.task_name == key), None)
+    if entry is None:
+        # “启用任务”直接创建为启用状态；其下次运行时间完全按 OAS 原生
+        # Scheduler 的等待规则计算，避免沿用配置默认的历史 next_run。
+        entry = MultiAccountRepeatNewTask(
+            task_name=key,
+            private_config={"scheduler": {"enable": True}},
+        )
+        account.task_list.append(entry)
+    else:
+        entry.private_config.setdefault("scheduler", {})["enable"] = True
+
+    scheduler = _single_task_scheduler(script_name, entry)
+    if scheduler is not None and scheduler.enable and scheduler.next_run.year <= 2023:
+        scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
+        entry.private_config.setdefault("scheduler", {}).update(
+            scheduler.model_dump(mode="json")
+        )
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
+    return _serialize_single_task(script_name, entry)
+
+
+@multi_account_task_orchestration_app.delete('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks/{task_name}')
 async def delete_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
     account.task_list.remove(entry)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.get('/{script_name}/multi_account_repeat_new_fixed/fixed-time-tasks')
+@multi_account_task_orchestration_app.get('/{script_name}/multi_account_task_orchestration/fixed-time-tasks')
 async def list_fixed_time_tasks(script_name: str):
-    """返回所有可执行的普通任务，固定时间任务不再依赖账号普通任务列表。"""
+    """返回所有可编排的普通任务；任务组不依赖账号普通任务列表。"""
     model = mm.config_cache(script_name).model
     tasks_root = Path.cwd() / "tasks"
     tasks = []
@@ -456,57 +716,52 @@ async def list_fixed_time_tasks(script_name: str):
     return {"tasks": tasks}
 
 
-@multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches')
-async def add_fixed_time_batch(
-        script_name: str,
-        account_index: int,
-        name: str | None = None,
-        run_time: str | None = None,
-):
+@multi_account_task_orchestration_app.post('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches')
+async def add_fixed_time_batch(script_name: str, account_index: int, name: str | None = None, run_time: str | None = None):
     section = _section(script_name)
     account = _task_account(section, account_index)
-    batch_name = (name or "").strip() or "固定时间特殊任务"
-    if len(batch_name) > 40:
-        raise HTTPException(status_code=400, detail="特殊任务名称不能超过 40 个字符")
+    # “添加顺序任务组”即创建一个可运行的虚拟 OAS 任务：默认启用，
+    # 并立即以原生 Scheduler 的等待规则生成下一次运行时间。
     scheduler = Scheduler(enable=True)
     if run_time:
         try:
             scheduler.server_update = time.fromisoformat(run_time)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="运行时间格式错误，应为 HH:MM") from exc
-    # 与“多账号任务编排”的顺序任务组一致：新建即启用，并按 OAS
-    # Scheduler 的立即等待规则生成下一次运行时间，而不是留下 2023 默认值。
     scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
+    batch_name = (name or "").strip() or "未命名顺序任务组"
+    if len(batch_name) > 40:
+        raise HTTPException(status_code=400, detail="顺序任务组名称不能超过 40 个字符")
     batch = MultiAccountRepeatNewFixedTimeBatch(
         batch_id=uuid4().hex,
         name=batch_name,
         scheduler=scheduler,
     )
     account.fixed_time_batch_list.append(batch)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return _serialize_fixed_batch(account, batch)
 
 
-@multi_account_repeat_new_fixed_app.delete('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}')
+@multi_account_task_orchestration_app.delete('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}')
 async def delete_fixed_time_batch(script_name: str, account_index: int, batch_id: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
     batch = _batch(account, batch_id)
     account.fixed_time_batch_list.remove(batch)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/copy')
+@multi_account_task_orchestration_app.post('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/copy')
 async def copy_fixed_time_batch_to_accounts(
         script_name: str,
         account_index: int,
         batch_id: str,
         target_account_indexes: str,
 ):
-    """复制固定时间批次的周期、任务及批次私有配置，不复制运行记录。"""
+    """复制顺序任务组的调度、任务及私有配置，不复制运行记录。"""
     section = _section(script_name)
     source_account = _task_account(section, account_index)
     source_batch = _batch(source_account, batch_id)
@@ -526,7 +781,7 @@ async def copy_fixed_time_batch_to_accounts(
         if target_index == account_index:
             continue
         target_account = _task_account(section, target_index)
-        # 每个目标账号都创建独立批次，避免批次标识、进度和私有配置互相串用。
+        # 每个目标账号都创建独立任务组，避免标识、进度和私有配置互相串用。
         copied_batch = source_batch.model_copy(deep=True)
         copied_batch.batch_id = uuid4().hex
         copied_batch.last_complete_time = datetime(2023, 1, 1)
@@ -542,20 +797,20 @@ async def copy_fixed_time_batch_to_accounts(
         copied_count += 1
     if not copied_count:
         raise HTTPException(status_code=400, detail="没有可复制的目标账号")
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/enable')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/enable')
 async def set_fixed_time_batch_enable(script_name: str, account_index: int, batch_id: str, value: str):
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
     batch.scheduler.enable = _convert_argument("boolean", value)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/run-time')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/run-time')
 async def set_fixed_time_batch_run_time(script_name: str, account_index: int, batch_id: str, value: str):
     section = _section(script_name)
     try:
@@ -564,12 +819,12 @@ async def set_fixed_time_batch_run_time(script_name: str, account_index: int, ba
         batch.scheduler.next_run = _scheduler_next_run(batch.scheduler, run_now=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="运行时间格式错误，应为 HH:MM") from exc
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/schedule')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/schedule')
 async def set_fixed_time_batch_schedule(
         script_name: str,
         account_index: int,
@@ -579,7 +834,7 @@ async def set_fixed_time_batch_schedule(
         interval_days: int = 1,
         weekdays: str = "",
 ):
-    """一次性更新时间段的时间和运行周期。"""
+    """兼容旧接口：一次性更新任务组调度器的时间和周期。"""
     section = _section(script_name)
     try:
         parsed_time = time.fromisoformat(run_time)
@@ -610,17 +865,17 @@ async def set_fixed_time_batch_schedule(
     scheduler.delay_date = interval_days
     scheduler.weekdays = parsed_weekdays or list(range(1, 8))
     scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.get('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/scheduler/args')
+@multi_account_task_orchestration_app.get('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/scheduler/args')
 async def get_fixed_time_batch_scheduler_args(script_name: str, account_index: int, batch_id: str):
-    """直接返回特殊任务持有的原生 OAS Scheduler 表单数据。"""
+    """直接返回顺序任务组持有的原生 OAS Scheduler 表单数据。"""
     account = _task_account(_section(script_name), account_index)
     batch = _batch(account, batch_id)
-    # 固定时间段完整复用 OAS 原生 Scheduler 的所有字段。
+    # 顺序任务组完整复用 OAS 原生 Scheduler 的所有字段。
     allowed = {"enable", "next_run", "priority", "success_interval", "failure_interval", "server_update", "schedule_mode", "delay_date", "weekdays", "float_time"}
     arguments = [
         item for item in _serialize_group(_fixed_batch_scheduler(account, batch))
@@ -629,7 +884,7 @@ async def get_fixed_time_batch_scheduler_args(script_name: str, account_index: i
     return {"scheduler": arguments}
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/scheduler/{argument}/value')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/scheduler/{argument}/value')
 async def set_fixed_time_batch_scheduler_arg(
     script_name: str,
     account_index: int,
@@ -638,39 +893,47 @@ async def set_fixed_time_batch_scheduler_arg(
     types: str,
     value,
 ):
-    """使用 OAS 原生 Scheduler 的校验规则更新一个时间段。"""
+    """使用 OAS 原生 Scheduler 的校验规则更新一个顺序任务组。"""
     section = _section(script_name)
     account = _task_account(section, account_index)
     batch = _batch(account, batch_id)
     argument_name = convert_to_underscore(argument)
     allowed = {"enable", "next_run", "priority", "success_interval", "failure_interval", "server_update", "schedule_mode", "delay_date", "weekdays", "float_time"}
     if argument_name not in allowed:
-        raise HTTPException(status_code=400, detail="该时间段不支持修改此调度器参数")
+        raise HTTPException(status_code=400, detail="该顺序任务组不支持修改此调度器参数")
     try:
         scheduler_data = _fixed_batch_scheduler(account, batch).model_dump(mode="json")
         scheduler_data[argument_name] = _convert_argument(types, value)
         scheduler = Scheduler.model_validate(scheduler_data)
+        # 新建任务组默认未启用；首次启用时按原生 Scheduler 规则计算下次运行，
+        # 而不是沿用 2023-01-01 的占位时间立即执行。
+        if (
+            argument_name == "enable"
+            and scheduler.enable
+            and scheduler.next_run.year <= 2023
+        ):
+            scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
         _apply_fixed_batch_scheduler(batch, scheduler)
     except (ValidationError, ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"特殊任务调度器参数无效：{exc}") from exc
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+        raise HTTPException(status_code=400, detail=f"顺序任务组调度器参数无效：{exc}") from exc
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     await _broadcast_multi_account_overview(script_name)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/quick-schedule')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/quick-schedule')
 async def quick_schedule_fixed_time_batch(script_name: str, account_index: int, batch_id: str, run_now: bool = True):
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
     batch.scheduler.next_run = _scheduler_next_run(batch.scheduler, run_now=run_now)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     await _broadcast_multi_account_overview(script_name)
     return True
 
 
-@multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/rerun')
+@multi_account_task_orchestration_app.post('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/rerun')
 async def rerun_fixed_time_batch(script_name: str, account_index: int, batch_id: str):
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
@@ -679,11 +942,11 @@ async def rerun_fixed_time_batch(script_name: str, account_index: int, batch_id:
     batch.completed_task_list = ""
     batch.failed_task_list = ""
     batch.unfinished_task_list = ""
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/last-complete-time')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/last-complete-time')
 async def set_fixed_time_batch_last_complete_time(script_name: str, account_index: int, batch_id: str, value: str):
     try:
         parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
@@ -693,11 +956,11 @@ async def set_fixed_time_batch_last_complete_time(script_name: str, account_inde
         raise HTTPException(status_code=400, detail="完成时间格式错误，应为 YYYY-MM-DD HH:MM:SS") from exc
     section = _section(script_name)
     _batch(_task_account(section, account_index), batch_id).last_complete_time = parsed
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/order')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/order')
 async def reorder_fixed_time_batch_tasks(script_name: str, account_index: int, batch_id: str, task_names: str):
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
@@ -708,11 +971,11 @@ async def reorder_fixed_time_batch_tasks(script_name: str, account_index: int, b
         raise HTTPException(status_code=400, detail="排序任务必须与当前已启用任务完全一致")
     by_name = {convert_to_underscore(item.task_name): item for item in enabled}
     batch.task_list = [*(by_name[name] for name in requested), *(item for item in batch.task_list if not item.enable)]
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/status')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/status')
 async def set_fixed_time_batch_task_status(script_name: str, account_index: int, batch_id: str, task_name: str, value: str):
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
@@ -736,11 +999,11 @@ async def set_fixed_time_batch_task_status(script_name: str, account_index: int,
     batch.completed_task_list = "\n".join(_task_display_name(name) for name in completed)
     batch.failed_task_list = "\n".join(_task_display_name(name) for name in failed)
     batch.unfinished_task_list = "\n".join(_task_display_name(name) for name in unfinished)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks')
+@multi_account_task_orchestration_app.post('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks')
 async def add_fixed_time_batch_task(script_name: str, account_index: int, batch_id: str, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
@@ -756,12 +1019,12 @@ async def add_fixed_time_batch_task(script_name: str, account_index: int, batch_
         # 重新添加只恢复启用状态，保留之前停用时留下的私有配置和运行记录。
         entry.enable = True
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/enable')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/enable')
 async def set_fixed_time_batch_task_enable(
     script_name: str,
     account_index: int,
@@ -769,33 +1032,33 @@ async def set_fixed_time_batch_task_enable(
     task_name: str,
     value: str,
 ):
-    """停用或恢复时间段任务，不删除其私有配置和运行记录。"""
+    """停用或恢复任务组内任务，不删除其私有配置和运行记录。"""
     section = _section(script_name)
     account = _task_account(section, account_index)
     batch = _batch(account, batch_id)
     entry = _batch_task_entry(batch, task_name)
     entry.enable = _convert_argument("boolean", value)
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.delete('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}')
+@multi_account_task_orchestration_app.delete('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}')
 async def delete_fixed_time_batch_task(script_name: str, account_index: int, batch_id: str, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
     batch = _batch(account, batch_id)
     entry = _batch_task_entry(batch, task_name)
-    # OAS 左滑停用语义：不删除任务私有配置，仅取消当前时间段的启用状态。
+    # OAS 左滑停用语义：不删除任务私有配置，仅取消当前任务组的启用状态。
     entry.enable = False
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(section)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.get('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/args')
+@multi_account_task_orchestration_app.get('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/args')
 async def get_fixed_time_batch_task_args(script_name: str, account_index: int, batch_id: str, task_name: str):
     account = _task_account(_section(script_name), account_index)
     entry = _batch_task_entry(_batch(account, batch_id), task_name)
@@ -803,7 +1066,7 @@ async def get_fixed_time_batch_task_args(script_name: str, account_index: int, b
     return _apply_private_args(task_args, entry.private_config)
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/{group}/{argument}/value')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/{group}/{argument}/value')
 async def set_fixed_time_batch_task_arg(
         script_name: str, account_index: int, batch_id: str, task_name: str,
         group: str, argument: str, types: str, value,
@@ -812,7 +1075,7 @@ async def set_fixed_time_batch_task_arg(
     account = _task_account(section, account_index)
     entry = _batch_task_entry(_batch(account, batch_id), task_name)
     if convert_to_underscore(group) == "scheduler":
-        raise HTTPException(status_code=400, detail="不能在批次私有配置中修改调度参数")
+        raise HTTPException(status_code=400, detail="不能在任务组私有配置中修改调度参数")
     task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
     if not isinstance(task_config, BaseModel):
         raise HTTPException(status_code=400, detail="任务配置不存在")
@@ -827,24 +1090,24 @@ async def set_fixed_time_batch_task_arg(
                     _set_argument(candidate, group_name, name, item_value)
         candidate.__class__.model_validate(candidate.model_dump())
     except (ValidationError, ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"批次私有参数无效：{exc}") from exc
+        raise HTTPException(status_code=400, detail=f"任务组私有参数无效：{exc}") from exc
     entry.private_config = private
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/private/default')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/private/default')
 async def reset_fixed_time_batch_task_private_config_to_default(script_name: str, account_index: int, batch_id: str, task_name: str):
     # 恢复任务模型的默认值，而不是清空后继续继承公共配置。
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _batch_task_entry(_batch(account, batch_id), task_name)
     entry.private_config = _default_private_config(script_name, entry.task_name)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.get('/{script_name}/multi_account_repeat_new_fixed/public-args')
+@multi_account_task_orchestration_app.get('/{script_name}/multi_account_task_orchestration/public-args')
 async def get_public_args(script_name: str):
     section = _section(script_name)
     return {
@@ -853,7 +1116,7 @@ async def get_public_args(script_name: str):
     }
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/public-args/{group}/{argument}/value')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/public-args/{group}/{argument}/value')
 async def set_public_arg(script_name: str, group: str, argument: str, types: str, value):
     section = _section(script_name)
     group_name = convert_to_underscore(group)
@@ -865,25 +1128,24 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
         candidate = candidate.__class__.model_validate(candidate.model_dump())
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"公共参数无效：{exc}") from exc
-    _save(script_name, multi_account_repeat_new_fixed=candidate)
+    _save(script_name, multi_account_task_orchestration=candidate)
     return True
 
 
-@multi_account_repeat_new_fixed_app.get('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/tasks/{task_name}/args')
+@multi_account_task_orchestration_app.get('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks/{task_name}/args')
 async def get_private_args(script_name: str, account_index: int, task_name: str):
     account = _task_account(_section(script_name), account_index)
     entry = _task_entry(account, task_name)
-    task_args = _default_task_args(script_name, entry.task_name, remove_scheduler=True)
+    task_args = _default_task_args(script_name, entry.task_name, remove_scheduler=False)
     return _apply_private_args(task_args, entry.private_config)
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/tasks/{task_name}/{group}/{argument}/value')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks/{task_name}/{group}/{argument}/value')
 async def set_private_arg(script_name: str, account_index: int, task_name: str, group: str, argument: str, types: str, value):
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
-    if convert_to_underscore(group) == "scheduler":
-        raise HTTPException(status_code=400, detail="不能在私有配置中修改调度参数")
+    group_name = convert_to_underscore(group)
     task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
     if not isinstance(task_config, BaseModel):
         raise HTTPException(status_code=400, detail="任务配置不存在")
@@ -891,19 +1153,43 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
     candidate = task_config.__class__()
     try:
-        for group_name, arguments in private.items():
+        for candidate_group_name, arguments in private.items():
             if isinstance(arguments, dict):
                 for name, item_value in arguments.items():
-                    _set_argument(candidate, group_name, name, item_value)
+                    _set_argument(candidate, candidate_group_name, name, item_value)
         candidate.__class__.model_validate(candidate.model_dump())
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"私有参数无效：{exc}") from exc
     entry.private_config = private
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    if group_name == "scheduler":
+        scheduler = _single_task_scheduler(script_name, entry)
+        if scheduler is not None and scheduler.enable and scheduler.next_run.year <= 2023:
+            scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
+            entry.private_config.setdefault("scheduler", {}).update(
+                scheduler.model_dump(mode="json")
+            )
+        _refresh_fixed_batch_scheduler(section, script_name)
+        await _broadcast_multi_account_overview(script_name)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/tasks/{task_name}/private/copy')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/single-tasks/{task_name}/quick-schedule')
+async def quick_schedule_single_task(script_name: str, account_index: int, task_name: str, run_now: bool = True):
+    section = _section(script_name)
+    entry = _task_entry(_task_account(section, account_index), task_name)
+    scheduler = _single_task_scheduler(script_name, entry)
+    if scheduler is None:
+        raise HTTPException(status_code=400, detail="任务调度器不存在")
+    scheduler.next_run = _scheduler_next_run(scheduler, run_now=run_now)
+    entry.private_config.setdefault("scheduler", {}).update(scheduler.model_dump(mode="json"))
+    _refresh_fixed_batch_scheduler(section, script_name)
+    _save(script_name, multi_account_task_orchestration=section)
+    await _broadcast_multi_account_overview(script_name)
+    return True
+
+
+@multi_account_task_orchestration_app.post('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks/{task_name}/private/copy')
 async def copy_private_args_to_accounts(
         script_name: str,
         account_index: int,
@@ -947,11 +1233,11 @@ async def copy_private_args_to_accounts(
         copied_count += 1
     if not copied_count:
         raise HTTPException(status_code=400, detail="没有可复制的目标账号")
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 
-@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/tasks/{task_name}/private/default')
+@multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks/{task_name}/private/default')
 async def reset_private_args_to_default(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     entry = _task_entry(_task_account(section, account_index), task_name)
@@ -966,7 +1252,7 @@ async def reset_private_args_to_default(script_name: str, account_index: int, ta
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"默认私有参数无效：{exc}") from exc
     entry.private_config = private
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    _save(script_name, multi_account_task_orchestration=section)
     return True
 
 

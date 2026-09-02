@@ -1,23 +1,25 @@
 import copy
 import importlib.util
 import re
-from datetime import datetime, timedelta
+import random
+from hashlib import sha256
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Any, ClassVar
 
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
 from pydantic import BaseModel, ValidationError
-from module.config.utils import convert_to_underscore
-from tasks.MultiAccountRepeatNew.task_name_resolver import TaskNameResolver
+from module.config.utils import convert_to_underscore, parse_next_server_weekday, parse_tomorrow_server
+from tasks.MultiAccountTaskOrchestration.task_name_resolver import TaskNameResolver
 from tasks.Restart.server_update import build_server_update_delay_target, is_server_update_window
 from tasks.Component.MultiAccount.multi_account_priority import MultiAccountPriorityMixin
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.tree_switch_account import TreeSwitchAccount
 from tasks.GameUi.game_ui import GameUi
-from tasks.MultiAccountRepeatNew.assets import MultiAccountRepeatNewAssets
-from tasks.MultiAccountRepeatNew.config import (
-    MultiAccountRepeatNew,
+from tasks.MultiAccountTaskOrchestration.assets import MultiAccountRepeatNewAssets
+from tasks.MultiAccountTaskOrchestration.config import (
+    MultiAccountTaskOrchestration,
     MultiAccountRepeatNewAccount,
     MultiAccountRepeatNewFixedTimeBatch,
     MultiAccountRepeatNewFixedTimeBatchProgress,
@@ -27,15 +29,16 @@ from tasks.MultiAccountRepeatNew.config import (
 
 
 class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets, SwitchAccountAssets):
-    """多账号多任务新的独立执行器。"""
+    """多账号任务编排的统一执行器。"""
 
-    task_name: ClassVar[str] = "MultiAccountRepeatNew"
-    multi_account_config_attr: ClassVar[str] = "multi_account_repeat_new"
+    task_name: ClassVar[str] = "MultiAccountTaskOrchestration"
+    multi_account_config_attr: ClassVar[str] = "multi_account_task_orchestration"
     priority_config_attr: ClassVar[str] = "multi_account_repeat_new_config"
-    fade_conf: MultiAccountRepeatNew = None
+    fade_conf: MultiAccountTaskOrchestration = None
+    overview_kind: ClassVar[str] = "orchestration"
     task_retry_limit: ClassVar[int] = 3
     task_display_names: ClassVar[dict[str, str]] = {
-        "MultiAccountRepeatNew": "多账号多任务新",
+        "MultiAccountTaskOrchestration": "多账号任务编排",
     }
 
     def run(self):
@@ -45,14 +48,14 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         # 普通列表和混合版进入账号前统一拦截维护时间，避免切号后才发现停服。
         if self._delay_for_server_update_before_accounts():
             raise TaskEnd(self.task_name)
-        if self._has_fixed_time_batches():
-            return self._run_fixed_time_batches()
+        if self._has_orchestration_items():
+            return self._run_orchestration_items()
         overall_failed = False
 
         for account_info in self.fade_conf.account_list:
             self._yield_to_higher_priority_task()
             if not self._sync_account_from_public(account_info):
-                logger.error("多账号多任务新公共账号不存在：%s", account_info.public_account_identifier)
+                logger.error("多账号任务编排公共账号不存在：%s", account_info.public_account_identifier)
                 overall_failed = True
                 continue
             if not account_info.is_valid():
@@ -176,7 +179,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             and incomplete_accounts
         ):
             logger.warning(
-                "本轮结束后仍有账号今天未完成任务，重新执行一次多账号多任务新: %s",
+                "本轮结束后仍有账号今天未完成任务，重新执行一次多账号任务编排: %s",
                 ", ".join(incomplete_accounts),
             )
             # 第二次直接复用完整流程，由“今日已执行则跳过”自动跳过已完成账号。
@@ -202,218 +205,211 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         self.set_next_run(self.task_name, success=None, server=False, target=delay_target)
         return True
 
-    def _has_fixed_time_batches(self) -> bool:
-        """任一账号存在启用且含任务的固定时间批次时，使用批次调度模式。"""
-        return any(
-            batch.enable and batch.task_names
-            for account in self.fade_conf.account_list
-            for batch in account.fixed_time_batch_list
-        )
+    def _single_task_scheduler(self, entry: MultiAccountRepeatNewTask):
+        """独立单任务复用自身私有 Scheduler，和多账号定时使用同一覆盖方式。"""
+        task_config = getattr(self.config.model, convert_to_underscore(entry.task_name), None)
+        public_scheduler = getattr(task_config, "scheduler", None)
+        if public_scheduler is None:
+            return None
+        data = public_scheduler.model_dump(mode="json")
+        private_scheduler = entry.private_config.get("scheduler", {})
+        if isinstance(private_scheduler, dict):
+            data.update(private_scheduler)
+        return public_scheduler.__class__.model_validate(data)
 
-    @staticmethod
-    def _enabled_fixed_time_batches(
-        account_info: MultiAccountRepeatNewAccount,
-    ) -> list[MultiAccountRepeatNewFixedTimeBatch]:
+    def _enabled_single_tasks(self, account_info: MultiAccountRepeatNewAccount):
         return [
-            batch for batch in account_info.fixed_time_batch_list
-            if batch.enable and batch.task_names
+            entry for entry in account_info.task_list
+            if entry.task_name
+            and (scheduler := self._single_task_scheduler(entry)) is not None
+            and scheduler.enable
         ]
 
-    @staticmethod
-    def _is_fixed_batch_scheduled_on(
-        batch: MultiAccountRepeatNewFixedTimeBatch,
-        target_date,
-    ) -> bool:
-        """判断批次在指定日期是否应运行。"""
-        mode = getattr(batch, "schedule_mode", "daily")
-        if mode == "weekday":
-            weekdays = set(getattr(batch, "weekdays", []) or [])
-            return target_date.isoweekday() in weekdays
-        if mode == "interval":
-            last_run_time = getattr(batch, "last_run_time", datetime(2023, 1, 1))
-            return target_date >= last_run_time.date() + timedelta(days=max(1, batch.interval_days))
-        return True
-
-    @classmethod
-    def _is_fixed_batch_due(
-        cls,
-        batch: MultiAccountRepeatNewFixedTimeBatch,
-        now: datetime,
-    ) -> bool:
-        return (
-            batch.run_time <= now.time()
-            and cls._is_fixed_batch_scheduled_on(batch, now.date())
+    def _has_orchestration_items(self) -> bool:
+        """只要配置过任务组或独立单任务，就使用编排模式；未启用项绝不回退为旧普通任务执行。"""
+        return any(
+            batch.batch_id or batch.task_list
+            for account in self.fade_conf.account_list
+            for batch in account.fixed_time_batch_list
+        ) or any(
+            entry.task_name and isinstance(entry.private_config.get("scheduler"), dict)
+            for account in self.fade_conf.account_list
+            for entry in account.task_list
         )
 
-    @classmethod
-    def _next_fixed_batch_target(
-        cls,
-        batch: MultiAccountRepeatNewFixedTimeBatch,
-        now: datetime,
-        *,
-        allow_due_now: bool = False,
-    ) -> datetime | None:
-        """按批次周期寻找下一次时间；配置刚修改时允许已过点的当日批次立即执行。"""
-        for offset in range(367):
-            target_date = now.date() + timedelta(days=offset)
-            if not cls._is_fixed_batch_scheduled_on(batch, target_date):
-                continue
-            target = datetime.combine(target_date, batch.run_time)
-            if target > now or (allow_due_now and offset == 0):
-                return target
-        return None
+    @staticmethod
+    def _enabled_fixed_time_batches(account_info: MultiAccountRepeatNewAccount) -> list[MultiAccountRepeatNewFixedTimeBatch]:
+        return [batch for batch in account_info.fixed_time_batch_list if batch.scheduler.enable and batch.task_names]
 
     @staticmethod
-    def _batch_progress_for_today(
-        account_info: MultiAccountRepeatNewAccount,
-        batch: MultiAccountRepeatNewFixedTimeBatch,
-    ) -> MultiAccountRepeatNewFixedTimeBatchProgress:
-        progress = account_info.fixed_time_batch_progress.get(batch.batch_id)
-        if progress is None or progress.progress_time.date() != datetime.now().date():
+    def _batch_progress_for_today(batch: MultiAccountRepeatNewFixedTimeBatch) -> MultiAccountRepeatNewFixedTimeBatchProgress:
+        if batch.task_progress_time.date() != datetime.now().date():
             return MultiAccountRepeatNewFixedTimeBatchProgress()
-        return progress
+        return MultiAccountRepeatNewFixedTimeBatchProgress(
+            progress_time=batch.task_progress_time,
+            completed_task_list=batch.completed_task_list,
+            failed_task_list=batch.failed_task_list,
+            unfinished_task_list=batch.unfinished_task_list,
+        )
 
-    def _fixed_batch_task_names_to_run(
-        self,
-        account_info: MultiAccountRepeatNewAccount,
-        batch: MultiAccountRepeatNewFixedTimeBatch,
-    ) -> list[str]:
-        """按账号和批次恢复失败/中断项，已完成项不重复运行。"""
+    def _fixed_batch_task_names_to_run(self, batch: MultiAccountRepeatNewFixedTimeBatch) -> list[str]:
+        """恢复该顺序任务组自己的失败/中断项，已完成项不重复运行。"""
         configured = batch.task_names
-        progress = self._batch_progress_for_today(account_info, batch)
-        completed = set(progress.completed_task_names)
+        progress = self._batch_progress_for_today(batch)
         recovery = set(progress.failed_task_names) | set(progress.unfinished_task_names)
         if recovery:
             return [name for name in configured if name in recovery]
-        return [name for name in configured if name not in completed]
+        if batch.last_complete_time.date() == datetime.now().date():
+            return []
+        return [name for name in configured if name not in set(progress.completed_task_names)]
 
     def _save_fixed_batch_progress(
         self,
-        account_info: MultiAccountRepeatNewAccount,
         batch: MultiAccountRepeatNewFixedTimeBatch,
         completed_task_names: list[str],
         failed_task_names: list[str],
         unfinished_task_names: list[str],
     ) -> None:
-        """保存单账号单批次检查点，并刷新任务列表中的今日状态。"""
-        account_info.fixed_time_batch_progress[batch.batch_id] = MultiAccountRepeatNewFixedTimeBatchProgress(
-            progress_time=datetime.now(),
-            completed_task_list="\n".join(self._task_display_name(name) for name in dict.fromkeys(completed_task_names)),
-            failed_task_list="\n".join(self._task_display_name(name) for name in dict.fromkeys(failed_task_names)),
-            unfinished_task_list="\n".join(self._task_display_name(name) for name in dict.fromkeys(unfinished_task_names)),
-        )
-        self._refresh_fixed_batch_task_status(account_info)
+        """状态完全归属到顺序任务组，不再与同账号其他任务组共享。"""
+        batch.task_progress_time = datetime.now()
+        batch.completed_task_list = "\n".join(self._task_display_name(name) for name in dict.fromkeys(completed_task_names))
+        batch.failed_task_list = "\n".join(self._task_display_name(name) for name in dict.fromkeys(failed_task_names))
+        batch.unfinished_task_list = "\n".join(self._task_display_name(name) for name in dict.fromkeys(unfinished_task_names))
         self._save_repeat_config()
 
-    def _refresh_fixed_batch_task_status(self, account_info: MultiAccountRepeatNewAccount) -> None:
-        """将各批次当天状态汇总到账号普通任务列表，供旧页面状态标签使用。"""
-        completed: set[str] = set()
-        failed: set[str] = set()
-        unfinished: set[str] = set()
-        today = datetime.now().date()
-        for progress in account_info.fixed_time_batch_progress.values():
-            if progress.progress_time.date() != today:
-                continue
-            completed.update(progress.completed_task_names)
-            failed.update(progress.failed_task_names)
-            unfinished.update(progress.unfinished_task_names)
-        unfinished -= failed
-        completed -= failed | unfinished
-        account_info.completed_task_list = "\n".join(
-            self._task_display_name(name) for name in account_info.task_names if name in completed
-        )
-        account_info.failed_task_list = "\n".join(
-            self._task_display_name(name) for name in account_info.task_names if name in failed
-        )
-        account_info.unfinished_task_list = "\n".join(
-            self._task_display_name(name) for name in account_info.task_names if name in unfinished
-        )
-        account_info.task_progress_time = datetime.now()
+    @staticmethod
+    def _scheduler_next_run(scheduler, *, success: bool) -> datetime:
+        """复用 OAS Scheduler 成功/失败后的完整时间计算语义。"""
+        now = datetime.now().replace(microsecond=0)
+        interval = scheduler.success_interval if success else scheduler.failure_interval
+        next_run = now + interval
+        float_time = scheduler.float_time
+        random_float = random.randint(0, float_time.hour * 3600 + float_time.minute * 60 + float_time.second)
+        if scheduler.server_update == time(hour=9):
+            return next_run + timedelta(seconds=random_float)
+        mode = getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode)
+        if mode == "weekday":
+            return parse_next_server_weekday(scheduler.server_update, scheduler.weekdays, random_float)
+        return parse_tomorrow_server(scheduler.server_update, scheduler.delay_date, random_float)
 
-    def _run_fixed_time_batches(self):
-        """到点后按各账号自己的固定时间批次运行；同一账号在一轮中只切号一次。"""
+    def _build_due_fixed_batch_plan(self, now: datetime):
+        """收集账号下到点的顺序任务组，按原生 Scheduler 规则排序。"""
+        due_plan = []
+        for account_index, account_info in enumerate(self.fade_conf.account_list):
+            if not self._sync_account_from_public(account_info) or not account_info.is_valid() or not self._is_account_in_scope(account_info):
+                continue
+            for batch_index, batch in enumerate(self._enabled_fixed_time_batches(account_info)):
+                if batch.scheduler.next_run > now:
+                    continue
+                task_names = self._fixed_batch_task_names_to_run(batch)
+                if task_names:
+                    due_plan.append((account_index, batch_index, account_info, batch, task_names))
+        return sorted(due_plan, key=lambda item: (item[3].scheduler.priority, item[3].scheduler.next_run, item[0], item[1]))
+
+    def _run_orchestration_items(self):
+        """按同一 Scheduler 队列运行任务组与独立单任务。"""
         now = datetime.now()
-        overall_failed = False
-        # 新固定时间版会直接调用本方法，因此这里也必须独立拦截维护时间。
         if self._delay_for_server_update_before_accounts():
             raise TaskEnd(self.task_name)
-        for account_info in self.fade_conf.account_list:
+        due_plan = []
+        for account_index, account_info in enumerate(self.fade_conf.account_list):
+            if not self._sync_account_from_public(account_info) or not account_info.is_valid() or not self._is_account_in_scope(account_info):
+                continue
+            for item_index, batch in enumerate(self._enabled_fixed_time_batches(account_info)):
+                if batch.scheduler.next_run <= now and (task_names := self._fixed_batch_task_names_to_run(batch)):
+                    due_plan.append((batch.scheduler.priority, batch.scheduler.next_run, account_index, item_index, "group", account_info, batch, task_names))
+            for item_index, entry in enumerate(self._enabled_single_tasks(account_info)):
+                scheduler = self._single_task_scheduler(entry)
+                if scheduler is not None and scheduler.next_run <= now:
+                    due_plan.append((scheduler.priority, scheduler.next_run, account_index, item_index, "single", account_info, entry, [entry.task_name]))
+        due_plan.sort(key=lambda item: item[:4])
+        failed_account_ids: set[int] = set()
+        current_account_id: int | None = None
+        for _, _, account_index, _, item_type, account_info, item, task_names in due_plan:
             self._yield_to_higher_priority_task()
-            if not self._sync_account_from_public(account_info):
-                logger.error("多账号多任务新公共账号不存在：%s", account_info.public_account_identifier)
-                overall_failed = True
+            account_id = id(account_info)
+            if account_id in failed_account_ids:
                 continue
-            if not account_info.is_valid() or not self._is_account_in_scope(account_info):
-                continue
-            account_batches = [
-                (batch, self._fixed_batch_task_names_to_run(account_info, batch))
-                for batch in self._enabled_fixed_time_batches(account_info)
-                if self._is_fixed_batch_due(batch, now)
-            ]
-            account_batches = [item for item in account_batches if item[1]]
-            if not account_batches:
-                continue
-            logger.hr(f"处理账号 {account_info.character}-{account_info.svr}", 2)
-            logger.info("开始处理账号 %s-%s 的固定时间批次", account_info.character, account_info.svr)
-            if not self._switch_account(account_info):
-                overall_failed = True
-                self._push_error_notification(account_info, "切换账号", getattr(self, "_last_switch_error", None))
-                continue
-            for batch, task_names in account_batches:
-                if not self._run_fixed_time_batch(account_info, batch, task_names):
-                    overall_failed = True
-        # 固定时间批次只由各账号自己的批次时间决定，不受成功/失败间隔和服务器更新时间改写。
-        self.set_next_run(
-            self.task_name,
-            success=None,
-            server=False,
-            target=self._next_fixed_batch_run(now),
-        )
+            if current_account_id != account_id:
+                self.current_account_info = account_info
+                if not self._switch_account(account_info):
+                    failed_account_ids.add(account_id)
+                    current_account_id = None
+                    continue
+                current_account_id = account_id
+            payload = {"account_index": account_index + 1}
+            if item_type == "group":
+                payload["batch_id"] = item.batch_id
+            else:
+                payload["task_name"] = item.task_name
+            self._publish_multi_account_overview(self.overview_kind, payload)
+            if item_type == "group":
+                self._run_fixed_time_batch(account_info, item, task_names)
+            else:
+                self._run_single_orchestration_task(account_info, item)
+            self._publish_multi_account_overview(self.overview_kind, None)
+        next_run = self._next_orchestration_item_run()
+        self.set_next_run(self.task_name, success=None, server=False, target=next_run) if next_run else self.set_next_run(self.task_name, success=True, server=False)
         raise TaskEnd(self.task_name)
 
-    def _run_fixed_time_batch(
-        self,
-        account_info: MultiAccountRepeatNewAccount,
-        batch: MultiAccountRepeatNewFixedTimeBatch,
-        task_names: list[str],
-    ) -> bool:
-        """运行一个账号的一项固定时间批次，并在每项任务前后持久化检查点。"""
-        logger.hr(f"{account_info.character}-{account_info.svr} 固定时间批次 {batch.run_time.strftime('%H:%M')}", 3)
-        progress = self._batch_progress_for_today(account_info, batch)
+    def _run_single_orchestration_task(self, account_info: MultiAccountRepeatNewAccount, entry: MultiAccountRepeatNewTask) -> bool:
+        scheduler = self._single_task_scheduler(entry)
+        if scheduler is None:
+            return False
+        entry.task_progress_time = datetime.now()
+        entry.status = "running"
+        self._save_repeat_config()
+        success = self._run_task_with_retry(account_info, entry.task_name, entry)
+        entry.task_progress_time = datetime.now()
+        entry.status = "completed" if success else "failed"
+        if success:
+            entry.last_complete_time = datetime.now()
+        scheduler.next_run = self._scheduler_next_run(scheduler, success=success)
+        entry.private_config.setdefault("scheduler", {}).update(scheduler.model_dump(mode="json"))
+        self._save_repeat_config()
+        return success
+
+    def _run_fixed_time_batch(self, account_info: MultiAccountRepeatNewAccount, batch: MultiAccountRepeatNewFixedTimeBatch, task_names: list[str]) -> bool:
+        progress = self._batch_progress_for_today(batch)
         completed = list(dict.fromkeys(progress.completed_task_names))
         failed = list(dict.fromkeys(progress.failed_task_names))
         overall_failed = False
         for index, task_name in enumerate(task_names):
-            self._save_fixed_batch_progress(account_info, batch, completed, failed, task_names[index:])
-            entry = batch.task_entry(task_name)
-            if self._run_task_with_retry(account_info, task_name, entry):
+            self._save_fixed_batch_progress(batch, completed, failed, task_names[index:])
+            if self._run_task_with_retry(account_info, task_name, batch.task_entry(task_name)):
                 failed = [name for name in failed if name != task_name]
                 if task_name not in completed:
                     completed.append(task_name)
-                self._save_fixed_batch_progress(account_info, batch, completed, failed, task_names[index + 1:])
+                self._save_fixed_batch_progress(batch, completed, failed, task_names[index + 1:])
                 continue
             if task_name not in failed:
                 failed.append(task_name)
             completed = [name for name in completed if name != task_name]
-            self._save_fixed_batch_progress(account_info, batch, completed, failed, task_names[index + 1:])
+            self._save_fixed_batch_progress(batch, completed, failed, task_names[index + 1:])
             overall_failed = True
-        if not overall_failed:
-            # 只有整个批次成功后才推进间隔天数，失败任务仍可在当前计划日恢复执行。
-            batch.last_run_time = datetime.now()
-            self._save_fixed_batch_progress(account_info, batch, completed, [], [])
-        return not overall_failed
+        if overall_failed:
+            batch.scheduler.next_run = self._scheduler_next_run(batch.scheduler, success=False)
+            self._save_repeat_config()
+            return False
+        batch.last_complete_time = datetime.now()
+        batch.scheduler.next_run = self._scheduler_next_run(batch.scheduler, success=True)
+        self._save_fixed_batch_progress(batch, batch.task_names, [], [])
+        return True
 
-    def _next_fixed_batch_run(self, now: datetime | None = None) -> datetime | None:
-        """返回所有账号中下一项固定时间批次；已过点的批次安排到次日。"""
-        now = now or datetime.now()
-        targets = []
-        for account_info in self.fade_conf.account_list:
-            if not self._is_account_in_scope(account_info):
-                continue
-            for batch in self._enabled_fixed_time_batches(account_info):
-                target = self._next_fixed_batch_target(batch, now)
-                if target is not None:
-                    targets.append(target)
+    def _next_orchestration_item_run(self) -> datetime | None:
+        targets = [
+            batch.scheduler.next_run
+            for account in self.fade_conf.account_list
+            if self._is_account_in_scope(account)
+            for batch in self._enabled_fixed_time_batches(account)
+        ]
+        targets.extend(
+            scheduler.next_run
+            for account in self.fade_conf.account_list
+            if self._is_account_in_scope(account)
+            for entry in self._enabled_single_tasks(account)
+            if (scheduler := self._single_task_scheduler(entry)) is not None
+        )
         return min(targets) if targets else None
 
     @staticmethod

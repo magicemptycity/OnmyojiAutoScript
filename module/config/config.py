@@ -386,11 +386,25 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
                              scheduler.float_time.minute * 60 +
                              scheduler.float_time.second)
             random_float = random.randint(0, float_seconds)
-            # 如果有强制运行时间
+            # 默认 09:00:00 仍保持 OAS 原有行为；只有修改强制服务执行时间后，
+            # 才启用“间隔天数 / 指定星期”的强制日期规则。
             if scheduler.server_update == time(hour=9):
                 next_run += timedelta(seconds=random_float)
             else:
-                next_run = parse_tomorrow_server(scheduler.server_update, scheduler.delay_date, random_float)
+                schedule_mode = getattr(scheduler, 'schedule_mode', 'interval_days')
+                schedule_mode = getattr(schedule_mode, 'value', schedule_mode)
+                if schedule_mode == 'weekday':
+                    next_run = parse_next_server_weekday(
+                        scheduler.server_update,
+                        scheduler.weekdays,
+                        random_float,
+                    )
+                else:
+                    next_run = parse_tomorrow_server(
+                        scheduler.server_update,
+                        scheduler.delay_date,
+                        random_float,
+                    )
 
         # 将这些连接起来，方便日志输出
         kv = dict_to_kv(

@@ -1,11 +1,17 @@
 import copy
+import random
 import re
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
-from module.config.utils import convert_to_underscore
+from module.config.utils import (
+    convert_to_underscore,
+    parse_next_server_weekday,
+    parse_tomorrow_server,
+)
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
 from tasks.MultiAccountRepeatTimed.config import (
@@ -13,6 +19,7 @@ from tasks.MultiAccountRepeatTimed.config import (
     MultiAccountRepeatTimedTask,
 )
 from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
+from tasks.Component.config_base import TimeDelta
 from tasks.MultiAccountRepeatTimed.task_name_resolver import TASK_NAME_ALIASES, TaskNameResolver
 
 
@@ -37,13 +44,78 @@ def _save(script_name: str, **fields) -> None:
     mm.config_cache(script_name).save_selected_fields(fields)
 
 
-def _refresh_outer_scheduler(section) -> None:
+async def _broadcast_multi_account_overview(script_name: str) -> None:
+    """通过当前 OAS WebSocket 立即通知虚拟调度总览重排。"""
+    process = mm.script_process.get(script_name)
+    if process is not None:
+        await process.broadcast_state({
+            "multi_account_overview": {"kind": "timed"},
+        })
+
+
+def _entry_scheduler_enabled(script_name: str, entry: MultiAccountRepeatTimedTask) -> bool:
+    """读取任务自身 scheduler.enable，账号列表只展示已启用任务。"""
+    private_scheduler = entry.private_config.get("scheduler", {})
+    if isinstance(private_scheduler, dict) and "enable" in private_scheduler:
+        return bool(private_scheduler["enable"])
+    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
+    scheduler = getattr(task_config, "scheduler", None)
+    return bool(getattr(scheduler, "enable", False))
+
+
+def _entry_scheduler(script_name: str, entry: MultiAccountRepeatTimedTask):
+    """返回账号任务实际使用的 scheduler，保持与执行器的私有覆盖规则一致。"""
+    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
+    public_scheduler = getattr(task_config, "scheduler", None)
+    if public_scheduler is None:
+        return None
+    private_scheduler = entry.private_config.get("scheduler", {})
+    private_keys = set(private_scheduler) if isinstance(private_scheduler, dict) else set()
+    use_public = private_keys <= {"enable", "next_run"}
+    scheduler = copy.deepcopy(public_scheduler) if use_public else public_scheduler.__class__()
+    if isinstance(private_scheduler, dict):
+        # 私有配置在 JSON 中存储为字符串；通过模型重新校验，将时间、间隔和枚举恢复为正确类型。
+        scheduler_data = scheduler.model_dump(mode="json")
+        scheduler_data.update(private_scheduler)
+        scheduler = scheduler.__class__.model_validate(scheduler_data)
+    return scheduler
+
+
+def _scheduler_next_run(scheduler, *, run_now: bool) -> datetime:
+    """按 OAS quick run/quick wait 规则计算账号任务下次时间。"""
+    if run_now:
+        return datetime.now().replace(microsecond=0) - timedelta(days=1)
+    start = datetime.now().replace(microsecond=0)
+    interval = getattr(scheduler, "success_interval", timedelta(days=1))
+    next_run = start + interval
+    float_time = getattr(scheduler, "float_time", time.min)
+    float_seconds = float_time.hour * 3600 + float_time.minute * 60 + float_time.second
+    random_float = random.randint(0, float_seconds)
+    server_update = getattr(scheduler, "server_update", time(hour=9))
+    if server_update == time(hour=9):
+        return next_run + timedelta(seconds=random_float)
+    schedule_mode = getattr(scheduler, "schedule_mode", "interval_days")
+    schedule_mode = getattr(schedule_mode, "value", schedule_mode)
+    if schedule_mode == "weekday":
+        return parse_next_server_weekday(
+            server_update,
+            getattr(scheduler, "weekdays", list(range(1, 8))),
+            random_float,
+        )
+    return parse_tomorrow_server(
+        server_update,
+        getattr(scheduler, "delay_date", 1),
+        random_float,
+    )
+
+
+def _refresh_outer_scheduler(script_name: str, section) -> None:
     """保存前刷新外层任务时间，使其始终指向账号任务的最早时间。"""
     next_runs = [
         entry.next_run
         for account in section.account_list
         for entry in account.task_list
-        if entry.task_name and entry.next_run
+        if _entry_scheduler_enabled(script_name, entry) and entry.task_name and entry.next_run
     ]
     if next_runs:
         section.scheduler.next_run = min(next_runs).replace(microsecond=0)
@@ -51,7 +123,7 @@ def _refresh_outer_scheduler(section) -> None:
 
 def _save_timed_section(script_name: str, section) -> None:
     """保存定时版配置，并同步外层多账号任务的 next_run。"""
-    _refresh_outer_scheduler(section)
+    _refresh_outer_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_timed=section)
 
 
@@ -144,12 +216,31 @@ def _set_argument(model: BaseModel, group_name: str, argument_name: str, value) 
 
 
 def _convert_argument(types: str, value):
+    """转换 OASX 表单值，确保私有 Pydantic 配置可被序列化和校验。"""
     if types == "integer":
         return int(value)
     if types == "number":
         return float(value)
     if types == "boolean":
         return value.lower() in {"true", "1"} if isinstance(value, str) else bool(value)
+    if types == "date_time":
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    if types == "time":
+        return datetime.strptime(value, "%H:%M:%S").time()
+    if types == "time_delta":
+        day, clock = value.strip().split(maxsplit=1)
+        parsed = datetime.strptime(clock, "%H:%M:%S")
+        return TimeDelta(
+            days=int(day),
+            hours=parsed.hour,
+            minutes=parsed.minute,
+            seconds=parsed.second,
+        )
+    if types == "weekday_multi":
+        days = sorted({int(item.strip()) for item in str(value).split(",") if item.strip()})
+        if any(day < 1 or day > 7 for day in days):
+            raise ValueError("weekday must be between 1 and 7")
+        return days
     return value
 
 
@@ -194,6 +285,17 @@ def _default_task_args(script_name: str, task_name: str, *, remove_scheduler: bo
     return task_args
 
 
+def _timed_task_overview_sort_key(
+    item: dict,
+    index: int,
+) -> tuple:
+    """OAS 总览顺序：到点任务按优先级，等待任务按 NextRun 升序。"""
+    next_run = item["next_run_value"]
+    if item["schedule_status"] == "pending":
+        return (0, item["priority"], next_run, index)
+    return (1, next_run, index)
+
+
 def _sync_task_account(account: MultiAccountRepeatTimedAccount, source: SharedPublicAccount) -> None:
     account.sync_public_account(source)
 
@@ -206,6 +308,43 @@ async def list_task_accounts(script_name: str):
         completed = set(item.completed_task_names)
         failed = set(item.failed_task_names)
         unfinished = set(item.unfinished_task_names)
+        task_rows = []
+        now = datetime.now()
+        for task_index, task in enumerate(item.task_list):
+            if not task.task_name:
+                continue
+            scheduler = _entry_scheduler(script_name, task)
+            enabled = _entry_scheduler_enabled(script_name, task)
+            next_run = task.next_run
+            schedule_status = "pending" if enabled and next_run <= now else "waiting"
+            try:
+                priority = int(getattr(scheduler, "priority", 5))
+            except (TypeError, ValueError):
+                priority = 5
+            task_rows.append({
+                "task_name": task.task_name,
+                "task_display_name": _task_display_name(task.task_name),
+                "has_private_config": bool(task.private_config),
+                "enabled": enabled,
+                "next_run": next_run.isoformat(sep=" ", timespec="seconds"),
+                "next_run_value": next_run,
+                "priority": priority,
+                "schedule_status": schedule_status,
+                "status": (
+                    "failed" if task.task_name in failed
+                    else "unfinished" if task.task_name in unfinished
+                    else "completed" if task.task_name in completed
+                    else "pending"
+                ),
+                "_index": task_index,
+            })
+        task_rows.sort(
+            key=lambda row: _timed_task_overview_sort_key(row, row["_index"])
+        )
+        for row in task_rows:
+            row.pop("next_run_value", None)
+            row.pop("priority", None)
+            row.pop("_index", None)
         accounts.append({
             "index": index,
             "public_account_identifier": item.public_account_identifier,
@@ -214,21 +353,7 @@ async def list_task_accounts(script_name: str):
             "account": item.account,
             "account_alias": item.account_alias,
             "apple_or_android": item.apple_or_android,
-            "tasks": [
-                {
-                    "task_name": task.task_name,
-                    "task_display_name": _task_display_name(task.task_name),
-                    "has_private_config": bool(task.private_config),
-                    "next_run": task.next_run.isoformat(sep=" ", timespec="seconds"),
-                    "status": (
-                        "failed" if task.task_name in failed
-                        else "unfinished" if task.task_name in unfinished
-                        else "completed" if task.task_name in completed
-                        else "pending"
-                    ),
-                }
-                for task in item.task_list if task.task_name
-            ],
+            "tasks": task_rows,
         })
     return {"accounts": accounts}
 
@@ -267,9 +392,22 @@ async def add_task(script_name: str, account_index: int, task_name: str):
         raise HTTPException(status_code=400, detail="不能嵌套多账号多任务")
     if not _has_task_script(key):
         raise HTTPException(status_code=400, detail="该功能没有可执行任务，不能添加到多账号任务")
-    if any(convert_to_underscore(item.task_name) == key for item in account.task_list):
+    existing = next(
+        (item for item in account.task_list
+         if convert_to_underscore(item.task_name) == key),
+        None,
+    )
+    if existing is not None:
+        # 重新添加等同于重新启用，原有私有配置和调度时间全部保留。
+        existing.private_config.setdefault("scheduler", {})["enable"] = True
+        _save_timed_section(script_name, section)
         return True
-    account.task_list.append(MultiAccountRepeatTimedTask(task_name=key))
+    account.task_list.append(
+        MultiAccountRepeatTimedTask(
+            task_name=key,
+            private_config={"scheduler": {"enable": True}},
+        )
+    )
     _save_timed_section(script_name, section)
     return True
 
@@ -279,8 +417,41 @@ async def delete_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
-    account.task_list.remove(entry)
+    # DELETE 接口保留兼容旧客户端，但语义改为关闭 scheduler；配置不删除。
+    entry.private_config.setdefault("scheduler", {})["enable"] = False
     _save_timed_section(script_name, section)
+    return True
+
+
+@multi_account_repeat_timed_app.put('/{script_name}/multi_account_repeat_timed/accounts/{account_index}/tasks/{task_name}/enable')
+async def set_task_enable(script_name: str, account_index: int, task_name: str, value: str):
+    section = _section(script_name)
+    entry = _task_entry(_task_account(section, account_index), task_name)
+    entry.private_config.setdefault("scheduler", {})["enable"] = _convert_argument("boolean", value)
+    _save_timed_section(script_name, section)
+    return True
+
+
+@multi_account_repeat_timed_app.put('/{script_name}/multi_account_repeat_timed/accounts/{account_index}/tasks/{task_name}/quick-schedule')
+async def quick_schedule_task(
+    script_name: str,
+    account_index: int,
+    task_name: str,
+    run_now: bool = True,
+):
+    """提供与 OAS 任务行相同的立即执行/立即等待快捷调度。"""
+    section = _section(script_name)
+    entry = _task_entry(_task_account(section, account_index), task_name)
+    scheduler = _entry_scheduler(script_name, entry)
+    if scheduler is None:
+        raise HTTPException(status_code=400, detail="任务调度器不存在")
+    next_run = _scheduler_next_run(scheduler, run_now=run_now)
+    entry.next_run = next_run
+    entry.private_config.setdefault("scheduler", {})["next_run"] = next_run.strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    _save_timed_section(script_name, section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -301,8 +472,12 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
         raise HTTPException(status_code=400, detail="不支持修改该公共配置")
     candidate = copy.deepcopy(section)
     try:
-        _set_argument(candidate, group_name, argument, _convert_argument(types, value))
-        candidate = candidate.__class__.model_validate(candidate.model_dump())
+        candidate_data = candidate.model_dump(mode="json")
+        group_data = candidate_data.get(group_name)
+        if not isinstance(group_data, dict):
+            raise ValueError(f"找不到任务参数分组：{group_name}")
+        group_data[convert_to_underscore(argument)] = _convert_argument(types, value)
+        candidate = candidate.__class__.model_validate(candidate_data)
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"公共参数无效：{exc}") from exc
     _save_timed_section(script_name, candidate)
@@ -336,18 +511,26 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
     candidate = task_config.__class__()
     try:
+        candidate_data = candidate.model_dump(mode="json")
         for group_name, arguments in private.items():
-            if isinstance(arguments, dict):
-                for name, item_value in arguments.items():
-                    _set_argument(candidate, group_name, name, item_value)
-        candidate.__class__.model_validate(candidate.model_dump())
+            if not isinstance(arguments, dict):
+                continue
+            group_data = candidate_data.get(convert_to_underscore(group_name))
+            if not isinstance(group_data, dict):
+                raise ValueError(f"找不到任务参数分组：{group_name}")
+            for name, item_value in arguments.items():
+                group_data[convert_to_underscore(name)] = item_value
+        candidate = candidate.__class__.model_validate(candidate_data)
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"私有参数无效：{exc}") from exc
     entry.private_config = private
     # 定时版以任务项的 next_run 作为调度比较依据；私有调度器修改后同步两处。
-    if convert_to_underscore(group) == "scheduler" and convert_to_underscore(argument) == "next_run":
+    scheduler_changed = convert_to_underscore(group) == "scheduler"
+    if scheduler_changed and convert_to_underscore(argument) == "next_run":
         entry.next_run = candidate.scheduler.next_run
     _save_timed_section(script_name, section)
+    if scheduler_changed:
+        await _broadcast_multi_account_overview(script_name)
     return True
 
 

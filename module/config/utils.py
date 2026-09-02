@@ -273,6 +273,36 @@ def parse_tomorrow_server(server_update: time, delay_date: int = 1, float_second
     
     return next_run
 
+
+def parse_next_server_weekday(server_update: time, weekdays: list[int], float_seconds: int = 0) -> datetime:
+    """返回下一个指定星期的强制运行时间。星期使用 ISO 编号，周一为 1、周日为 7。"""
+    if isinstance(server_update, str):
+        server_update = time.fromisoformat(server_update)
+
+    valid_weekdays = sorted({day for day in weekdays if 1 <= day <= 7})
+    if not valid_weekdays:
+        # 空选择不是有效的星期规则，按每天处理，避免调度器失去下次运行时间。
+        valid_weekdays = list(range(1, 8))
+
+    now = datetime.now()
+    for offset in range(8):
+        candidate_date = now.date() + timedelta(days=offset)
+        candidate = datetime.combine(candidate_date, server_update)
+        if candidate > now and candidate_date.isoweekday() in valid_weekdays:
+            next_run = candidate
+            break
+    else:
+        raise ValueError(f'Unable to calculate next weekday run time: {valid_weekdays}')
+
+    if float_seconds:
+        next_run += timedelta(seconds=float_seconds)
+        start_of_day = datetime.combine(next_run.date(), time.min)
+        end_of_day = datetime.combine(next_run.date(), time(hour=23, minute=50))
+        next_run = max(start_of_day, min(next_run, end_of_day))
+
+    return next_run
+
+
 def deep_get(d, keys, default=None):
     """
     Get values in dictionary safely.

@@ -40,6 +40,9 @@ class MultiAccountKekkaiUtilizeNewAccount(ConfigBase, extra="allow"):
     account: str = Field(default="")
     account_alias: str = Field(default="")
     apple_or_android: bool = Field(default=True)
+    # 每个账号都是一个独立的“虚拟 OAS 蹭卡任务”，拥有完整 Scheduler。
+    scheduler: UtilizeScheduler = Field(default_factory=UtilizeScheduler)
+    # 兼容旧配置与旧客户端；运行时与 scheduler.next_run 始终同步。
     next_utilize_time: datetime = Field(
         default=datetime(2023, 1, 1),
         title="下一次蹭卡时间",
@@ -72,6 +75,16 @@ class MultiAccountKekkaiUtilizeNewAccount(ConfigBase, extra="allow"):
             return value
         data = dict(value)
         # 首版中空配置代表使用公共配置；新版改为每个账号各自使用默认配置。
+        if "scheduler" not in data:
+            data["scheduler"] = {
+                "enable": True,
+                "next_run": data.get("next_utilize_time", "2023-01-01 00:00:00"),
+            }
+        elif isinstance(data.get("scheduler"), dict) and "next_run" not in data["scheduler"]:
+            data["scheduler"] = {
+                **data["scheduler"],
+                "next_run": data.get("next_utilize_time", "2023-01-01 00:00:00"),
+            }
         if not data.get("private_config"):
             data["private_config"] = {"utilize_config": UtilizeConfig().model_dump()}
         if "forbid_periods" not in data:
@@ -88,6 +101,11 @@ class MultiAccountKekkaiUtilizeNewAccount(ConfigBase, extra="allow"):
             data["forbid_periods"] = periods
         data.pop("private_forbid_config", None)
         return data
+
+    @model_validator(mode="after")
+    def sync_legacy_next_utilize_time(self):
+        self.next_utilize_time = self.scheduler.next_run
+        return self
 
 
 class MultiAccountKekkaiUtilizeNew(ConfigBase, extra="allow"):
