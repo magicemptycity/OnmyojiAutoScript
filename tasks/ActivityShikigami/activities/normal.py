@@ -14,19 +14,45 @@ class NormalClimbAct:
 
     def setup_climb_pages(self):
         page_act = self.navigator.resolve_page(pages.page_act)
+        page_climb_main = self.navigator.resolve_page(pages.page_climb_main)
         page_pass = self.navigator.resolve_page(pages.page_climb_pass)
         page_ap = self.navigator.resolve_page(pages.page_climb_ap)
+        page_ap100 = self.navigator.resolve_page(pages.page_climb_ap100)
+        page_boss = self.navigator.resolve_page(pages.page_climb_boss)
 
-        page_act.connect(page_ap, ActivityShikigamiAssets.I_TO_BATTLE_MAIN, key='activity->climb_ap')
+        page_act.connect(
+            page_climb_main,
+            ActivityShikigamiAssets.I_TO_BATTLE_MAIN,
+            key='activity->climb_main',
+        )
+        page_climb_main.connect(
+            page_ap,
+            ActivityShikigamiAssets.I_TO_BATTLE_CLIMB,
+            key='climb_main->climb_ap',
+        )
         page_ap.add_enter_failure_hooks(pages.conditional_action(
             condition=ActivityShikigamiAssets.I_CLIMB_MODE_PASS,
             action=ActivityShikigamiAssets.I_CLIMB_MODE_SWITCH,
         ))
-        page_act.connect(page_pass, ActivityShikigamiAssets.I_TO_BATTLE_MAIN, key='activity->climb_pass')
+        page_climb_main.connect(
+            page_pass,
+            ActivityShikigamiAssets.I_TO_BATTLE_CLIMB,
+            key='climb_main->climb_pass',
+        )
         page_pass.add_enter_failure_hooks(pages.conditional_action(
             condition=ActivityShikigamiAssets.I_CLIMB_MODE_AP,
             action=ActivityShikigamiAssets.I_CLIMB_MODE_SWITCH,
         ))
+        page_climb_main.connect(
+            page_ap100,
+            ActivityShikigamiAssets.I_TO_BATTLE_CLIMB,
+            key='climb_main->climb_ap100',
+        )
+        page_climb_main.connect(
+            page_boss,
+            ActivityShikigamiAssets.I_TO_BATTLE_BOSS,
+            key='climb_main->climb_boss',
+        )
         page_pass.connect(page_ap, ActivityShikigamiAssets.I_CLIMB_MODE_SWITCH, key='climb_pass->climb_ap')
         page_ap.connect(page_pass, ActivityShikigamiAssets.I_CLIMB_MODE_SWITCH, key='climb_ap->climb_pass')
 

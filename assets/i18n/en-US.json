@@ -1,4 +1,7 @@
 {
+  "itachi_coin_shop": "Itachi Coin Purchase",
+  "itachi_coin_buy_jade": "Buy Jade with Itachi Coins",
+  "itachi_coin_buy_jade_help": "Buy the auto-forwarded Itachi gift boxes. Each box is opened only once; if the purchase dialog does not appear within three seconds, the weekly shop is treated as already purchased.",
   "ocr": "OCR Logs",
   "save_ocr_log": "Save OCR recognition logs",
   "save_ocr_log_help": "Disabled by default. When enabled, saves OCR input images and recognized text for debugging.",

@@ -2,8 +2,8 @@
   {
     "itemName": "to_battle_main",
     "imageName": "as_to_battle_main.png",
-    "roiFront": "598,407,39,139",
-    "roiBack": "533,291,155,370",
+    "roiFront": "318,179,90,104",
+    "roiBack": "287,125,149,201",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "进入爬塔主界面"
@@ -11,8 +11,8 @@
   {
     "itemName": "to_battle_boss",
     "imageName": "as_to_battle_boss.png",
-    "roiFront": "935,250,35,123",
-    "roiBack": "876,165,234,327",
+    "roiFront": "125,419,89,91",
+    "roiBack": "97,402,145,138",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "进入首领战斗页面"
@@ -34,5 +34,23 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "爬塔主界面标志"
+  },
+  {
+    "itemName": "to_battle_climb",
+    "imageName": "climb_to_battle_climb.png",
+    "roiFront": "68,98,140,33",
+    "roiBack": "32,83,247,97",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": ""
+  },
+  {
+    "itemName": "check_climb_main",
+    "imageName": "climb_check_climb_main.png",
+    "roiFront": "151,18,134,40",
+    "roiBack": "141,0,157,67",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": ""
   }
 ]

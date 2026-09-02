@@ -7,7 +7,7 @@
   "Chess": "百鬼棋局",
   "chess_config": "百鬼棋局配置",
   "rank_protection": "保段位",
-  "rank_protection_help": "上一局进入前四名后主动退出三局；主动退出的局数不计入执行次数",
+  "rank_protection_help": "上一局进入前四名后主动退出两局；主动退出的局数不计入执行次数",
   "run_count": "执行次数",
   "limit_time": "运行时间限制",
   "limit_time_help": "达到限制时间后不再开始下一局或下一场战斗，已经开始的战斗会正常完成",
@@ -235,6 +235,9 @@
   "earn_money": "获取樱灯饰",
   "earn_money_help": "通过放置借处式神获取500樱灯饰\n开启前确保已放置借出式神",
   "WeeklyPurchase": "每周购买",
+  "itachi_coin_shop": "鼬乐币购买",
+  "itachi_coin_buy_jade": "鼬乐币是否购买勾玉",
+  "itachi_coin_buy_jade_help": "启用后进入鼬乐园商店，购买右侧自动前移的鼬乐礼盒；商品只尝试打开一次，三秒内未出现购买框则认为本周已购买。",
   "ActivityShikigami": "式神活动",
   "activity_shikigami": "式神活动",
   "scheduler": "任务调度",
@@ -319,5 +322,6 @@
   "long_rest_duration_help": "触发累计活跃上限后的强制休息时长。格式：天 时:分:秒。",
   "min_run_interval": "最小再运行间隔",
   "min_run_interval_help": "防风控：两次蹭卡运行之间的最小间隔，避免蹭卡过于频繁被服务端标记。设为 0（默认）保持原逻辑（按结界卡剩余时间安排下次）。格式：天 时:分:秒。",
-  "costume_shikigami_11": "花礼幕台"
+  "costume_shikigami_11": "花札幕台",
+  "costume_main_17": "狐栖归处"
 }

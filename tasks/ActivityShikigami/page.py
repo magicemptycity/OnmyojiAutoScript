@@ -160,25 +160,29 @@ page_act.add_enter_failure_hooks(
 page_act.connect(page_main, GlobalGameAssets.I_UI_BACK_YELLOW, key='activity->main')
 page_main.connect(page_act, ActivityShikigamiAssets.I_MAIN_GOTO_ACT, key='main->activity')
 
+# 当期爬塔入口中间层。
+page_climb_main = Page(ActivityShikigamiAssets.I_CHECK_CLIMB_MAIN)
+page_climb_main.connect(page_act, GlobalGameAssets.I_UI_BACK_YELLOW, key='climb_main->activity')
+
 # 当期爬塔四种战斗页面。
 page_climb_ap = Page(all_of(
     ActivityShikigamiAssets.I_CHECK_BATTLE_PASS,
     ActivityShikigamiAssets.I_CLIMB_MODE_AP,
 ))
-page_climb_ap.connect(page_act, GlobalGameAssets.I_UI_BACK_YELLOW, key='climb_ap->activity')
+page_climb_ap.connect(page_climb_main, GlobalGameAssets.I_UI_BACK_YELLOW, key='climb_ap->climb_main')
 
 page_climb_pass = Page(all_of(
     ActivityShikigamiAssets.I_CHECK_BATTLE_PASS,
     ActivityShikigamiAssets.I_CLIMB_MODE_PASS,
 ))
-page_climb_pass.connect(page_act, GlobalGameAssets.I_UI_BACK_YELLOW, key='climb_pass->activity')
+page_climb_pass.connect(page_climb_main, GlobalGameAssets.I_UI_BACK_YELLOW, key='climb_pass->climb_main')
 
 page_climb_ap100 = Page(ActivityShikigamiAssets.I_CLIMB_MODE_AP100)
 page_climb_ap100.add_enter_failure_hooks(GlobalGameAssets.I_UI_BACK_RED)
+page_climb_ap100.connect(page_climb_main, GlobalGameAssets.I_UI_BACK_YELLOW, key='climb_ap100->climb_main')
 
 page_climb_boss = Page(ActivityShikigamiAssets.I_AS_BOSS_FIRE)
-page_climb_boss.connect(page_act, GlobalGameAssets.I_UI_BACK_YELLOW, key='climb_boss->activity')
-page_act.connect(page_climb_boss, ActivityShikigamiAssets.I_TO_BATTLE_BOSS, key='activity->climb_boss')
+page_climb_boss.connect(page_climb_main, GlobalGameAssets.I_UI_BACK_YELLOW, key='climb_boss->climb_main')
 
 # 大富翁棋盘。
 page_rich_man = Page(ActivityShikigamiAssets.I_CHECK_RM_RICHMAN)

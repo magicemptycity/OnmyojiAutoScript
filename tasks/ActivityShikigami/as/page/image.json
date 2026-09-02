@@ -20,7 +20,7 @@
   {
     "itemName": "check_battle_main",
     "imageName": "as_check_battle_main.png",
-    "roiFront": "151,18,164,40",
+    "roiFront": "151,18,141,41",
     "roiBack": "141,0,192,69",
     "method": "Template matching",
     "threshold": 0.8,
@@ -47,8 +47,8 @@
   {
     "itemName": "activity_signin_close",
     "imageName": "as_activity_signin_close.png",
-    "roiFront": "1100,186,40,32",
-    "roiBack": "1072,160,94,85",
+    "roiFront": "1137,179,40,32",
+    "roiBack": "1113,150,94,85",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "活动签到附属页面关闭按钮"
