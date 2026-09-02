@@ -33,6 +33,8 @@ class SwitchAccountAssets:
 	C_SA_EG_PROFILE_PHOTO = RuleClick(roi_front=(35,35,55,55), roi_back=(35,35,55,55), name="sa_eg_profile_photo")
 	# 选择服务器界面 底部角色名 列表---与ocr.json中同名对象区域一致 
 	C_SA_SELECT_SVR_CHARACTER_LIST = RuleClick(roi_front=(422,131,654,495), roi_back=(422,131,654,495), name="sa_select_svr_character_list")
+	# 登录界面-进入游戏按钮(旧的页面) 
+	C_SA_LOGIN_FORM_SWITCH_SVR_BTN_OLED = RuleClick(roi_front=(539,170,40,289), roi_back=(539,170,40,289), name="sa_login_form_switch_svr_btn_oled")
 
 
 	# Image Rule Assets
@@ -79,6 +81,8 @@ class SwitchAccountAssets:
 	O_SA_ACCOUNT_ACCOUNT_LIST = RuleOcr(roi=(460,280,440,330), area=(460,280,440,330), mode="FULL", method="Default", keyword="", name="sa_account_account_list")
 	# 选择账号界面 已选择的账号 
 	O_SA_ACCOUNT_ACCOUNT_SELECTED = RuleOcr(roi=(460,280,370,50), area=(460,280,370,50), mode="SINGLE", method="Default", keyword="", name="sa_account_account_selected")
+	# 登录页面服务器名称(OLED) 
+	O_SA_LOGIN_FORM_SVR_NAME_OLED = RuleOcr(roi=(536,169,41,227), area=(536,169,41,227), mode="SINGLE", method="Default", keyword="", name="sa_login_form_svr_name_oled")
 	# 登录界面 用户中心(区别于游戏内用户中心) 账户名 
 	O_SA_LOGIN_FORM_USER_CENTER_ACCOUNT = RuleOcr(roi=(290,185,290,50), area=(290,185,290,50), mode="SINGLE", method="Default", keyword="", name="sa_login_form_user_center_account")
 

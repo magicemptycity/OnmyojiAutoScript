@@ -64,5 +64,11 @@
     "roiFront": "422,131,654,495",
     "roiBack": "422,131,654,495",
     "description": "选择服务器界面 底部角色名 列表---与ocr.json中同名对象区域一致"
+  },
+  {
+    "itemName": "sa_login_form_switch_svr_btn_oled",
+    "roiFront": "539,170,40,289",
+    "roiBack": "539,170,40,289",
+    "description": "登录界面-进入游戏按钮(旧的页面)"
   }
 ]

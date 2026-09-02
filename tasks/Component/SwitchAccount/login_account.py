@@ -16,8 +16,13 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
 
     def get_svr_name(self):
         self.screenshot()
-        ocrRes = self.O_SA_LOGIN_FORM_SVR_NAME.ocr(self.device.image)
-        return ocrRes
+        if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME):
+            ocrRes = self.O_SA_LOGIN_FORM_SVR_NAME.ocr(self.device.image)
+            return ocrRes
+        if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME_OLED):
+            ocrRes = self.O_SA_LOGIN_FORM_SVR_NAME_OLED.ocr(self.device.image)
+            return ocrRes
+        return None
 
     def select_target(self, characterName: str, svrName: str = None) -> bool:
         """
@@ -40,15 +45,28 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
         # ---------- 保留原 switch_svr 的当前服务器检查 ----------
         if svrName:
             self.O_SA_LOGIN_FORM_SVR_NAME.keyword = svrName
+            self.O_SA_LOGIN_FORM_SVR_NAME_OLED.keyword = svrName
             self.screenshot()
             if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME):
                 logger.info("current svr is %s, no need to switch", svrName)
                 return True
+            if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME_OLED):
+                logger.info("current svr is %s, no need to switch", svrName)
+                return True
         # ------------------------------------------------------
+        self.O_SA_LOGIN_FORM_SVR_NAME.keyword = ""
+        logger.info("Reset SVR name keyword: %s", self.O_SA_LOGIN_FORM_SVR_NAME.keyword)
+        self.O_SA_LOGIN_FORM_SVR_NAME_OLED.keyword = ""
+        logger.info("Reset SVR name keyword (OLED): %s", self.O_SA_LOGIN_FORM_SVR_NAME_OLED.keyword)
+
 
         # 点击“切换服务器”按钮，进入选择区域界面
-        if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME):
+        self.screenshot()
+        svr_text = self.O_SA_LOGIN_FORM_SVR_NAME.ocr(self.device.image)
+        if svr_text:
             self.ui_click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN, self.I_SA_CHECK_SELECT_SVR_4, interval=3)
+        else:
+            self.ui_click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN_OLED, self.I_SA_CHECK_SELECT_SVR_4, interval=3)        
 
         # ---------- 辅助匹配函数 ----------
         def exact_match(target, candidates):

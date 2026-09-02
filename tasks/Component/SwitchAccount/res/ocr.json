@@ -45,6 +45,15 @@
     "description": "选择账号界面 已选择的账号"
   },
   {
+    "itemName": "sa_login_form_svr_name_oled",
+    "roiFront": "536,169,41,227",
+    "roiBack": "536,169,41,227",
+    "mode": "SINGLE",
+    "method": "Default",
+    "keyword": "",
+    "description": "登录页面服务器名称(OLED)"
+  },
+  {
     "itemName": "sa_login_form_user_center_account",
     "roiFront": "290,185,290,50",
     "roiBack": "290,185,290,50",
