@@ -10,11 +10,18 @@ from module.atom.list import RuleList
 class ActivityShikigamiAssets: 
 
 
+	# Click Rule Assets
+	#  
+	C_CL_SELECT_EASY = RuleClick(roi_front=(1166,171,71,63), roi_back=(1166,171,71,63), name="cl_select_easy")
+	#  
+	C_CL_SELECT_HARD = RuleClick(roi_front=(1121,340,71,63), roi_back=(1121,340,71,63), name="cl_select_hard")
+
+
 	# Image Rule Assets
 	# 上锁图标 
-	I_LOCK = RuleImage(roi_front=(796,653,31,30), roi_back=(760,628,330,86), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_lock.png")
+	I_LOCK = RuleImage(roi_front=(868,653,31,30), roi_back=(760,628,330,86), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_lock.png")
 	# 还未上锁图片 
-	I_UNLOCK = RuleImage(roi_front=(796,653,31,30), roi_back=(752,625,313,92), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_unlock.png")
+	I_UNLOCK = RuleImage(roi_front=(868,653,31,30), roi_back=(752,625,313,92), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_unlock.png")
 	# 活动爬塔标志 
 	I_CLIMB_MODE_PASS = RuleImage(roi_front=(1143,544,21,21), roi_back=(1118,510,119,186), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_climb_mode_pass.png")
 	# 体力爬塔标志 
@@ -35,19 +42,25 @@ class ActivityShikigamiAssets:
 	I_FIGHT_PENTA_USE = RuleImage(roi_front=(867,650,31,30), roi_back=(755,631,330,86), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/climb_fight_penta_use.png")
 	# 不使用五倍卷 
 	I_FIGHT_PENTA_DISUSE = RuleImage(roi_front=(867,650,31,30), roi_back=(746,629,330,86), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/climb_fight_penta_disuse.png")
+	#  
+	I_CHECK_CLIMB_HARD = RuleImage(roi_front=(398,149,38,155), roi_back=(393,144,48,165), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/climb_check_climb_hard.png")
+	#  
+	I_CHECK_CLIMB_EASY = RuleImage(roi_front=(398,149,38,155), roi_back=(393,144,48,165), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/climb_check_climb_easy.png")
 
 
 	# Ocr Rule Assets
 	# 体力的数量检测 
-	O_REMAIN_AP = RuleOcr(roi=(1123,24,95,34), area=(1123,24,95,34), mode="Quantity", method="Default", keyword="", name="remain_ap")
-	# 活动体力的剩余检测 
-	O_REMAIN_PASS = RuleOcr(roi=(539,23,88,31), area=(539,23,88,31), mode="Digit", method="Default", keyword="", name="remain_pass")
+	O_REMAIN_AP = RuleOcr(roi=(1142,14,95,34), area=(1142,14,95,34), mode="Quantity", method="Default", keyword="", name="remain_ap")
+	# 活动门票的剩余检测 
+	O_REMAIN_PASS = RuleOcr(roi=(756,17,88,31), area=(756,17,88,31), mode="Digit", method="Default", keyword="", name="remain_pass")
 	# boss剩余攻击次数 
 	O_REMAIN_BOSS = RuleOcr(roi=(1169,668,70,30), area=(1169,668,70,30), mode="Digit", method="Default", keyword="", name="remain_boss")
 	# 100体活动门票检测 
-	O_REMAIN_AP100 = RuleOcr(roi=(923,20,113,40), area=(911,8,129,61), mode="Digit", method="Default", keyword="", name="remain_ap100")
+	O_REMAIN_AP100 = RuleOcr(roi=(936,16,99,42), area=(911,8,129,61), mode="Digit", method="Default", keyword="", name="remain_ap100")
 	# 五倍卷剩余数量 
-	O_REMAIN_PENTA_PASS = RuleOcr(roi=(707,21,113,40), area=(698,9,129,61), mode="Digit", method="Default", keyword="", name="remain_penta_pass")
+	O_REMAIN_PENTA_PASS = RuleOcr(roi=(948,13,93,34), area=(948,13,93,34), mode="Digit", method="Default", keyword="", name="remain_penta_pass")
+	# 剩余体力门票 
+	O_REMAIN_AP_PASS = RuleOcr(roi=(567,14,93,34), area=(567,14,93,34), mode="Digit", method="Default", keyword="", name="remain_ap_pass")
 
 
 	# Image Rule Assets

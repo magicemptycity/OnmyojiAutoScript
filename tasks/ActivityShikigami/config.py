@@ -28,7 +28,7 @@ ACTIVITY_NAME_ALIASES = {
     '伪神': '伪神降临',
     '伪神降临': '伪神降临',
 }
-CLIMB_TYPES = ('ap', 'pass', 'boss', 'ap100')
+CLIMB_TYPES = ('pass', 'ap', 'boss', 'ap100')
 BATTLE_TYPES = ('rich_man', *CLIMB_TYPES, 'fakegod')
 
 
@@ -40,7 +40,11 @@ class GeneralConfig(ConfigBase):
     )
     throw_limit: int = Field(default=0, title='Throw Limit', ge=0)
     ap_limit: int = Field(default=0, title='Ap Limit', ge=0)
-    pass_limit: int = Field(default=0, title='Pass Limit', ge=0)
+    pass_limit: str = Field(
+        default='0',
+        title='Pass Limit',
+        description='pass_limit_help',
+    )
     boss_limit: int = Field(default=0, title='Boss Limit', ge=0)
     ap100_limit: int = Field(default=0, title='Ap100 Limit', ge=0)
     fakegod_limit: int = Field(default=0, title='Fakegod Limit', ge=0)
@@ -91,7 +95,23 @@ class GeneralConfig(ConfigBase):
     @property
     def climb_sequence_v(self) -> list[str]:
         """爬塔四种战斗按 UI 约定顺序执行，并跳过次数为零的项。"""
-        return [name for name in CLIMB_TYPES if getattr(self, f'{name}_limit') > 0]
+        return [name for name in CLIMB_TYPES if self.limit_for(name) > 0]
+
+    @property
+    def pass_limits_v(self) -> tuple[int, int]:
+        """返回门票简单、困难模式的次数限制。"""
+        parts = [int(part) for part in self.pass_limit.split(',')]
+        if len(parts) == 1:
+            return parts[0], 0
+        return parts[0], parts[1]
+
+    def pass_limit_for(self, mode: str) -> int:
+        easy_limit, hard_limit = self.pass_limits_v
+        if mode == 'easy':
+            return easy_limit
+        if mode == 'hard':
+            return hard_limit
+        raise ValueError(f'Unsupported pass mode: {mode}')
 
     def activity_enabled(self, activity_name: str) -> bool:
         field = ACTIVITY_NAME_TO_FIELD[activity_name]
@@ -102,8 +122,21 @@ class GeneralConfig(ConfigBase):
         return self.fakegod_limit > 0
 
     def limit_for(self, action_type: str) -> int:
+        if action_type == 'pass':
+            return sum(self.pass_limits_v)
         field = 'throw_limit' if action_type == 'rich_man' else f'{action_type}_limit'
         return getattr(self, field, 0)
+
+    @validator('pass_limit', pre=True, always=True)
+    def parse_pass_limit(cls, value):
+        """兼容“简单次数”及“简单次数,困难次数”两种写法。"""
+        raw_value = '0' if value is None else str(value).strip()
+        parts = [part.strip() for part in raw_value.split(',')]
+        if len(parts) not in (1, 2) or any(not part for part in parts):
+            raise ValueError('门票战斗次数必须填写数字或“简单次数,困难次数”')
+        if any(not part.isdigit() for part in parts):
+            raise ValueError('门票战斗次数只能填写非负整数')
+        return ','.join(str(int(part)) for part in parts)
 
     @validator('limit_time', pre=True, always=True)
     def parse_limit_time(cls, value):
