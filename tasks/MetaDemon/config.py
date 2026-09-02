@@ -112,10 +112,11 @@ class MetaDemonSwitchSoulConfig(ConfigBase):
 class MetaDemonScheduler(Scheduler):
     wait_interval: TimeDelta = Field(default=TimeDelta(hours=1, minutes=40), description='疲劳度满时等多长时间后再次运行本任务,建议设置等待完全恢复疲劳度所需的时间\n例:100分钟恢复100点疲劳度,再次运行必定可以继续战斗')
 
-    hide_fields = dynamic_hide('server_update', 'delay_date')
+    hide_fields = dynamic_hide('server_update', 'schedule_mode', 'delay_date', 'weekdays')
 
 
 class MetaDemon(ConfigBase):
     scheduler: MetaDemonScheduler = Field(default_factory=MetaDemonScheduler)
     meta_demon_config: MetaDemonConfig = Field(default_factory=MetaDemonConfig)
     switch_soul: MetaDemonSwitchSoulConfig = Field(default_factory=MetaDemonSwitchSoulConfig)
+

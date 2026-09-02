@@ -81,8 +81,8 @@ class ScriptTask(GameUi, CollectiveMissionsAssets):
             logger.info("Try switch to next mission")
             switch_fail_cnt = 0 if pre_mission != mission_text else (switch_fail_cnt + 1)
             pre_mission = mission_text
-            if self.appear_then_click(self.I_CM_SWITCH, interval=0.6):
-                sleep(random.uniform(0.6, 1.2))
+            if self.appear_then_click(self.I_CM_SWITCH, interval=1):
+                sleep(random.uniform(1, 1.5))
                 switch_cnt += 1
                 self.device.click_record_clear()
 

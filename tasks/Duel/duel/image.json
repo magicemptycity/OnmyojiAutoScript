@@ -187,5 +187,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "胜利分享"
+  },
+  {
+    "itemName": "d_xiaobai",
+    "imageName": "duel_d_xiaobai.png",
+    "roiFront": "386,301,54,59",
+    "roiBack": "252,232,284,252",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "小白弹窗"
   }
 ]

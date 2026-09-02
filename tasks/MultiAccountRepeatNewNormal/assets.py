@@ -1,0 +1,2 @@
+class MultiAccountRepeatNewAssets:
+    pass

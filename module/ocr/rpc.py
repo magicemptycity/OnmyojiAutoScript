@@ -18,10 +18,8 @@ import zerorpc
 
 from module.exception import ScriptError
 from module.logger import logger
-from module.ocr.ppocr import TextSystem
+from module.ocr.backend import create_ocr_text_system, normalize_ocr_backend
 
-# OCR 服务始终通过全新解释器启动，避免继承父进程中已初始化的 RPC 运行时状态。
-_OCR_SERVER_CONTEXT = multiprocessing.get_context("spawn")
 _OCR_SERVER_PROCESS: Optional[multiprocessing.Process] = None
 _OCR_CLIENT_CACHE: dict[str, "ModelProxy"] = {}
 
@@ -56,12 +54,22 @@ def _is_port_in_use(host: str, port: int) -> bool:
 @dataclass(slots=True)
 class OcrServerSettings:
     worker_count: int = 0
+    backend: str = "ppocr_onnx"
+    use_gpu: bool = False
+    gpu_id: int = 0
+    cpu_threads: int = 10
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "OcrServerSettings":
         if not data:
             return cls()
-        return cls(worker_count=int(data.get("worker_count", 0)))
+        return cls(
+            worker_count=int(data.get("worker_count", 0)),
+            backend=normalize_ocr_backend(data.get("backend")),
+            use_gpu=bool(data.get("use_gpu", False)),
+            gpu_id=int(data.get("gpu_id", 0)),
+            cpu_threads=int(data.get("cpu_threads", 10)),
+        )
 
 
 class OcrTaskScheduler:
@@ -112,7 +120,12 @@ class OcrRuntime:
             "requests_succeeded": 0,
             "requests_failed": 0,
         }
-        logger.info(f"OCR runtime initialized (workers={self._scheduler.worker_count})")
+        logger.info(
+            "OCR runtime initialized (workers=%s, backend=%s, gpu=%s)",
+            self._scheduler.worker_count,
+            self.settings.backend,
+            self.settings.use_gpu,
+        )
 
     def ping(self) -> bool:
         return True
@@ -183,10 +196,15 @@ class OcrRuntime:
             return np.rot90(image)
         return image
 
-    def _get_model(self) -> TextSystem:
+    def _get_model(self):
         model = getattr(self._thread_local, "model", None)
         if model is None:
-            model = TextSystem()
+            model = create_ocr_text_system(
+                self.settings.backend,
+                use_gpu=self.settings.use_gpu,
+                gpu_id=self.settings.gpu_id,
+                cpu_threads=self.settings.cpu_threads,
+            )
             self._thread_local.model = model
             worker_name = threading.current_thread().name
             with self._lock:
@@ -285,7 +303,7 @@ def ensure_ocr_server_started() -> bool:
         logger.info("OCR server process already started")
         return True
 
-    _OCR_SERVER_PROCESS = _OCR_SERVER_CONTEXT.Process(
+    _OCR_SERVER_PROCESS = multiprocessing.Process(
         target=run_ocr_server,
         args=(host, port, _build_server_settings()),
         name="ocr_server",

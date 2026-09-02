@@ -99,6 +99,15 @@
     "description": "庭院前往组队"
   },
   {
+    "itemName": "main_goto_nawu",
+    "imageName": "page_main_goto_nawu.png",
+    "roiFront": "323,617,36,53",
+    "roiBack": "323,617,36,53",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "庭院进入纳物库"
+  },
+  {
     "itemName": "main_goto_collection",
     "imageName": "page_main_goto_collection.png",
     "roiFront": "70,590,36,41",
@@ -196,6 +205,15 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "组队页面标志"
+  },
+  {
+    "itemName": "check_nawu",
+    "imageName": "page_check_nawu.png",
+    "roiFront": "94,21,95,37",
+    "roiBack": "94,21,95,37",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "纳物库页面标志"
   },
   {
     "itemName": "check_collection",

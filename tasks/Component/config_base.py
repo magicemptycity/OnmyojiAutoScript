@@ -68,6 +68,9 @@ Time = Annotated[time,
                  PlainSerializer(lambda v: v.strftime('%H:%M:%S'), return_type=str),
                  WithJsonSchema({'type': 'time'}),]
 
+Weekdays = Annotated[list[int],
+                    WithJsonSchema({'type': 'weekday_multi'}),]
+
 # ---------------------------------------------------------------------------------------------------------------------
 
 @classmethod

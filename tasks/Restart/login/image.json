@@ -160,5 +160,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "取消继续战斗"
+  },
+  {
+    "itemName": "choose",
+    "imageName": "login_choose.png",
+    "roiFront": "299,613,170,46",
+    "roiBack": "0,0,1143,720",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "抵扣券选择"
   }
 ]
