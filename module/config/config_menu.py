@@ -60,7 +60,7 @@ class ConfigMenu:
             'MultiAccountRepeatMonth',
         ]
         # 每周任务
-        self.menu["Weekly Task"] = ['TrueOrochi', 'RichMan', 'Secret', 'WeeklyTrifles', 'MysteryShop', 'Duel']
+        self.menu["Weekly Task"] = ['TrueOrochi', 'RichMan', 'Secret', 'WeeklyTrifles', 'MysteryShop', 'Duel', 'Chess']
         # 活动的任务
         self.menu["Activity Task"] = ['ActivityShikigami', 'MartialTournament', 'MetaDemon', 'FrogBoss', 'FloatParade', 'Quiz', 'KittyShop', 'DyeTrials', 'GuguArtStudio']
         # 开发工具

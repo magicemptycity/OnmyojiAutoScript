@@ -5,6 +5,10 @@ from tasks.Component.GeneralInvite.assets import GeneralInviteAssets
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Exploration.assets import ExplorationAssets
 from tasks.GameUi.action import conditional_action, sequence
+from tasks.GameUi.chess_battle import (
+    handle_chess_battle_page,
+    handle_chess_result_page,
+)
 from tasks.Pets.assets import PetsAssets
 from typing import Union
 
@@ -14,6 +18,7 @@ import random
 
 from module.atom.click import RuleClick
 from tasks.Component.GeneralBattle.assets import GeneralBattleAssets
+from tasks.Chess.assets import ChessAssets
 from tasks.Component.Login.service import LoginService
 from tasks.DailyTrifles.assets import DailyTriflesAssets
 from tasks.GlobalGame.assets import GlobalGameAssets
@@ -50,6 +55,20 @@ def random_click(
     return [click for _ in range(random.randint(low, high))]
 
 
+def reward_random_click() -> RuleClick:
+    """按拟人化权重选择奖励页面的安全退出区域。"""
+    return random.choices(
+        (
+            GeneralBattleAssets.C_RANDOM_LEFT,
+            GeneralBattleAssets.C_RANDOM_TOP,
+            GeneralBattleAssets.C_RANDOM_RIGHT,
+            GeneralBattleAssets.C_RANDOM_BOTTOM,
+        ),
+        weights=(5, 10, 45, 40),
+        k=1,
+    )[0]
+
+
 def handle_login_page(task) -> bool:
     return LoginService(config=task.config, device=task.device).app_handle_login()
 
@@ -61,9 +80,19 @@ page_login.add_enter_success_hooks(handle_login_page)
 # 庭院主页(此处通过提高阈值来处理部分探索章节会识别成原始庭院的问题, 后续有其他更好方法需改善)
 page_main = Page(GameUiAssets.I_CHECK_MAIN, category="global")
 page_main.add_enter_success_hooks(
-    GameUiAssets.I_AD_CLOSE_RED, GlobalGameAssets.I_UI_BACK_RED, RestartAssets.I_CANCEL_BATTLE,
-    conditional_action(RestartAssets.I_LOGIN_COURTYARD, RestartAssets.C_LOGIN_SCROLL_CLOSE_AREA),
+    GameUiAssets.I_AD_CLOSE_RED,
+    GlobalGameAssets.I_UI_BACK_RED,
+    RestartAssets.I_CANCEL_BATTLE,
+    RestartAssets.I_RETURN_CHESS_CANCEL,
 )
+
+# 闲庭仍会命中庭院主页标志，因此使用更高优先级先识别闲庭，再点击左上角返回庭院。
+page_relax = Page(
+    all_of(GameUiAssets.I_CHECK_MAIN, GameUiAssets.I_BACK_BROWN),
+    category="global",
+    priority=90,
+)
+page_relax.connect(page_main, GameUiAssets.I_BACK_BROWN, key="page_relax->page_main")
 
 # 庭院区域页面。
 page_shikigami_records = Page(GameUiAssets.I_CHECK_RECORDS, category="global")
@@ -166,6 +195,62 @@ page_town.connect(page_main, GameUiAssets.I_TOWN_GOTO_MAIN, key="page_town->page
 page_main.connect(page_town, GameUiAssets.I_MAIN_GOTO_TOWN, key="page_main->page_town")
 
 # 町中区域页面。
+page_entertainment = Page(GameUiAssets.I_CHECK_ENTERTAINMENT, category="global")
+page_entertainment.add_enter_success_hooks(ChessAssets.I_SKIP)
+page_town.connect(
+    page_entertainment,
+    GameUiAssets.I_TOWN_GOTO_ENTERTAINMENT,
+    key="page_town->page_entertainment",
+    on_enter_failure=[ChessAssets.I_SKIP],
+)
+
+page_chess = Page(GameUiAssets.I_CHECK_CHESS, category="global")
+page_entertainment.connect(
+    page_chess,
+    GameUiAssets.I_ENTERTAINMENT_GOTO_CHESS,
+    key="page_entertainment->page_chess",
+    on_leave_failure=[ChessAssets.I_SKIP],
+    on_enter_failure=[ChessAssets.I_SKIP],
+)
+page_chess.connect(
+    page_entertainment,
+    GlobalGameAssets.I_UI_BACK_YELLOW,
+    key="page_chess->page_entertainment",
+)
+
+# 遗留对局和结算页作为全局恢复节点，避免其他任务启动时卡在棋局内。
+page_chess_battle = Page(
+    GameUiAssets.I_CHECK_CHESS_BATTLE,
+    category="global",
+    priority=95,
+)
+page_chess_battle.connect(
+    page_chess,
+    handle_chess_battle_page,
+    key="page_chess_battle->page_chess",
+)
+page_chess_result = Page(
+    any_of(
+        GameUiAssets.I_CHESS_EXIT_TO_LOBBY,
+        GameUiAssets.I_CHESS_EXIT_TO_LOBBY_2,
+        GameUiAssets.I_CHESS_SHARE,
+        GameUiAssets.I_CHECK_CHESS_RANK,
+        GameUiAssets.I_CHESS_RANK_GOTO_LOBBY,
+    ),
+    category="global",
+    priority=96,
+)
+page_chess_result.connect(
+    page_chess,
+    handle_chess_result_page,
+    key="page_chess_result->page_chess",
+)
+page_entertainment.connect(
+    page_town,
+    GlobalGameAssets.I_UI_BACK_YELLOW,
+    key="page_entertainment->page_town",
+)
+
 page_duel = Page(GameUiAssets.I_CHECK_DUEL, category="global")
 page_duel.connect(page_town, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_duel->page_town")
 page_town.connect(page_duel, GameUiAssets.I_TOWN_GOTO_DUEL, key="page_town->page_duel")
@@ -340,7 +425,7 @@ def handle_battle_reward_page(task) -> bool:
     """
     if task.appear_then_click(GeneralBattleAssets.I_OVER_GHOST, interval=0.8):
         return True
-    return task.click(random_click(), interval=0.8)
+    return task.click(reward_random_click(), interval=0.8)
 
 page_reward.add_enter_success_hooks(handle_battle_reward_page)
 
