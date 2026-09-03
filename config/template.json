@@ -1527,11 +1527,12 @@
       "ap_limit": 300,
       "boss_limit": 20,
       "limit_time": "01:30:00",
+      "use_penta_pass": false,
       "fatigue_rest_enable": false,
       "fatigue_rest_battle_count": 60,
       "fatigue_rest_minutes_min": 5,
       "run_sequence": "pass,ap,ap100,boss",
-      "pass_limit": 50
+      "pass_limit": "50"
     },
     "ap100_battle_conf": {
       "lock_team_enable": false,
