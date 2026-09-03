@@ -105,14 +105,20 @@ class RestartAssets:
 	I_EARLY_SERVER_CANCEL = RuleImage(roi_front=(435,404,172,56), roi_back=(435,404,172,56), threshold=0.8, method="Template matching", file="./tasks/Restart/login/login_early_server_cancel.png")
 	# 取消继续战斗
 	I_CANCEL_BATTLE = RuleImage(roi_front=(471,395,129,55), roi_back=(367,227,545,296), threshold=0.8, method="Template matching", file="./tasks/Restart/login/login_cancel_battle.png")
-	# 抵扣券选择
+	# 取消返回百鬼棋局，进入棋局结算流程
+	I_RETURN_CHESS_CANCEL = RuleImage(roi_front=(432,400,181,69), roi_back=(400,370,240,120), threshold=0.8, method="Template matching", file="./tasks/Restart/login/login_return_chess_cancel.png")
+  # 抵扣券选择
 	I_CHOOSE = RuleImage(roi_front=(299,613,170,46), roi_back=(0,0,1143,720), threshold=0.8, method="Template matching", file="./tasks/Restart/login/login_choose.png")
 
 
 	# Ocr Rule Assets
+	# 正在连接服务器 
+	O_LOGIN_NETWORK = RuleOcr(roi=(534,649,189,39), area=(210,492,100,100), mode="Single", method="Default", keyword="正在连接服务器", name="login_network")
 	# 进入游戏 
-	O_LOGIN_ENTER_GAME = RuleOcr(roi=(543,530,194,125), area=(543,530,194,125), mode="Full", method="Default", keyword="进入", name="login_enter_game")
-	# 点击屏幕跳过 
+	O_LOGIN_ENTER_GAME = RuleOcr(roi=(550,567,176,56), area=(558,574,154,49), mode="Single", method="Default", keyword="进入游戏", name="login_enter_game")
+	# 新版竖排进入游戏按钮
+	O_LOGIN_ENTER_GAME_VERTICAL = RuleOcr(roi=(550,567,176,56), area=(558,574,154,49), mode="Single", method="Default", keyword="进入", name="login_enter_game_vertical")
+	# 点击屏幕跳过
 	O_LOGIN_SKIP_1 = RuleOcr(roi=(1046,35,130,37), area=(1046,35,130,37), mode="Single", method="Default", keyword="点击屏幕跳过", name="login_skip_1")
 	# 登录动画-跳过 
 	O_LOGIN_ANIMATION_SKIP = RuleOcr(roi=(1110,35,100,45), area=(1135,40,70,35), mode="Single", method="Default", keyword="跳过", name="login_animation_skip")

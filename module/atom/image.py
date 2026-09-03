@@ -8,6 +8,7 @@ from numpy import float32, int32, uint8, fromfile
 from pathlib import Path
 
 from module.base.decorator import cached_property
+from module.base.utils import random_normal_distribution_int
 from module.image.rpc import get_image_client
 from module.logger import logger
 from module.base.utils import is_approx_rectangle

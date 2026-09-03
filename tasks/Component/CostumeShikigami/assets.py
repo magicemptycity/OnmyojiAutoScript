@@ -481,5 +481,3 @@ class CostumeShikigamiAssets:
 	I_ST_SOULS_9 = RuleImage(roi_front=(1196,234,33,65), roi_back=(1170,220,70,90), threshold=0.8, method="Template matching", file="./tasks/Component/CostumeShikigami/sk9/sk9_st_souls_9.png")
 	# 更换 
 	I_ST_REPLACE_9 = RuleImage(roi_front=(878,224,63,39), roi_back=(855,175,110,130), threshold=0.8, method="Template matching", file="./tasks/Component/CostumeShikigami/sk9/sk9_st_replace_9.png")
-
-

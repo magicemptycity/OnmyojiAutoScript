@@ -122,7 +122,7 @@ class ScriptTask(GameUi, DelegationAssets):
                 continue
             if check_timer.reached():
                 break
-            if self.ocr_appear(self.O_D_DONE):
+            if self.ocr_appear(self.O_D_DONE_CARD, interval=1):
                 # RuleOcr.ocr 已将识别到的“完成”文字真实位置写入 area。
                 # 在文字右侧 x+150、宽 90、高 65 的范围内正态随机点击。
                 x, y, _, _ = self.O_D_DONE.area
@@ -139,7 +139,7 @@ class ScriptTask(GameUi, DelegationAssets):
                 self.device.click(
                     x=click_x,
                     y=click_y,
-                    control_name='D_DONE_OFFSET',
+                    control_name='D_DONE_CARD_OFFSET',
                 )
                 check_timer.reset()
                 continue
@@ -158,7 +158,5 @@ if __name__ == '__main__':
 
     # t.delegate_one('弥助的画')
     t.run()
-
-
 
 

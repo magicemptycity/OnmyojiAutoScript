@@ -33,9 +33,17 @@ class UtilizeConfig(BaseModel):
     shikigami_class: ShikigamiClass = Field(default=ShikigamiClass.N, description='shikigami_class_help')
     shikigami_order: int = Field(default=4, description='shikigami_order_help')
     min_run_interval: TimeDelta = Field(default=timedelta(0), description='min_run_interval_help')
-    harvest_guild_max_times: int = Field(default=2, description='harvest_guild_max_times_help')
+    guild_lottery_enable: bool = Field(default=False, description='guild_lottery_enable_help')
+    guild_reward_random_wait: bool = Field(default=False, description='guild_reward_random_wait_help')
     utilize_harvest: bool = Field(default=True, description='utilize_harvest_help')
     utilize_enable: bool = Field(default=True, description='utilize_enable_help')
+    lazy_mode: bool = Field(default=False, description='lazy_mode_help')
+    lazy_mode_weight: float = Field(
+        default=1.0,
+        ge=0,
+        le=1,
+        description='lazy_mode_weight_help',
+    )
     box_ap_enable: bool = Field(default=True)
     box_exp_enable: bool = Field(default=True)
     box_exp_waste: bool = Field(default=True, description='box_exp_waste_help')
@@ -44,6 +52,3 @@ class UtilizeConfig(BaseModel):
 class KekkaiUtilize(ConfigBase):
     scheduler: UtilizeScheduler = Field(default_factory=UtilizeScheduler)
     utilize_config: UtilizeConfig = Field(default_factory=UtilizeConfig)
-
-
-

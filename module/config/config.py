@@ -20,6 +20,7 @@ from module.config.config_menu import ConfigMenu
 from module.config.config_model import ConfigModel
 from module.config.config_state import ConfigState
 from module.config.scheduler import TaskScheduler
+from module.config.weekly_schedule import WeeklySchedule
 from module.config.utils import *
 from module.notify.notify import Notifier
 
@@ -205,11 +206,179 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
             return
         self.model.write_json(self.config_name, self.model.dict())
 
+    def apply_weekly_schedule_today(
+        self,
+        now: datetime = None,
+        force: bool = False,
+        preserve_existing_times: bool = False,
+    ) -> dict:
+        now = (now or datetime.now()).replace(microsecond=0)
+        weekly_schedule = WeeklySchedule(self.config_name)
+        weekly_schedule.ensure_week_refresh(now)
+        data = weekly_schedule.load()
+        result = {
+            'applied': [],
+            'skipped': [],
+            'disabled': [],
+            'restored': [],
+            'preserved': [],
+        }
+        restore_pending = data['turtle_restore_pending']
+        preserve_existing_times = preserve_existing_times or restore_pending
+        today_targets = (
+            weekly_schedule.targets_for_date(now.date())
+            if data['enabled']
+            else {}
+        )
+        planned_task_keys = {
+            convert_to_underscore(entry['task'])
+            for entry in data['entries']
+        }
+        if not data['enabled'] and not restore_pending:
+            return result
+        if (
+            not force
+            and not restore_pending
+            and not weekly_schedule.needs_daily_apply(now.date())
+        ):
+            return result
+
+        changed = False
+        if restore_pending:
+            planned_tasks = {
+                convert_to_underscore(entry['task']): entry['task']
+                for entry in data['entries']
+            }
+            for task_key, task_name in planned_tasks.items():
+                task_object = getattr(self.model, task_key, None)
+                scheduler = getattr(task_object, 'scheduler', None)
+                if scheduler is None:
+                    continue
+                if data['enabled'] and task_key not in today_targets:
+                    if scheduler.enable:
+                        scheduler.enable = False
+                        result['disabled'].append(ConfigModel.type(task_key))
+                        changed = True
+                    continue
+                target = weekly_schedule.next_run(
+                    task_name,
+                    after=now,
+                    include_disabled=True,
+                )
+                scheduler.enable = True
+                if target is not None and not preserve_existing_times:
+                    scheduler.next_run = target
+                result['restored'].append(ConfigModel.type(task_key))
+                changed = True
+
+        if not data['enabled']:
+            if changed:
+                self.save()
+            if preserve_existing_times:
+                weekly_schedule.clear_turtle_restore_pending()
+            else:
+                weekly_schedule.mark_applied(now)
+            return result
+
+        turtle_keep_keys = {
+            convert_to_underscore(task)
+            for task in data['turtle_keep_tasks']
+        }
+        free_cycle_keys = {
+            convert_to_underscore(task)
+            for task in data['free_cycle_tasks']
+        }
+        if data['turtle_mode'] and not turtle_keep_keys:
+            logger.error('Turtle mode has no retained tasks; skip scheduler changes')
+            weekly_schedule.mark_applied(now)
+            return result
+        if data['turtle_mode']:
+            for task_key in self.model.dict().keys():
+                task_object = getattr(self.model, task_key, None)
+                scheduler = getattr(task_object, 'scheduler', None)
+                if scheduler is None:
+                    continue
+                task_name = ConfigModel.type(task_key)
+                if task_key in turtle_keep_keys:
+                    if task_key in planned_task_keys and task_key not in today_targets:
+                        if scheduler.enable:
+                            result['disabled'].append(task_name)
+                            changed = True
+                        scheduler.enable = False
+                        continue
+                    if not scheduler.enable:
+                        scheduler.enable = True
+                        result['restored'].append(task_name)
+                        changed = True
+                    continue
+                if scheduler.enable:
+                    result['disabled'].append(task_name)
+                    changed = True
+                scheduler.enable = False
+
+        if preserve_existing_times:
+            if changed:
+                self.save()
+            weekly_schedule.clear_turtle_restore_pending()
+            logger.info(
+                f"Weekly turtle sync preserved scheduler times: "
+                f"disabled={result['disabled']}, restored={result['restored']}"
+            )
+            return result
+
+        for task_key in sorted(planned_task_keys - set(today_targets)):
+            task_object = getattr(self.model, task_key, None)
+            scheduler = getattr(task_object, 'scheduler', None)
+            if scheduler is None or not scheduler.enable:
+                continue
+            scheduler.enable = False
+            result['disabled'].append(ConfigModel.type(task_key))
+            changed = True
+
+        for task_key, target in today_targets.items():
+            if data['turtle_mode'] and task_key not in turtle_keep_keys:
+                continue
+            task_object = getattr(self.model, task_key, None)
+            scheduler = getattr(task_object, 'scheduler', None)
+            if scheduler is None:
+                continue
+            task_name = ConfigModel.type(task_key)
+            if not force and task_key in free_cycle_keys:
+                if not scheduler.enable:
+                    scheduler.enable = True
+                    result['restored'].append(task_name)
+                    changed = True
+                result['preserved'].append(task_name)
+                continue
+            if target < now and not data['catch_up_missed']:
+                result['skipped'].append(task_name)
+                continue
+            scheduler.enable = True
+            scheduler.next_run = target
+            result['applied'].append(task_name)
+            changed = True
+
+        if changed:
+            self.save()
+        weekly_schedule.mark_applied(now)
+        logger.info(
+            f"Weekly schedule daily sync: applied={result['applied']}, "
+            f"skipped_past={result['skipped']}, "
+            f"disabled={result['disabled']}, "
+            f"turtle_restored={result['restored']}, "
+            f"free_cycle_preserved={result['preserved']}"
+        )
+        return result
+
+    def weekly_schedule_refresh_at(self, now: datetime = None) -> datetime | None:
+        return WeeklySchedule(self.config_name).next_daily_refresh(now)
+
     def update_scheduler(self) -> None:
         """
         更新调度器， 设置pending_task and waiting_task
         :return:
         """
+        self.apply_weekly_schedule_today()
         pending_task = []
         waiting_task = []
         error = []

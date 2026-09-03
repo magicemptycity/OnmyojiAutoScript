@@ -1,10 +1,8 @@
 # This Python file uses the following encoding: utf-8
 # @author runhey
 # github https://github.com/runhey
-import numpy as np
-
 from module.base.decorator import cached_property
-from module.base.utils.utils import random_normal_distribution_int
+from module.base.utils import random_normal_distribution_int
 from module.logger import logger
 
 

@@ -166,7 +166,6 @@ def handle_adb_error(e):
         logger.error(e)
         return True
     else:
-        # AdbError()
         logger.exception(e)
         possible_reasons(
             'If you are using BlueStacks or LD player or WSA, please enable ADB in the settings of your emulator',

@@ -6,10 +6,13 @@ import json
 from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from fastapi.responses import Response, StreamingResponse
 from fastapi import WebSocket, WebSocketDisconnect
-from datetime import datetime
+from datetime import datetime, timedelta
 from module.config.utils import convert_to_underscore
+from module.config.config_model import ConfigModel
+from module.config.weekly_schedule import WeeklySchedule
 
 from module.logger import logger
 from module.server.api_logger import ApiLoggingRoute, log_ws_event
@@ -29,6 +32,190 @@ from tasks.Component.config_base import TimeDelta
 
 
 script_app = APIRouter(route_class=ApiLoggingRoute)
+
+
+class WeeklyScheduleEntryRequest(BaseModel):
+    task: str
+    weekday: int = Field(ge=1, le=7)
+    time: str
+
+
+class WeeklyRefreshFreezeWindowRequest(BaseModel):
+    weekday: int = Field(ge=1, le=7)
+    start: str
+    end: str
+
+
+class WeeklyRefreshBoundaryRequest(BaseModel):
+    task: str
+    weekday: int = Field(ge=1, le=7)
+    start: str
+    end: str
+
+
+class WeeklyRefreshRequest(BaseModel):
+    enabled: bool = False
+    min_offset_seconds: int = Field(default=600, ge=0, le=86399)
+    max_offset_seconds: int = Field(default=1200, ge=0, le=86399)
+    excluded_tasks: list[str] = Field(default_factory=list)
+    freeze_windows: list[WeeklyRefreshFreezeWindowRequest] = Field(
+        default_factory=lambda: [
+            WeeklyRefreshFreezeWindowRequest(
+                weekday=3, start='04:00:00', end='10:00:00'
+            )
+        ]
+    )
+    boundaries: list[WeeklyRefreshBoundaryRequest] = Field(default_factory=list)
+
+
+class WeeklyScheduleRequest(BaseModel):
+    enabled: bool = True
+    catch_up_missed: bool = False
+    turtle_mode: bool | None = None
+    turtle_keep_tasks: list[str] | None = None
+    free_cycle_tasks: list[str] | None = None
+    entries: list[WeeklyScheduleEntryRequest] = Field(default_factory=list)
+    week_refresh: WeeklyRefreshRequest | None = None
+
+
+class WeeklyRefreshPreviewRequest(BaseModel):
+    entries: list[WeeklyScheduleEntryRequest] = Field(default_factory=list)
+    week_refresh: WeeklyRefreshRequest
+
+
+def _weekly_schedule_tasks(config):
+    tasks = []
+    for key in config.model.dict().keys():
+        task_object = getattr(config.model, key, None)
+        scheduler = getattr(task_object, 'scheduler', None)
+        if scheduler is None:
+            continue
+        try:
+            task_name = ConfigModel.type(key)
+        except (KeyError, IndexError):
+            continue
+        tasks.append({
+            'name': task_name,
+            'enabled': bool(scheduler.enable),
+            'next_run': str(scheduler.next_run),
+        })
+    return tasks
+
+
+def _available_weekly_tasks(config) -> dict[str, str]:
+    return {
+        convert_to_underscore(task['name']): task['name']
+        for task in _weekly_schedule_tasks(config)
+    }
+
+
+def _normalize_weekly_entries(
+    items,
+    available_tasks: dict[str, str],
+) -> list[dict]:
+    entries = []
+    for item in items:
+        task_key = convert_to_underscore(item.task)
+        if task_key not in available_tasks:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Unknown scheduled task: {item.task}',
+            )
+        entries.append({
+            'task': available_tasks[task_key],
+            'weekday': item.weekday,
+            'time': item.time,
+        })
+    return entries
+
+
+def _normalize_week_refresh_request(
+    request: WeeklyRefreshRequest,
+    available_tasks: dict[str, str],
+) -> dict:
+    data = request.model_dump()
+    excluded_tasks = []
+    for task in request.excluded_tasks:
+        task_key = convert_to_underscore(task)
+        if task_key not in available_tasks:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Unknown weekly refresh task: {task}',
+            )
+        excluded_tasks.append(available_tasks[task_key])
+    data['excluded_tasks'] = excluded_tasks
+    boundaries = []
+    for boundary in request.boundaries:
+        task_key = convert_to_underscore(boundary.task)
+        if task_key not in available_tasks:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Unknown weekly refresh boundary task: {boundary.task}',
+            )
+        boundaries.append({
+            **boundary.model_dump(),
+            'task': available_tasks[task_key],
+        })
+    data['boundaries'] = boundaries
+    return data
+
+
+def _weekly_schedule_response(script_name: str):
+    config = mm.config_cache(script_name)
+    schedule = WeeklySchedule(script_name)
+    data = schedule.load()
+    tasks = _weekly_schedule_tasks(config)
+    now = datetime.now().replace(microsecond=0)
+    week_start = now.date() - timedelta(days=now.isoweekday() - 1)
+    effective_entries = schedule.effective_entries(now)
+    planned_keys = {
+        convert_to_underscore(entry['task'])
+        for entry in data['entries']
+    }
+    next_runs = {
+        task['name']: task['next_run']
+        for task in tasks
+        if task['next_run']
+    }
+    return {
+        **data,
+        'entries': [
+            {
+                **entry,
+                'scheduled_at': str(schedule.current_week_datetime(entry, now)),
+            }
+            for entry in data['entries']
+        ],
+        'effective_entries': [
+            {
+                **entry,
+                'scheduled_at': str(schedule.current_week_datetime(entry, now)),
+            }
+            for entry in effective_entries
+        ],
+        'tasks': tasks,
+        'planned_tasks': [
+            task['name'] for task in tasks
+            if convert_to_underscore(task['name']) in planned_keys
+        ],
+        'unplanned_tasks': [
+            task['name'] for task in tasks
+            if convert_to_underscore(task['name']) not in planned_keys
+        ],
+        'next_runs': next_runs,
+        'server_now': str(now),
+        'current_week_start': str(week_start),
+        'today_weekday': now.isoweekday(),
+    }
+
+
+async def _broadcast_schedule(script_name: str, config):
+    if script_name not in mm.script_process:
+        return
+    config.get_next()
+    await mm.script_process[script_name].broadcast_state({
+        'schedule': config.get_schedule_data(),
+    })
 
 
 @script_app.get('/test')
@@ -259,6 +446,140 @@ async def script_stop(script_name: str):
         return
     mm.script_process[script_name].stop()
     return
+
+
+@script_app.get('/{script_name}/weekly_schedule')
+async def get_weekly_schedule(script_name: str):
+    if script_name not in mm.all_script_files():
+        raise HTTPException(status_code=404, detail='Config not found')
+    return _weekly_schedule_response(script_name)
+
+
+@script_app.put('/{script_name}/weekly_schedule')
+async def put_weekly_schedule(script_name: str, payload: WeeklyScheduleRequest):
+    if script_name not in mm.all_script_files():
+        raise HTTPException(status_code=404, detail='Config not found')
+    config = mm.config_cache(script_name)
+    available_tasks = _available_weekly_tasks(config)
+    entries = _normalize_weekly_entries(payload.entries, available_tasks)
+    schedule = WeeklySchedule(script_name)
+    previous = schedule.load()
+    turtle_keep_tasks = None
+    if payload.turtle_keep_tasks is not None:
+        turtle_keep_tasks = []
+        for task in payload.turtle_keep_tasks:
+            task_key = convert_to_underscore(task)
+            if task_key not in available_tasks:
+                raise HTTPException(status_code=400, detail=f'Unknown turtle task: {task}')
+            turtle_keep_tasks.append(available_tasks[task_key])
+    effective_turtle_mode = (
+        previous['turtle_mode']
+        if payload.turtle_mode is None
+        else payload.turtle_mode
+    )
+    effective_turtle_tasks = (
+        previous['turtle_keep_tasks']
+        if turtle_keep_tasks is None
+        else turtle_keep_tasks
+    )
+    if effective_turtle_mode and not effective_turtle_tasks:
+        raise HTTPException(status_code=400, detail='Turtle mode requires at least one retained task')
+    free_cycle_tasks = None
+    if payload.free_cycle_tasks is not None:
+        free_cycle_tasks = []
+        for task in payload.free_cycle_tasks:
+            task_key = convert_to_underscore(task)
+            if task_key not in available_tasks:
+                raise HTTPException(status_code=400, detail=f'Unknown free-cycle task: {task}')
+            free_cycle_tasks.append(available_tasks[task_key])
+    week_refresh = None
+    if payload.week_refresh is not None:
+        week_refresh = _normalize_week_refresh_request(
+            payload.week_refresh, available_tasks
+        )
+    try:
+        schedule.save(
+            payload.enabled,
+            entries,
+            payload.catch_up_missed,
+            payload.turtle_mode,
+            turtle_keep_tasks,
+            free_cycle_tasks,
+            week_refresh,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return _weekly_schedule_response(script_name)
+
+
+@script_app.post('/{script_name}/weekly_schedule/refresh/preview')
+async def preview_weekly_schedule_refresh(
+    script_name: str,
+    payload: WeeklyRefreshPreviewRequest,
+):
+    if script_name not in mm.all_script_files():
+        raise HTTPException(status_code=404, detail='Config not found')
+    config = mm.config_cache(script_name)
+    available_tasks = _available_weekly_tasks(config)
+    entries = _normalize_weekly_entries(payload.entries, available_tasks)
+    week_refresh = _normalize_week_refresh_request(
+        payload.week_refresh, available_tasks
+    )
+    try:
+        generated_entries, issues = (
+            WeeklySchedule.generate_week_refresh_entries(entries, week_refresh)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {
+        'entries': generated_entries,
+        'issues': issues,
+    }
+
+
+@script_app.post('/{script_name}/weekly_schedule/refresh')
+async def refresh_weekly_schedule_now(script_name: str):
+    if script_name not in mm.all_script_files():
+        raise HTTPException(status_code=404, detail='Config not found')
+    config = mm.config_cache(script_name)
+    schedule = WeeklySchedule(script_name)
+    refresh = schedule.ensure_week_refresh(force=True)
+    result = config.apply_weekly_schedule_today(force=True)
+    if (
+        result['applied']
+        or result['disabled']
+        or result['restored']
+        or result['preserved']
+    ):
+        await _broadcast_schedule(script_name, config)
+    response = _weekly_schedule_response(script_name)
+    response['refresh_issues'] = refresh['issues']
+    response['applied_tasks'] = sorted(result['applied'])
+    response['skipped_tasks'] = sorted(result['skipped'])
+    return response
+
+
+@script_app.post('/{script_name}/weekly_schedule/apply')
+async def apply_weekly_schedule(
+    script_name: str,
+    preserve_existing_times: bool = False,
+):
+    if script_name not in mm.all_script_files():
+        raise HTTPException(status_code=404, detail='Config not found')
+    config = mm.config_cache(script_name)
+    result = config.apply_weekly_schedule_today(
+        force=True,
+        preserve_existing_times=preserve_existing_times,
+    )
+    if result['applied'] or result['disabled'] or result['restored'] or result['preserved']:
+        await _broadcast_schedule(script_name, config)
+    response = _weekly_schedule_response(script_name)
+    response['applied_tasks'] = sorted(result['applied'])
+    response['skipped_tasks'] = sorted(result['skipped'])
+    response['disabled_tasks'] = sorted(result['disabled'])
+    response['restored_tasks'] = sorted(result['restored'])
+    response['preserved_tasks'] = sorted(result['preserved'])
+    return response
 
 @script_app.get('/{script_name}/{task}/args')
 async def script_task(script_name: str, task: str):

@@ -3,6 +3,7 @@
 # github https://github.com/runhey
 import time
 import re
+import random
 from cached_property import cached_property
 from tasks.GameUi.default_pages import page_exploration
 
@@ -22,11 +23,28 @@ from module.exception import TaskEnd
 from module.atom.image_grid import ImageGrid
 from module.atom.image import RuleImage
 from module.atom.click import RuleClick
+from module.base.timer import Timer
+
+
+REALM_RAID_FIRE_DELAY_RANGE = (1.0, 3.0)
+REALM_RAID_QUICK_EXIT_DELAY_RANGE = (1.0, 2.0)
+REALM_RAID_QUICK_EXIT_RETRY_DELAY_RANGE = (1.0, 2.0)
+
+
+def random_attack_delay(
+    min_value: float = REALM_RAID_FIRE_DELAY_RANGE[0],
+    max_value: float = REALM_RAID_FIRE_DELAY_RANGE[1],
+    decimal: int = 1,
+) -> float:
+    return round(random.uniform(min_value, max_value), decimal)
 
 
 class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
     medal_grid: ImageGrid = None
     init_tickets: int = -1
+    CLICK_REACTION_DELAY = (0.18, 0.22)
+    PREPARE_CLICK_DELAY_RANGE = (2.5, 3.5)
+    SETTLEMENT_CLICK_INTERVAL_RANGE = (0.65, 0.95)
 
     def _handle_result(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
         if config.quick_exit:
@@ -444,12 +462,33 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
         click = self.partition[order - 1]
         self.wait_until_appear(self.I_RR_PERSON)
         self.device.click_record_clear()
+        delay_enabled = self.config.realm_raid.raid_config.realm_raid_attack_delay
+        fire_delay_timer = None
+        fire_delay_complete = not delay_enabled
         while True:
             self.screenshot()
             if not self.appear(self.I_RR_PERSON):
                 return True
-            if self.appear_then_click(self.I_FIRE, interval=1):
-                continue
+
+            if self.appear(self.I_FIRE, threshold=0.8):
+                if not fire_delay_complete:
+                    if fire_delay_timer is None:
+                        delay = random_attack_delay()
+                        logger.info(
+                            f'个人突破点击进攻前随机等待: delay={delay:.1f}s'
+                        )
+                        fire_delay_timer = Timer(delay).start()
+                        continue
+                    if not fire_delay_timer.reached():
+                        continue
+                    fire_delay_complete = True
+                if self.appear_then_click(self.I_FIRE, interval=1, threshold=0.8):
+                    continue
+
+            # 延迟期间浮窗消失时停止本次挑战，避免重新选择已失效目标。
+            if fire_delay_timer is not None and not fire_delay_complete:
+                logger.warning('个人突破进攻按钮在等待期间消失，取消本次挑战')
+                return False
             if self.click(click, interval=2):
                 continue
         logger.info(f'Click fire {order} success')
@@ -461,6 +500,12 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
         :return: 是否再战成功
         """
         self.wait_until_appear(self.I_FIRE_AGAIN)
+        delay = random_attack_delay(*REALM_RAID_QUICK_EXIT_RETRY_DELAY_RANGE)
+        logger.info(
+            '个人突破退四次进入下一轮前随机等待: '
+            f'delay={delay:.1f}s'
+        )
+        time.sleep(delay)
         while True:
             self.screenshot()
             if not self.appear(self.I_FIRE_AGAIN):
@@ -473,6 +518,40 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
             if self.appear_then_click(self.I_FIRE_AGAIN, interval=2):
                 continue
         return False
+
+    def exit_battle(self, skip_first: bool = False) -> bool:
+        """退四次时在退出按钮可用后留出一次人类反应时间。"""
+        context = getattr(self, '_battle_context', None)
+        if context is not None and context.quick_exit:
+            delay_complete = getattr(
+                context,
+                'realm_raid_quick_exit_delay_complete',
+                False,
+            )
+            if not delay_complete and self.appear(self.I_EXIT):
+                delay_timer = getattr(
+                    context,
+                    'realm_raid_quick_exit_delay_timer',
+                    None,
+                )
+                if delay_timer is None:
+                    delay = random_attack_delay(
+                        *REALM_RAID_QUICK_EXIT_DELAY_RANGE
+                    )
+                    logger.info(
+                        '个人突破退四次退出前随机等待: '
+                        f'delay={delay:.1f}s'
+                    )
+                    delay_timer = Timer(delay).start()
+                    context.realm_raid_quick_exit_delay_timer = delay_timer
+                if not delay_timer.reached():
+                    if context.quick_exit_timer is not None:
+                        context.quick_exit_timer.reset()
+                    return False
+                context.realm_raid_quick_exit_delay_complete = True
+                if context.quick_exit_timer is not None:
+                    context.quick_exit_timer.reset()
+        return super().exit_battle(skip_first=skip_first)
 
     @cached_property
     def false_roi(self) -> list:
