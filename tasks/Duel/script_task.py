@@ -9,6 +9,7 @@ from datetime import time, datetime, timedelta
 from module.logger import logger
 from module.exception import TaskEnd
 from module.base.timer import Timer
+from module.base.protect import random_sleep
 
 from tasks.Component.GeneralBattle.general_battle import GeneralBattle
 from tasks.Component.SwitchOnmyoji.switch_onmyoji import SwitchOnmyoji
@@ -63,6 +64,11 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
                 continue
             if not self.can_start_duel():
                 break
+            if self.conf.duel_config.random_sleep:
+                random_sleep(probability=0.2)
+                if datetime.now() - self.start_time >= self.limit_time:
+                    logger.info('Duel task is over time after random sleep')
+                    break
             self.start_duel()
         logger.info('Duel battle end')
         self.goto_page(page_main)

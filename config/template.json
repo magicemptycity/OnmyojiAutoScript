@@ -946,7 +946,9 @@
       "fakegod_limit": 0,
       "limit_time": "01:30:00",
       "active_souls_clean": false,
-      "random_sleep": false
+      "random_sleep": false,
+      "climb_drink_break": false,
+      "climb_drink_interval": "60,120"
     },
     "switch_soul_config": {
       "enable_switch_rich_man": false,
@@ -1307,7 +1309,8 @@
       "bondling_stone_enable": false,
       "bondling_search_enable": false,
       "check_enable": true,
-      "limit_num": 2000
+      "limit_num": 2000,
+      "random_sleep": false
     },
     "invite_config": {
       "friend_list": "",
@@ -1786,7 +1789,8 @@
       "target_score": 2000,
       "honor_full_exit": false,
       "green_enable": false,
-      "green_mark": "green_left1"
+      "green_mark": "green_left1",
+      "random_sleep": false
     },
     "duel_celeb_config": {
       "celeb_battle": false,

@@ -9,6 +9,7 @@ from cached_property import cached_property
 from datetime import datetime
 from datetime import timedelta, time
 from module.base.timer import Timer
+from module.base.protect import random_sleep
 from module.exception import TaskEnd
 from module.logger import logger
 from tasks.BondlingFairyland.assets import BondlingFairylandAssets
@@ -34,6 +35,15 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
 
     last_plate_count: int = None  # 上一次识别到的契灵盘子数量
     plate_interval: int = None  # 契灵盘子数量间隔(一般为1)
+
+    def random_sleep_before_action(self) -> bool:
+        """沿用式神活动的行动前随机休息，并在休息后重新检查时间限制。"""
+        if self.config.bondling_fairyland.bondling_config.random_sleep:
+            random_sleep(probability=0.2)
+        if datetime.now() - self.start_time >= self.limit_time:
+            logger.info('BondlingFairyland time limit reached after random sleep')
+            return False
+        return True
 
     def _exit_matcher(self) -> ExitMatcher | None:
         return any_of(self.I_BALL_FIRE, self.I_CHECK_BONDLING_FAIRYLAND, self.I_GI_EMOJI_1, self.I_GI_EMOJI_2)
@@ -235,6 +245,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                     break
 
             if self.appear(self.I_GI_IN_ROOM):
+                if not self.random_sleep_before_action():
+                    break
                 # 点击挑战
                 if not is_first:
                     if self.run_invite(config=self.config.bondling_fairyland.invite_config):
@@ -453,6 +465,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
             if datetime.now() - self.start_time >= self.limit_time:
                 logger.warning(f'No time, exit')
                 return False
+            if not self.random_sleep_before_action():
+                return False
             if self.click_search():
                 self.run_general_battle(self.general_battle_config, exit_matcher=self.I_BF_STORE)
                 if limit_cnt is not None:
@@ -546,6 +560,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
             cong = self.config.bondling_fairyland
             match cong.bondling_config.user_status:
                 case UserStatus.ALONE:
+                    if not self.random_sleep_before_action():
+                        return False
                     self.run_alone()
                     self.run_general_battle(battle_config)
                 case _:

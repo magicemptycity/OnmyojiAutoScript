@@ -32,6 +32,11 @@ class DuelConfig(ConfigBase):
     green_enable: bool = Field(default=False, description='green_enable_help')
     # 选哪一个绿标
     green_mark: GreenMarkType = Field(default=GreenMarkType.GREEN_LEFT1, description='green_mark_help')
+    # 每局匹配前沿用式神活动的随机休息
+    random_sleep: bool = Field(
+        default=False,
+        description='duel_random_sleep_help',
+    )
 
 
 class DuelCelebConfig(ConfigBase):

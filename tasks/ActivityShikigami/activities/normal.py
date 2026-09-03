@@ -1,5 +1,6 @@
 """当期爬塔独有页面与执行逻辑。"""
 
+from datetime import datetime
 import random
 import time
 
@@ -108,6 +109,7 @@ class NormalClimbAct:
                     self._sync_climb_penta_pass()
                 if not self.prepare_next_action(action_type):
                     return
+                self._handle_climb_drink_break()
                 try:
                     self._run_climb_action(action_type, destination)
                 except ActivityResourceNotEnough:
@@ -134,6 +136,54 @@ class NormalClimbAct:
                 time.sleep(0.5)
                 continue
             self.goto_page(destination)
+
+    def _start_climb_drink_timer(self, interval_range: tuple[int, int]) -> None:
+        limit_minutes = random.randint(*interval_range)
+        self._climb_drink_started_at = time.monotonic()
+        self._climb_drink_limit_seconds = limit_minutes * 60
+        self._climb_drink_interval_range = interval_range
+        logger.info(
+            'Climb drink timer started: '
+            f'limit={limit_minutes}m, '
+            f'range={interval_range[0]}-{interval_range[1]}m'
+        )
+
+    def _handle_climb_drink_break(self) -> None:
+        """爬塔内部连续运行达到间隔后，在下一场开始前暂停。"""
+        config = self.conf.general_config
+        if not config.climb_drink_break:
+            return
+
+        parts = config.climb_drink_interval.split(',')
+        interval_range = int(parts[0]), int(parts[1])
+        started_at = getattr(self, '_climb_drink_started_at', None)
+        previous_range = getattr(self, '_climb_drink_interval_range', None)
+        if started_at is None or previous_range != interval_range:
+            self._start_climb_drink_timer(interval_range)
+            return
+
+        elapsed = time.monotonic() - started_at
+        if elapsed < self._climb_drink_limit_seconds:
+            return
+
+        if random.random() < 0.9:
+            rest_minutes = random.triangular(2, 8, 5)
+            branch = 'short'
+        else:
+            rest_minutes = random.triangular(8, 20, 8)
+            branch = 'long_tail'
+        rest_seconds = max(120, min(1200, round(rest_minutes * 60)))
+        logger.info(
+            'Climb drink break started: '
+            f'elapsed={elapsed / 60:.1f}m, '
+            f'rest={rest_seconds / 60:.1f}m, distribution={branch}'
+        )
+        rest_started_at = datetime.now()
+        time.sleep(rest_seconds)
+        # 内部喝水休息不占用式神活动的任务时限。
+        self.start_time += datetime.now() - rest_started_at
+        logger.info('Climb drink break finished; continue current climb task')
+        self._start_climb_drink_timer(interval_range)
 
     def _run_climb_action(self, action_type: str, destination):
         if not self._climb_resource_available(action_type):

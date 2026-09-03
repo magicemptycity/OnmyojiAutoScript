@@ -2,6 +2,7 @@
 """式神活动统一配置。"""
 
 from datetime import time, timedelta
+import re
 
 from pydantic import BaseModel, Field, model_validator, validator
 
@@ -67,6 +68,16 @@ class GeneralConfig(ConfigBase):
         default=False,
         title='Use Penta Pass',
         description='use_penta_pass_help',
+    )
+    climb_drink_break: bool = Field(
+        default=False,
+        title='Climb Drink Break',
+        description='climb_drink_break_help',
+    )
+    climb_drink_interval: str = Field(
+        default='60,120',
+        title='Climb Drink Interval',
+        description='climb_drink_interval_help',
     )
 
     @property
@@ -154,6 +165,16 @@ class GeneralConfig(ConfigBase):
                 logger.warning('Invalid activity limit_time value. Expected format: HH:MM:SS')
                 return time(hour=1, minute=30)
         return value
+
+    @validator('climb_drink_interval', pre=True, always=True)
+    def parse_climb_drink_interval(cls, value):
+        matched = re.fullmatch(r'\s*(\d+)\s*[,，]\s*(\d+)\s*', str(value))
+        if matched is None:
+            raise ValueError('爬塔喝水间隔必须填写“最小分钟,最大分钟”')
+        lower, upper = (int(item) for item in matched.groups())
+        if lower <= 0 or upper <= 0 or lower > upper:
+            raise ValueError('爬塔喝水间隔必须为有效的正整数范围')
+        return f'{lower},{upper}'
 
 
 def check_soul_by_number(enable_switch: bool, group_team: str, label: str):

@@ -64,15 +64,15 @@ class CostumeAssets:
 
 	# Image Rule Assets
 	# description 
-	I_PET_HOUSE_13 = RuleImage(roi_front=(811,271,58,34), roi_back=(810,269,60,37), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_pet_house_13.png")
+	I_PET_HOUSE_13 = RuleImage(roi_front=(811,271,58,34), roi_back=(778,232,127,98), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_pet_house_13.png")
 	# description 
-	I_MAIN_GOTO_TOWN_13 = RuleImage(roi_front=(727,194,24,48), roi_back=(720,191,40,54), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_main_goto_town_13.png")
+	I_MAIN_GOTO_TOWN_13 = RuleImage(roi_front=(727,194,24,48), roi_back=(710,174,68,88), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_main_goto_town_13.png")
 	# description 
-	I_MAIN_GOTO_SUMMON_13 = RuleImage(roi_front=(968,145,29,44), roi_back=(959,143,47,49), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_main_goto_summon_13.png")
+	I_MAIN_GOTO_SUMMON_13 = RuleImage(roi_front=(968,145,29,44), roi_back=(959,138,50,58), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_main_goto_summon_13.png")
 	# description 
-	I_CHECK_MAIN_13 = RuleImage(roi_front=(620,121,90,94), roi_back=(574,89,189,180), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_check_main_13.png")
+	I_CHECK_MAIN_13 = RuleImage(roi_front=(367,191,90,94), roi_back=(281,136,221,182), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_check_main_13.png")
 	# description 
-	I_MAIN_GOTO_EXPLORATION_13 = RuleImage(roi_front=(561,133,24,45), roi_back=(543,125,57,64), threshold=0.6, method="Template matching", file="./tasks/Component/Costume/main13/main13_main_goto_exploration_13.png")
+	I_MAIN_GOTO_EXPLORATION_13 = RuleImage(roi_front=(561,133,24,45), roi_back=(543,125,63,69), threshold=0.6, method="Template matching", file="./tasks/Component/Costume/main13/main13_main_goto_exploration_13.png")
 	# description 
 	I_WQ_DONE_13 = RuleImage(roi_front=(172,281,32,34), roi_back=(97,171,211,244), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main13/main13_wq_done_13.png")
 	# description 
