@@ -10,6 +10,7 @@ import time
 import os
 import inflection
 import json
+import random
 
 from datetime import date
 import threading
@@ -58,6 +59,10 @@ class Script:
         # Key: str, task name, value: int, failure count
         self.failure_record = {}
         self.last_task_runtime_outcome: dict[str, Any] | None = None
+        # 连续任务休息只统计调度器未进入等待状态的墙钟时间。
+        self._continuous_task_started_at: float | None = None
+        self._continuous_task_limit_seconds: int | None = None
+        self._continuous_task_interval_range: tuple[int, int] | None = None
         # 运行loop的线程
         self.loop_thread: Thread = None
         # 低配模式属于进程级运行参数，只在脚本进程创建时读取一次。
@@ -339,6 +344,80 @@ class Script:
             candidate += timedelta(days=1)
         return candidate
 
+    @staticmethod
+    def _parse_continuous_task_interval(value: str) -> tuple[int, int]:
+        """解析连续任务休息间隔，格式为“最小分钟,最大分钟”。"""
+        matched = re.fullmatch(r'\s*(\d+)\s*[,，]\s*(\d+)\s*', str(value))
+        if matched is None:
+            raise ValueError(f'Invalid continuous task rest interval: {value!r}')
+        lower, upper = (int(item) for item in matched.groups())
+        if lower <= 0 or upper <= 0 or lower > upper:
+            raise ValueError(f'Invalid continuous task rest interval: {value!r}')
+        return lower, upper
+
+    @staticmethod
+    def _sample_continuous_task_rest_seconds() -> tuple[int, str]:
+        """休息时长：90% 落在2-8分钟的对称三角分布，其余10% 在8-20分钟内逐渐降低概率。"""
+        if random.random() < 0.9:
+            minutes = random.triangular(2, 8, 5)
+            branch = 'short'
+        else:
+            minutes = random.triangular(8, 20, 8)
+            branch = 'long_tail'
+        return max(120, min(1200, round(minutes * 60))), branch
+
+    def _reset_continuous_task_rest(self, *, log_idle: bool = False) -> None:
+        if log_idle and self._continuous_task_started_at is not None:
+            logger.info('Scheduler entered task waiting state; reset continuous task timer')
+        self._continuous_task_started_at = None
+        self._continuous_task_limit_seconds = None
+        self._continuous_task_interval_range = None
+
+    def _handle_continuous_task_rest(self) -> bool:
+        """在新任务开始前处理连续运行休息，已休息时返回 True 要求重新调度。"""
+        device_config = self.config.script.device
+        if not device_config.continuous_task_rest_enable:
+            self._reset_continuous_task_rest()
+            return False
+
+        try:
+            interval_range = self._parse_continuous_task_interval(
+                device_config.continuous_task_rest_interval
+            )
+        except ValueError as exc:
+            logger.warning(f'{exc}; fallback to 60,120 minutes')
+            interval_range = (60, 120)
+
+        now = time.monotonic()
+        if (
+            self._continuous_task_started_at is None
+            or self._continuous_task_interval_range != interval_range
+        ):
+            limit_minutes = random.randint(*interval_range)
+            self._continuous_task_started_at = now
+            self._continuous_task_limit_seconds = limit_minutes * 60
+            self._continuous_task_interval_range = interval_range
+            logger.info(
+                'Continuous task timer started: '
+                f'limit={limit_minutes}m, range={interval_range[0]}-{interval_range[1]}m'
+            )
+            return False
+
+        elapsed = now - self._continuous_task_started_at
+        if elapsed < self._continuous_task_limit_seconds:
+            return False
+
+        rest_seconds, branch = self._sample_continuous_task_rest_seconds()
+        logger.info(
+            'Continuous task limit reached: '
+            f'elapsed={elapsed / 60:.1f}m, '
+            f'rest={rest_seconds / 60:.1f}m, distribution={branch}'
+        )
+        time.sleep(rest_seconds)
+        self._reset_continuous_task_rest()
+        logger.info('Continuous task rest finished; reschedule pending tasks')
+        return True
+
     def _antiban_wake_time(self, now: datetime):
         ab = self.config.script.anti_ban
         if not ab.enable:
@@ -376,7 +455,10 @@ class Script:
                 task.next_run = max(task.next_run, antiban_wake)
             # 任务时间到了返回任务名称
             if task.next_run <= now:
+                if self._handle_continuous_task_rest():
+                    continue
                 return task.command
+            self._reset_continuous_task_rest(log_idle=True)
             # 根据策略执行等待逻辑
             decision = self.runtime.handle_wait_during_idle(task.next_run)
             if decision == ScriptRuntimeDecision.RESCHEDULE:
