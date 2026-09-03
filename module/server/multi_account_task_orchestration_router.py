@@ -106,14 +106,36 @@ def _batch(account: MultiAccountRepeatNewAccount, batch_id: str) -> MultiAccount
     raise HTTPException(status_code=404, detail="该账号没有此顺序任务组")
 
 
+def _find_batch_task_entry(
+    batch: MultiAccountRepeatNewFixedTimeBatch,
+    task_name: str,
+) -> MultiAccountRepeatNewFixedTimeBatchTask | None:
+    return batch.task_entry(task_name)
+
+
 def _batch_task_entry(
     batch: MultiAccountRepeatNewFixedTimeBatch,
     task_name: str,
 ) -> MultiAccountRepeatNewFixedTimeBatchTask:
     """确认任务属于该顺序任务组，并返回任务的独立配置项。"""
-    entry = batch.task_entry(task_name)
+    entry = _find_batch_task_entry(batch, task_name)
     if entry is None:
         raise HTTPException(status_code=404, detail="该顺序任务组没有配置此任务")
+    return entry
+
+
+def _ensure_disabled_batch_task_entry(
+    batch: MultiAccountRepeatNewFixedTimeBatch,
+    task_name: str,
+) -> MultiAccountRepeatNewFixedTimeBatchTask:
+    """首次保存任务组私有配置时创建停用任务，不改变任务组调度状态。"""
+    entry = _find_batch_task_entry(batch, task_name)
+    if entry is None:
+        entry = MultiAccountRepeatNewFixedTimeBatchTask(
+            task_name=convert_to_underscore(task_name.strip()),
+            enable=False,
+        )
+        batch.task_list.append(entry)
     return entry
 
 
@@ -313,12 +335,34 @@ def _task_account(section, account_index: int) -> MultiAccountRepeatNewAccount:
     return accounts[account_index - 1]
 
 
-def _task_entry(account: MultiAccountRepeatNewAccount, task_name: str) -> MultiAccountRepeatNewTask:
+def _find_task_entry(account: MultiAccountRepeatNewAccount, task_name: str) -> MultiAccountRepeatNewTask | None:
     key = convert_to_underscore(task_name.strip())
-    for entry in account.task_list:
-        if convert_to_underscore(entry.task_name) == key:
-            return entry
-    raise HTTPException(status_code=404, detail="账号没有配置该任务")
+    return next(
+        (entry for entry in account.task_list if convert_to_underscore(entry.task_name) == key),
+        None,
+    )
+
+
+def _task_entry(account: MultiAccountRepeatNewAccount, task_name: str) -> MultiAccountRepeatNewTask:
+    entry = _find_task_entry(account, task_name)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="账号没有配置该任务")
+    return entry
+
+
+def _ensure_disabled_single_task_entry(
+    account: MultiAccountRepeatNewAccount,
+    task_name: str,
+) -> MultiAccountRepeatNewTask:
+    """首次保存独立任务私有配置时创建停用的原生 Scheduler 覆盖。"""
+    entry = _find_task_entry(account, task_name)
+    if entry is None:
+        entry = MultiAccountRepeatNewTask(
+            task_name=convert_to_underscore(task_name.strip()),
+            private_config={"scheduler": {"enable": False}},
+        )
+        account.task_list.append(entry)
+    return entry
 
 
 def _serialize_group(group: BaseModel) -> list[dict]:
@@ -1062,9 +1106,13 @@ async def delete_fixed_time_batch_task(script_name: str, account_index: int, bat
 @multi_account_task_orchestration_app.get('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/args')
 async def get_fixed_time_batch_task_args(script_name: str, account_index: int, batch_id: str, task_name: str):
     account = _task_account(_section(script_name), account_index)
-    entry = _batch_task_entry(_batch(account, batch_id), task_name)
-    task_args = _default_task_args(script_name, entry.task_name, remove_scheduler=True)
-    return _apply_private_args(task_args, entry.private_config)
+    entry = _find_batch_task_entry(_batch(account, batch_id), task_name)
+    task_args = _default_task_args(
+        script_name,
+        entry.task_name if entry is not None else task_name,
+        remove_scheduler=True,
+    )
+    return _apply_private_args(task_args, entry.private_config) if entry is not None else task_args
 
 
 @multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/{group}/{argument}/value')
@@ -1074,12 +1122,13 @@ async def set_fixed_time_batch_task_arg(
 ):
     section = _section(script_name)
     account = _task_account(section, account_index)
-    entry = _batch_task_entry(_batch(account, batch_id), task_name)
+    batch = _batch(account, batch_id)
     if convert_to_underscore(group) == "scheduler":
         raise HTTPException(status_code=400, detail="不能在任务组私有配置中修改调度参数")
-    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
+    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(task_name), None)
     if not isinstance(task_config, BaseModel):
         raise HTTPException(status_code=400, detail="任务配置不存在")
+    entry = _ensure_disabled_batch_task_entry(batch, task_name)
 
     private = copy.deepcopy(entry.private_config)
     private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
@@ -1098,7 +1147,10 @@ async def reset_fixed_time_batch_task_private_config_to_default(script_name: str
     # 恢复任务模型的默认值，而不是清空后继续继承公共配置。
     section = _section(script_name)
     account = _task_account(section, account_index)
-    entry = _batch_task_entry(_batch(account, batch_id), task_name)
+    entry = _find_batch_task_entry(_batch(account, batch_id), task_name)
+    # 从未保存过私有配置的停用任务本来就在使用默认值。
+    if entry is None:
+        return True
     entry.private_config = _default_private_config(script_name, entry.task_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
@@ -1133,20 +1185,24 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
 @multi_account_task_orchestration_app.get('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks/{task_name}/args')
 async def get_private_args(script_name: str, account_index: int, task_name: str):
     account = _task_account(_section(script_name), account_index)
-    entry = _task_entry(account, task_name)
-    task_args = _default_task_args(script_name, entry.task_name, remove_scheduler=False)
-    return _apply_private_args(task_args, entry.private_config)
+    entry = _find_task_entry(account, task_name)
+    task_args = _default_task_args(
+        script_name,
+        entry.task_name if entry is not None else task_name,
+        remove_scheduler=False,
+    )
+    return _apply_private_args(task_args, entry.private_config) if entry is not None else task_args
 
 
 @multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks/{task_name}/{group}/{argument}/value')
 async def set_private_arg(script_name: str, account_index: int, task_name: str, group: str, argument: str, types: str, value):
     section = _section(script_name)
     account = _task_account(section, account_index)
-    entry = _task_entry(account, task_name)
     group_name = convert_to_underscore(group)
-    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
+    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(task_name), None)
     if not isinstance(task_config, BaseModel):
         raise HTTPException(status_code=400, detail="任务配置不存在")
+    entry = _ensure_disabled_single_task_entry(account, task_name)
     private = copy.deepcopy(entry.private_config)
     private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
     candidate = task_config.__class__()
@@ -1234,8 +1290,15 @@ async def copy_private_args_to_accounts(
 @multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/tasks/{task_name}/private/default')
 async def reset_private_args_to_default(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
-    entry = _task_entry(_task_account(section, account_index), task_name)
+    entry = _find_task_entry(_task_account(section, account_index), task_name)
+    # 未启用且从未保存过私有配置时，本来就在使用默认值。
+    if entry is None:
+        return True
     private = _default_private_config(script_name, entry.task_name)
+    # 恢复参数默认值不应改变独立任务的启用状态。
+    scheduler = _single_task_scheduler(script_name, entry)
+    if scheduler is not None:
+        private.setdefault("scheduler", {})["enable"] = scheduler.enable
     task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
     candidate = task_config.__class__()
     try:
