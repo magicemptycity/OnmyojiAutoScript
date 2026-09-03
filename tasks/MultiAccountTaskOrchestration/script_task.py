@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
 from pydantic import BaseModel, ValidationError
+from module.config.model_overrides import model_with_field_overrides, model_with_group_overrides
 from module.config.utils import convert_to_underscore, parse_next_server_weekday, parse_tomorrow_server
 from tasks.MultiAccountTaskOrchestration.task_name_resolver import TaskNameResolver
 from tasks.Restart.server_update import build_server_update_delay_target, is_server_update_window
@@ -40,6 +41,16 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
     task_display_names: ClassVar[dict[str, str]] = {
         "MultiAccountTaskOrchestration": "多账号任务编排",
     }
+
+    def _publish_multi_account_overview(
+        self,
+        kind: str,
+        active: dict[str, Any] | None,
+    ) -> None:
+        """Publishes virtual multi-account execution state over OAS's native queue."""
+        state_queue = getattr(self, "state_queue", None)
+        if state_queue is not None:
+            state_queue.put({"multi_account_overview": {"kind": kind, "active": active}})
 
     def run(self):
         logger.hr(self._current_task_display_name(), 1)
@@ -211,11 +222,11 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         public_scheduler = getattr(task_config, "scheduler", None)
         if public_scheduler is None:
             return None
-        data = public_scheduler.model_dump(mode="json")
         private_scheduler = entry.private_config.get("scheduler", {})
-        if isinstance(private_scheduler, dict):
-            data.update(private_scheduler)
-        return public_scheduler.__class__.model_validate(data)
+        return model_with_field_overrides(
+            public_scheduler,
+            private_scheduler if isinstance(private_scheduler, dict) else {},
+        )
 
     def _enabled_single_tasks(self, account_info: MultiAccountRepeatNewAccount):
         return [
@@ -654,35 +665,6 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         return None
 
     @staticmethod
-    def _find_task_group(task_config: BaseModel, group_name: str) -> Any:
-        """按照参数页面使用的分组名称找到普通分组或列表分组。"""
-        group_name = convert_to_underscore(group_name)
-        group = getattr(task_config, group_name, None)
-        if group is not None:
-            return group
-        matches = re.findall(r"\d+", group_name)
-        index = int(matches[-1]) - 1 if matches else -1
-        if index < 0:
-            return None
-        for field_name, value in task_config.__dict__.items():
-            if field_name in group_name and isinstance(value, list) and index < len(value):
-                return value[index]
-        return None
-
-    @classmethod
-    def _set_task_argument(
-        cls,
-        task_config: BaseModel,
-        group_name: str,
-        argument_name: str,
-        value: Any,
-    ) -> None:
-        group = cls._find_task_group(task_config, group_name)
-        if group is None:
-            raise ValueError(f"找不到任务参数分组：{group_name}")
-        setattr(group, convert_to_underscore(argument_name), value)
-
-    @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
         """递归套用该账号该任务已经保存的运行记录。"""
         result = copy.deepcopy(base)
@@ -740,14 +722,9 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             if self._has_private_task_overrides(task_entry.private_config)
             else copy.deepcopy(public_config)
         )
-        for group_name, arguments in task_entry.private_config.items():
-            if not isinstance(arguments, dict):
-                continue
-            for argument_name, value in arguments.items():
-                self._set_task_argument(active, group_name, argument_name, value)
         try:
-            active = active.__class__.model_validate(active.model_dump())
-        except ValidationError as exc:
+            active = model_with_group_overrides(active, task_entry.private_config)
+        except (ValidationError, ValueError) as exc:
             raise ValueError(f"账号私有配置无效：{task_name}: {exc}") from exc
 
         if task_entry.runtime_record:

@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
+from module.config.model_overrides import model_with_field_overrides, model_with_group_overrides
 from module.config.utils import (
     convert_to_underscore,
     parse_next_server_weekday,
@@ -74,10 +75,8 @@ def _entry_scheduler(script_name: str, entry: MultiAccountRepeatTimedTask):
     use_public = private_keys <= {"enable", "next_run"}
     scheduler = copy.deepcopy(public_scheduler) if use_public else public_scheduler.__class__()
     if isinstance(private_scheduler, dict):
-        # 私有配置在 JSON 中存储为字符串；通过模型重新校验，将时间、间隔和枚举恢复为正确类型。
-        scheduler_data = scheduler.model_dump(mode="json")
-        scheduler_data.update(private_scheduler)
-        scheduler = scheduler.__class__.model_validate(scheduler_data)
+        # 私有配置在 JSON 中存储为字符串；统一交给 Pydantic 恢复时间、间隔和枚举类型。
+        scheduler = model_with_field_overrides(scheduler, private_scheduler)
     return scheduler
 
 
@@ -206,13 +205,6 @@ def _find_group(model: BaseModel, group_name: str):
         if field_name in normalized and isinstance(value, list) and index < len(value):
             return value[index]
     return None
-
-
-def _set_argument(model: BaseModel, group_name: str, argument_name: str, value) -> None:
-    group = _find_group(model, group_name)
-    if group is None:
-        raise ValueError(f"找不到任务参数分组：{group_name}")
-    setattr(group, convert_to_underscore(argument_name), value)
 
 
 def _convert_argument(types: str, value):
@@ -472,12 +464,9 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
         raise HTTPException(status_code=400, detail="不支持修改该公共配置")
     candidate = copy.deepcopy(section)
     try:
-        candidate_data = candidate.model_dump(mode="json")
-        group_data = candidate_data.get(group_name)
-        if not isinstance(group_data, dict):
-            raise ValueError(f"找不到任务参数分组：{group_name}")
-        group_data[convert_to_underscore(argument)] = _convert_argument(types, value)
-        candidate = candidate.__class__.model_validate(candidate_data)
+        candidate = model_with_group_overrides(candidate, {
+            group_name: {argument: _convert_argument(types, value)},
+        })
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"公共参数无效：{exc}") from exc
     _save_timed_section(script_name, candidate)
@@ -511,16 +500,7 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
     candidate = task_config.__class__()
     try:
-        candidate_data = candidate.model_dump(mode="json")
-        for group_name, arguments in private.items():
-            if not isinstance(arguments, dict):
-                continue
-            group_data = candidate_data.get(convert_to_underscore(group_name))
-            if not isinstance(group_data, dict):
-                raise ValueError(f"找不到任务参数分组：{group_name}")
-            for name, item_value in arguments.items():
-                group_data[convert_to_underscore(name)] = item_value
-        candidate = candidate.__class__.model_validate(candidate_data)
+        candidate = model_with_group_overrides(candidate, private)
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"私有参数无效：{exc}") from exc
     entry.private_config = private
@@ -595,10 +575,7 @@ async def reset_private_args_to_default(script_name: str, account_index: int, ta
     task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
     candidate = task_config.__class__()
     try:
-        for group_name, arguments in private.items():
-            for name, value in arguments.items():
-                _set_argument(candidate, group_name, name, value)
-        candidate.__class__.model_validate(candidate.model_dump())
+        candidate = model_with_group_overrides(candidate, private)
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"默认私有参数无效：{exc}") from exc
     entry.private_config = private

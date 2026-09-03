@@ -5,6 +5,7 @@ import random
 from datetime import datetime, time, timedelta
 from typing import Any, ClassVar
 
+from module.config.model_overrides import model_with_field_overrides
 from module.config.utils import (
     convert_to_underscore,
     parse_next_server_weekday,
@@ -205,15 +206,22 @@ class ScriptTask(MultiAccountRepeatNewBase):
         return False
 
     def _apply_account_utilize_config(self, account: MultiAccountKekkaiUtilizeNewAccount):
-        """临时套用账号独立蹭卡配置。"""
+        """临时套用账号独立蹭卡配置，并由 Pydantic 统一转换存储格式。"""
         backup = copy.deepcopy(self.config.kekkai_utilize.utilize_config)
-        active = UtilizeConfig()
-        for name, value in account.private_config.get("utilize_config", {}).items():
-            if hasattr(active, name):
-                setattr(active, name, value)
+        overrides = account.private_config.get("utilize_config", {})
+        if not isinstance(overrides, dict):
+            raise ValueError("账号私有蹭卡配置无效：utilize_config 必须是对象")
+
+        # 私有配置来自 JSON/API，TimeDelta 等字段是字符串；不能先 setattr 到
+        # 已类型化的模型后再 model_dump，否则序列化器会把字符串当 timedelta 使用。
         try:
-            active = UtilizeConfig.model_validate(active.model_dump())
-        except ValidationError as exc:
+            active = model_with_field_overrides(
+                UtilizeConfig(),
+                overrides,
+                # 兼容历史配置中已从当前蹭卡模型移除的字段。
+                ignore_unknown=True,
+            )
+        except (ValidationError, ValueError) as exc:
             raise ValueError(f"账号私有蹭卡配置无效：{exc}") from exc
         self.config.kekkai_utilize.utilize_config = active
         return backup

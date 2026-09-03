@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
+from module.config.model_overrides import model_with_field_overrides, model_with_group_overrides
 from module.config.utils import convert_to_underscore
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
@@ -111,13 +112,6 @@ def _find_group(model: BaseModel, group_name: str):
     return getattr(model, convert_to_underscore(group_name), None)
 
 
-def _set_argument(model: BaseModel, group_name: str, argument_name: str, value) -> None:
-    group = _find_group(model, group_name)
-    if not isinstance(group, BaseModel):
-        raise ValueError(f"找不到参数分组：{group_name}")
-    setattr(group, convert_to_underscore(argument_name), value)
-
-
 def _convert_argument(types: str, value):
     if types == "integer":
         return int(value)
@@ -139,6 +133,11 @@ def _default_utilize_config() -> dict:
 
 def _account_utilize_config(account: MultiAccountKekkaiUtilizeNewAccount) -> UtilizeConfig:
     return UtilizeConfig.model_validate(account.private_config.get("utilize_config", {}))
+
+
+def _validated_model_value(model: BaseModel, argument: str, value):
+    """将 API 原始值先合并到字典，再交给 Pydantic 转换为字段实际类型。"""
+    return model_with_field_overrides(model, {argument: value})
 
 
 def _account_scheduler(account: MultiAccountKekkaiUtilizeNewAccount) -> UtilizeScheduler:
@@ -270,8 +269,9 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
         raise HTTPException(status_code=400, detail="不支持修改该任务配置")
     candidate = copy.deepcopy(section)
     try:
-        _set_argument(candidate, group, argument, _convert_argument(types, value))
-        candidate = candidate.__class__.model_validate(candidate.model_dump())
+        candidate = model_with_group_overrides(candidate, {
+            group: {argument: _convert_argument(types, value)},
+        })
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"任务参数无效：{exc}") from exc
     _save(script_name, candidate)
@@ -289,8 +289,10 @@ async def set_account_scheduler_arg(script_name: str, account_index: int, argume
     account = _account(section, account_index)
     candidate = copy.deepcopy(_account_scheduler(account))
     try:
-        setattr(candidate, convert_to_underscore(argument), _convert_argument(types, value))
-        candidate = UtilizeScheduler.model_validate(candidate.model_dump())
+        candidate = model_with_field_overrides(
+            candidate,
+            {argument: _convert_argument(types, value)},
+        )
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"账号蹭卡调度器无效：{exc}") from exc
     account.scheduler = candidate
@@ -333,8 +335,11 @@ async def set_account_utilize_arg(script_name: str, account_index: int, argument
     account = _account(section, account_index)
     candidate = _account_utilize_config(account)
     try:
-        setattr(candidate, convert_to_underscore(argument), _convert_argument(types, value))
-        candidate = UtilizeConfig.model_validate(candidate.model_dump())
+        candidate = _validated_model_value(
+            candidate,
+            argument,
+            _convert_argument(types, value),
+        )
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"账号蹭卡配置无效：{exc}") from exc
     account.private_config = {"utilize_config": candidate.model_dump()}

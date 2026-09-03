@@ -413,7 +413,11 @@ class Script:
             module_path = str(Path.cwd() / 'tasks' / command / (module_name + '.py'))
             logger.info(f'module_path: {module_path}, module_name: {module_name}')
             task_module = load_module(module_name, module_path)
-            task_module.ScriptTask(config=self.config, device=self.device).run()
+            task_object = task_module.ScriptTask(config=self.config, device=self.device)
+            # Inner multi-account tasks publish their virtual running state through
+            # the same queue as the native scheduler overview.
+            task_object.state_queue = self.state_queue
+            task_object.run()
         except Exception as e:
             return self._handle_task_exception(e, command)
         return False

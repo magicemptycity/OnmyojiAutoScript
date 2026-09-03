@@ -5,6 +5,7 @@ import random
 from datetime import datetime, time, timedelta
 from typing import Any, ClassVar
 
+from module.config.model_overrides import model_with_group_overrides
 from module.config.utils import (
     convert_to_underscore,
     parse_next_server_weekday,
@@ -249,14 +250,9 @@ class ScriptTask(MultiAccountRepeatNewBase):
             if self._has_private_task_overrides(task_entry.private_config)
             else copy.deepcopy(public_config)
         )
-        for group_name, arguments in task_entry.private_config.items():
-            if not isinstance(arguments, dict):
-                continue
-            for argument_name, value in arguments.items():
-                self._set_task_argument(active, group_name, argument_name, value)
         try:
-            active = active.__class__.model_validate(active.model_dump())
-        except ValidationError as exc:
+            active = model_with_group_overrides(active, task_entry.private_config)
+        except (ValidationError, ValueError) as exc:
             raise ValueError(f"账号私有配置无效：{task_name}: {exc}") from exc
 
         baseline = active.model_dump()
