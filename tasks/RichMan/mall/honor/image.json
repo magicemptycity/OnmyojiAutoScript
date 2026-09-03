@@ -25,5 +25,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "三星白蛋"
+  },
+  {
+    "itemName": "honor_SWIPE_CHECK",
+    "imageName": "honor_honor_SWIPE_CHECK.png",
+    "roiFront": "424,399,100,100",
+    "roiBack": "140,69,897,552",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "判断是否滑动到底"
   }
 ]

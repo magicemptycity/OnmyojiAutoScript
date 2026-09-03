@@ -23,6 +23,8 @@ from threading import Thread
 from multiprocessing.queues import Queue
 from module.config.utils import convert_to_underscore
 from module.config.config import Config
+from module.config.anti_ban import AntiBanGuard
+from module.device.device import Device
 from module.device.env import IS_WINDOWS
 from module.base.utils import load_module
 from module.base.decorator import del_cached_property
@@ -55,6 +57,7 @@ class Script:
         self.last_task_runtime_outcome: dict[str, Any] | None = None
         # 运行loop的线程
         self.loop_thread: Thread = None
+        self.anti_ban_guard: AntiBanGuard = AntiBanGuard()
 
     @cached_property
     def config(self) -> "Config":
@@ -71,16 +74,24 @@ class Script:
 
     @cached_property
     def device(self) -> Device | None:
-        try:
-            from module.device.device import Device
-            device = Device(config=self.config)
-            return device
-        except RequestHumanTakeover:
-            logger.critical('Request human takeover')
-            exit(1)
-        except Exception as e:
-            logger.exception(e)
-            exit(1)
+        from module.device.device import Device
+
+        max_retry = 3
+        for attempt in range(1, max_retry + 1):
+            try:
+                return Device(config=self.config)
+            except RequestHumanTakeover:
+                logger.critical('Request human takeover')
+                exit(1)
+            except Exception as exc:
+                if attempt >= max_retry:
+                    logger.exception(exc)
+                    exit(1)
+                logger.warning(
+                    f'Device initialization failed, retrying '
+                    f'({attempt + 1}/{max_retry}) after 5 seconds: {exc}'
+                )
+                time.sleep(5)
 
     @cached_property
     def checker(self):
@@ -316,6 +327,9 @@ class Script:
             if self.state_queue:
                 self.state_queue.put({"schedule": self.config.get_schedule_data()})
             now = datetime.now()
+            antiban_wake = self.anti_ban_guard.wake_time(now, self.config.script.anti_ban)
+            if antiban_wake is not None:
+                task.next_run = max(task.next_run, antiban_wake)
             # 任务时间到了返回任务名称
             if task.next_run <= now:
                 return task.command
@@ -404,7 +418,11 @@ class Script:
             module_path = str(Path.cwd() / 'tasks' / command / (module_name + '.py'))
             logger.info(f'module_path: {module_path}, module_name: {module_name}')
             task_module = load_module(module_name, module_path)
-            task_module.ScriptTask(config=self.config, device=self.device).run()
+            task_object = task_module.ScriptTask(config=self.config, device=self.device)
+            # Inner multi-account tasks publish their virtual running state through
+            # the same queue as the native scheduler overview.
+            task_object.state_queue = self.state_queue
+            task_object.run()
         except Exception as e:
             return self._handle_task_exception(e, command)
         return False
@@ -419,6 +437,7 @@ class Script:
         start_day = date.today()
         logger.info(f'Start scheduler loop: {self.config_name}')
         self.config.model.running_task = ''
+        self.anti_ban_guard.reset()
 
         # Update GUI 防呆, 读取设置并立刻显示后台模拟器到前台
         if not self.config.script.device.run_background_only and IS_WINDOWS:
@@ -468,10 +487,12 @@ class Script:
             self.device.click_record_clear()
             logger.hr(task, level=0)
             self.config.model.running_task = task
+            _task_start = datetime.now()
             success = self.run(inflection.camelize(task))
             self.config.model.running_task = ''
             logger.info(f'Scheduler: End task `{task}`')
             self.is_first_task = False
+            self.anti_ban_guard.record_active((datetime.now() - _task_start).total_seconds())
 
             # Check failures
             # failed = deep_get(self.failure_record, keys=task, default=0)

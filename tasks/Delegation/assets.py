@@ -44,6 +44,8 @@ class DelegationAssets:
 	I_D_SELECT_5 = RuleImage(roi_front=(767,593,41,40), roi_back=(721,556,103,86), threshold=0.7, method="Template matching", file="./tasks/Delegation/d/d_d_select_5.png")
 	# 返回 
 	I_D_BACK = RuleImage(roi_front=(940,415,138,51), roi_back=(940,415,138,51), threshold=0.8, method="Template matching", file="./tasks/Delegation/d/d_d_back.png")
+	# 一键选择式神按钮 
+	I_D_ONE_CLICK_SELECTION = RuleImage(roi_front=(1096,450,132,39), roi_back=(1086,439,152,59), threshold=0.8, method="Template matching", file="./tasks/Delegation/d/d_d_one_click_selection.png")
 
 
 	# Ocr Rule Assets

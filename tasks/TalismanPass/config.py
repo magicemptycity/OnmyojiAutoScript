@@ -20,6 +20,10 @@ class LevelReward(str, Enum):
 class TalismanConfig(BaseModel):
     get_flower: bool = Field(default=False, description='收取花合战等级奖励')
     level_reward: LevelReward = Field(default=LevelReward.TWO)
+    # 领取成就奖励
+    get_accomplishments: bool = Field(default=False, description='获取成就奖励')
+    # 获取纳物库截图并发送通知
+    get_nawu: bool = Field(default=False, title='纳物库', description='获取纳物库截图并发送通知')
     harvest_soul: bool = Field(default=False, description='收获1500签御魂')
 
 class TalismanPass(ConfigBase):

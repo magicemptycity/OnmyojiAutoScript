@@ -117,28 +117,31 @@ def handle_adb_error(e):
         bool: If should retry
     """
     text = str(e).strip()
+    text_lower = text.lower()
+
     if not text:
-        # MuMu may return an empty FAIL response while ATX is restarting.
-        # Reconnecting this serial is safe and lets the normal retry loop recover.
-        logger.warning('ADB returned an empty error response, reconnect and retry')
+        logger.warning('Received empty AdbError, retrying with adb reconnect')
         return True
-    elif 'not found' in text:
+    elif text == 'FAIL':
+        logger.warning('ADB returned FAIL, retrying with adb reconnect')
+        return True
+    elif 'not found' in text_lower:
         # When you call `adb disconnect <serial>`
         # Or when adb server was killed (low possibility)
         # AdbError(device '127.0.0.1:59865' not found)
         logger.error(e)
         return True
-    elif 'timeout' in text:
+    elif 'timeout' in text_lower:
         # AdbTimeout(adb read timeout)
         logger.error(e)
         return True
-    elif 'closed' in text:
+    elif 'closed' in text_lower:
         # AdbError(closed)
         # Usually after AdbTimeout(adb read timeout)
         # Disconnect and re-connect should fix this.
         logger.error(e)
         return True
-    elif 'device offline' in text:
+    elif 'device offline' in text_lower:
         # AdbError(device offline)
         # When a device that has been connected wirelessly is disconnected passively,
         # it does not disappear from the adb device list,
@@ -148,15 +151,18 @@ def handle_adb_error(e):
         # the device is still available, but it needs to be disconnected and re-connected.
         logger.error(e)
         return True
-    elif 'is offline' in text:
+    elif 'is offline' in text_lower:
         # RuntimeError: USB device 127.0.0.1:7555 is offline
         # Raised by uiautomator2 when current adb service is killed by another version of adb service.
         logger.error(e)
         return True
-    elif 'unknown host service' in text:
+    elif 'unknown host service' in text_lower:
         # AdbError(unknown host service)
         # Another version of ADB service started, current ADB service has been killed.
         # Usually because user opened a Chinese emulator, which uses ADB from the Stone Age.
+        logger.error(e)
+        return True
+    elif any(keyword in text_lower for keyword in ['connection aborted', 'connection reset', 'remote host', 'forcefully closed']):
         logger.error(e)
         return True
     else:
