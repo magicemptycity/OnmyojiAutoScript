@@ -72,7 +72,9 @@ class MuMu12Handler(EmulatorHandler):
 
         # vms/MuMuPlayer-12.0-0 or vms/MuMuPlayer-15.0-0
         for folder in emulator.list_folder('../vms', is_dir=True):
+            found_nemu = False
             for file in iter_folder(folder, ext='.nemu'):
+                found_nemu = True
                 serial = Emulator.vbox_file_to_serial(file)
                 name = os.path.basename(folder)
                 if serial:
@@ -92,6 +94,25 @@ class MuMu12Handler(EmulatorHandler):
                     if mumu_id is not None:
                         instance.serial = f'127.0.0.1:{16384 + 32 * mumu_id}'
                         yield instance
+
+            # Newer MuMu versions may remove the .nemu descriptor after an
+            # instance is shut down. Keep the stopped instance discoverable so
+            # the manager command can launch it again.
+            if not found_nemu:
+                name = os.path.basename(folder)
+                instance = EmulatorInstance(
+                    serial=None,
+                    name=name,
+                    path=emulator.path,
+                )
+                mumu_id = self.get_instance_id(instance)
+                if mumu_id is not None:
+                    instance.serial = f'127.0.0.1:{16384 + 32 * mumu_id}'
+                    logger.info(
+                        f'MuMu instance {name} has no .nemu descriptor, '
+                        f'use index-derived serial {instance.serial}'
+                    )
+                    yield instance
 
     def iter_adb_binaries(self, emulator) -> t.Iterable[str]:
         # MuMu12 特有: ../vmonitor/bin/adb_server.exe

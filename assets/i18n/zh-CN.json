@@ -18,6 +18,7 @@
   "continue_grigri_refresh_below_nine": "刷新非前40%符咒",
   "continue_grigri_refresh_below_nine_help": "按当前品质符咒的收益排名保留前40%，只刷新其余仍有刷新次数的位置",
   "boss_limit_time": "单局Boss限制时间",
+  "costume_main_type_help": "可多选庭院皮肤。仅选择一个时固定使用该皮肤；选择多个时自动识别游戏当前随机切换到的庭院皮肤。",
   "costume_main_13": "云景阆苑",
   "pickup_email": "是否自动领取邮件",
   "courtyard_affairs": "是否启动庭院事务",

@@ -389,6 +389,12 @@ class ConfigModel(ConfigBase):
                 if '$ref' in value:  # list
                     enum_key = re.search(r"/([^/]+)$", value['$ref']).group(1)
                     item["enumEnum"] = definitions[enum_key]["enum"]
+                elif value.get('type') == 'array' and '$ref' in value.get('items', {}):
+                    enum_key = re.search(r"/([^/]+)$", value['items']['$ref']).group(1)
+                    enum_values = definitions.get(enum_key, {}).get('enum')
+                    if enum_values:
+                        item["type"] = "multi_enum"
+                        item["enumEnum"] = enum_values
                 # if 'allOf' in value:
                 #     enum_key = re.search(r"/([^/]+)$", value['allOf'][0]['$ref']).group(1)
                 #     item["enumEnum"] = definitions[enum_key]["enum"]

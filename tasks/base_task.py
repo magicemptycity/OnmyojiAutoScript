@@ -221,6 +221,13 @@ class BaseTask(GlobalGameAssets, CostumeBase):
         else:
             appear = target.match(self.device.image, threshold=threshold, frame_id=self.device.image_frame_id)
 
+        if (
+            not appear
+            and isinstance(target, RuleImage)
+            and target is getattr(self, 'I_CHECK_MAIN', None)
+        ):
+            appear = self.detect_random_main_costume(threshold=threshold)
+
         if appear and interval:
             self.interval_timer[timer_key].reset()
 

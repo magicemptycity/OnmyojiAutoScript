@@ -65,7 +65,9 @@
       "home_client_clear": true
     },
     "costume_config": {
-      "costume_main_type": "costume_main",
+      "costume_main_type": [
+        "costume_main"
+      ],
       "costume_realm_type": "costume_realm_default",
       "costume_theme_type": "costume_theme_default",
       "costume_shikigami_type": "costume_shikigami_default",

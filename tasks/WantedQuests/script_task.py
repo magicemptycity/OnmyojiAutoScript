@@ -9,8 +9,6 @@ from tasks.GameUi.default_pages import page_battle_prepare, page_battle
 from tasks.GameUi.matcher import any_of
 from typing import List, Callable, Optional
 
-from cached_property import cached_property
-
 from module.atom.image import RuleImage
 from module.atom.ocr import RuleOcr
 from module.base.timer import Timer
@@ -564,13 +562,15 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
     def appear_highlight(self, rule_image: RuleImage):
         return match_highlight_rule(rule_image, self.device.image, frame_id=self.device.image_frame_id)
 
-    @cached_property
+    @property
     def special_main(self) -> bool:
         # 特殊的庭院需要点一下，左边然后才能找到图标
-        main_type = self.config.global_game.costume_config.costume_main_type
-        if main_type == MainType.COSTUME_MAIN_3:
-            return True
-        return False
+        main_type = getattr(self, 'current_main_type', None)
+        if main_type is None:
+            configured = self.config.global_game.costume_config.costume_main_type
+            if len(configured) == 1:
+                main_type = configured[0]
+        return main_type == MainType.COSTUME_MAIN_3
 
     def get_config(self) -> WantedQuestsConfig:
         return self.config.wanted_quests.wanted_quests_config
