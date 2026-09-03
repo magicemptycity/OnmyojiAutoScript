@@ -38,6 +38,12 @@ class ConfigModel:
     OcrServerPort: int = 22268
     OcrClientAddress: str = "127.0.0.1:22268"
     OcrServerWorkerCount: int = 0
+    # OCR 后端：ppocr_onnx（默认）或 onnxocr（可选）
+    OcrBackend: str = "ppocr_onnx"
+    # 仅 onnxocr 后端使用，CUDA 不可用时会自动回退 CPU
+    OcrUseGpu: bool = False
+    OcrGpuId: int = 0
+    OcrCpuThreads: int = 10
 
     # Image
     StartImageServer: bool = True

@@ -1,20 +1,11 @@
 [
   {
     "itemName": "d_done",
-    "roiFront": "0,100,950,550",
-    "roiBack": "0,100,950,550",
+    "roiFront": "965,130,151,516",
+    "roiBack": "963,128,153,518",
     "mode": "Full",
     "method": "Default",
     "keyword": "完成",
-    "description": "地图上的完成标记"
-  },
-  {
-    "itemName": "d_done_card",
-    "roiFront": "950,100,330,550",
-    "roiBack": "950,100,330,550",
-    "mode": "Full",
-    "method": "Default",
-    "keyword": "完成",
-    "description": "右侧列表的完成状态"
+    "description": "完成"
   }
 ]

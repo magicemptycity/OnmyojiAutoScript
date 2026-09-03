@@ -34,5 +34,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "判断是否滑动到底"
+  },
+  {
+    "itemName": "sp_swipe_check2",
+    "imageName": "special_sp_swipe_check2.png",
+    "roiFront": "455,412,42,61",
+    "roiBack": "173,144,840,379",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "判断是否滑动到底2"
   }
 ]

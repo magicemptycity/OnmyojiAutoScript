@@ -32,6 +32,10 @@ from tasks.KekkaiUtilize.config import KekkaiUtilize
 from tasks.KekkaiActivation.config import KekkaiActivation
 from tasks.DemonEncounter.config import DemonEncounter
 from tasks.DailyTrifles.config import DailyTrifles
+from tasks.DailyTriflesSpecial.config import DailyTriflesSpecial
+from tasks.SameHeartTeam.config import SameHeartTeam
+from tasks.SameHeartTeamOrochi.config import SameHeartTeamOrochi
+from tasks.SameHeartTeamAwaken.config import SameHeartTeamAwaken
 from tasks.TalismanPass.config import TalismanPass
 from tasks.Pets.config import Pets
 from tasks.SoulsTidy.config import SoulsTidy
@@ -85,6 +89,28 @@ from tasks.Duel.config import Duel
 from tasks.Chess.config import Chess
 # ----------------------------------------------------------------------------------------------------------------------
 
+# 多账号专属---------------------------------------------------------------------------------------------------------------
+from tasks.Component.MultiAccount.account_library import MultiAccountAccounts
+from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
+from tasks.MultiAccountKekkaiUtilizeNew.config import MultiAccountKekkaiUtilizeNew
+from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
+from tasks.MultiAccountDelegation.config import MultiAccountDelegation
+from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
+from tasks.MultiAccountHunt.config import MultiAccountHunt
+from tasks.MultiAccountRepeat.config import MultiAccountRepeat
+from tasks.MultiAccountTaskOrchestration.config import MultiAccountTaskOrchestration
+from tasks.MultiAccountRepeatNewNormal.config import MultiAccountRepeatNewNormal
+from tasks.MultiAccountRepeatNewFixed.config import MultiAccountRepeatNewFixed
+from tasks.MultiAccountRepeatTimed.config import MultiAccountRepeatTimed
+from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccounts
+from tasks.MultiAccountRepeatMorning.config import MultiAccountRepeatMorning
+from tasks.MultiAccountRepeatAfternoon.config import MultiAccountRepeatAfternoon
+from tasks.MultiAccountRepeatMidnight.config import MultiAccountRepeatMidnight
+from tasks.MultiAccountRepeatDay.config import MultiAccountRepeatDay
+from tasks.MultiAccountRepeatWeek.config import MultiAccountRepeatWeek
+from tasks.MultiAccountRepeatMonth.config import MultiAccountRepeatMonth
+# ----------------------------------------------------------------------------------------------------------------------
+
 class ConfigModel(ConfigBase):
     config_name: str = "oas"
     running_task: str = ''
@@ -103,6 +129,10 @@ class ConfigModel(ConfigBase):
     kekkai_activation: KekkaiActivation = Field(default_factory=KekkaiActivation)
     demon_encounter: DemonEncounter = Field(default_factory=DemonEncounter)
     daily_trifles: DailyTrifles = Field(default_factory=DailyTrifles)
+    daily_trifles_special: DailyTriflesSpecial = Field(default_factory=DailyTriflesSpecial)
+    same_heart_team: SameHeartTeam = Field(default_factory=SameHeartTeam)
+    same_heart_team_orochi: SameHeartTeamOrochi = Field(default_factory=SameHeartTeamOrochi)
+    same_heart_team_awaken: SameHeartTeamAwaken = Field(default_factory=SameHeartTeamAwaken)
     talisman_pass: TalismanPass = Field(default_factory=TalismanPass)
     pets: Pets = Field(default_factory=Pets)
     souls_tidy: SoulsTidy = Field(default_factory=SoulsTidy)
@@ -150,6 +180,29 @@ class ConfigModel(ConfigBase):
     duel: Duel = Field(default_factory=Duel)
     chess: Chess = Field(default_factory=Chess)
 
+    # 多账号专属
+    multi_account_accounts: MultiAccountAccounts = Field(default_factory=MultiAccountAccounts)
+    multi_account_kekkai_utilize: MultiAccountKekkaiUtilize = Field(default_factory=MultiAccountKekkaiUtilize)
+    multi_account_kekkai_utilize_new: MultiAccountKekkaiUtilizeNew = Field(default_factory=MultiAccountKekkaiUtilizeNew)
+    multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
+    multi_account_delegation: MultiAccountDelegation = Field(default_factory=MultiAccountDelegation)
+    multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)
+    multi_account_hunt: MultiAccountHunt = Field(default_factory=MultiAccountHunt)
+    multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
+    # 兼容已创建过“多账号多任务新专属公共账号”的旧配置；新版功能只读取通用公共账号库。
+    multi_account_repeat_new_accounts: SharedPublicAccounts | None = None
+    multi_account_shared_accounts: SharedPublicAccounts = Field(default_factory=SharedPublicAccounts)
+    multi_account_task_orchestration: MultiAccountTaskOrchestration = Field(default_factory=MultiAccountTaskOrchestration)
+    multi_account_repeat_new_normal: MultiAccountRepeatNewNormal = Field(default_factory=MultiAccountRepeatNewNormal)
+    multi_account_repeat_new_fixed: MultiAccountRepeatNewFixed = Field(default_factory=MultiAccountRepeatNewFixed)
+    multi_account_repeat_timed: MultiAccountRepeatTimed = Field(default_factory=MultiAccountRepeatTimed)
+    multi_account_repeat_morning: MultiAccountRepeatMorning = Field(default_factory=MultiAccountRepeatMorning)
+    multi_account_repeat_afternoon: MultiAccountRepeatAfternoon = Field(default_factory=MultiAccountRepeatAfternoon)
+    multi_account_repeat_midnight: MultiAccountRepeatMidnight = Field(default_factory=MultiAccountRepeatMidnight)
+    multi_account_repeat_day: MultiAccountRepeatDay = Field(default_factory=MultiAccountRepeatDay)
+    multi_account_repeat_week: MultiAccountRepeatWeek = Field(default_factory=MultiAccountRepeatWeek)
+    multi_account_repeat_month: MultiAccountRepeatMonth = Field(default_factory=MultiAccountRepeatMonth)
+
     # 阴阳寮
     collective_missions: CollectiveMissions = Field(default_factory=CollectiveMissions)
     hunt: Hunt = Field(default_factory=Hunt)
@@ -165,6 +218,7 @@ class ConfigModel(ConfigBase):
         :param config_name:
         """
         if data:
+            data.pop("multi_account_repeat_new", None)
             if config_name:
                 data["config_name"] = config_name
             super().__init__(**data)
@@ -173,6 +227,7 @@ class ConfigModel(ConfigBase):
             super().__init__()
             return
         data = self.read_json(config_name)
+        data.pop("multi_account_repeat_new", None)
         data["config_name"] = config_name
         super().__init__(**data)
 
@@ -335,7 +390,6 @@ class ConfigModel(ConfigBase):
                 # deal with exclude 
                 if key in jsons and jsons[key] == 0xABCDEF:
                     continue
-
                 item = {}
                 item["name"] = key
                 item["title"] = value["title"] if "title" in value else inflection.underscore(key)

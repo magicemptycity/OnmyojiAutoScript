@@ -35,6 +35,16 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
     last_plate_count: int = None  # 上一次识别到的契灵盘子数量
     plate_interval: int = None  # 契灵盘子数量间隔(一般为1)
 
+    def screenshot(self):
+        """契灵结算页与协作邀请重叠时，先让结算流程处理底层页面。"""
+        self.device.screenshot()
+        # 协作邀请出现在“放弃结契”/“再次结契”结算页上时，直接点接受不会生效。
+        # 此时不触发全局协作处理，等结算操作移除底层页面后再处理邀请。
+        if self.appear(self.I_BATTLE_FAIL_ABANDON) or self.appear(self.I_CAP_AGAIN):
+            return self.device.image
+        self._burst()
+        return self.device.image
+
     def _exit_matcher(self) -> ExitMatcher | None:
         return any_of(self.I_BALL_FIRE, self.I_CHECK_BONDLING_FAIRYLAND, self.I_GI_EMOJI_1, self.I_GI_EMOJI_2)
 
@@ -73,6 +83,61 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         ret = super()._handle_reward(context, config)
         context.is_win = is_win
         return ret
+
+    def set_next_run(
+        self,
+        task: str,
+        finish: bool = False,
+        success: bool = None,
+        server: bool = True,
+        target: datetime = None,
+    ) -> None:
+        """契灵正常完成时更新身份互换状态，再设置下次调度。"""
+        if task == "BondlingFairyland" and finish and success is True:
+            if self._update_role_swap_after_complete():
+                # task_delay 会重新加载配置，必须在此前保存互换状态。
+                self.config.save()
+        super().set_next_run(task, finish, success, server, target)
+
+    def _update_role_swap_after_complete(self) -> bool:
+        """按完成日期累计队长队员互换间隔，同一天内多次完成只计一次。"""
+        bondling_config = self.config.bondling_fairyland.bondling_config
+        if not bondling_config.role_swap_enable:
+            return False
+
+        current_status = bondling_config.user_status
+        if current_status not in {UserStatus.LEADER, UserStatus.MEMBER}:
+            logger.info("当前身份不是队长或队员，跳过队长队员互换。")
+            return False
+
+        today = datetime.now().date().isoformat()
+        if bondling_config.role_swap_last_complete_date == today:
+            logger.info("今日已记录契灵完成状态，不重复累计互换间隔。")
+            return False
+
+        bondling_config.role_swap_last_complete_date = today
+        bondling_config.role_swap_completed_days += 1
+        if bondling_config.role_swap_completed_days < bondling_config.role_swap_interval_days:
+            logger.info(
+                "契灵身份互换累计进度：%s/%s 天，本次不互换。",
+                bondling_config.role_swap_completed_days,
+                bondling_config.role_swap_interval_days,
+            )
+            return True
+
+        previous_status = current_status
+        bondling_config.user_status = (
+            UserStatus.MEMBER
+            if current_status == UserStatus.LEADER
+            else UserStatus.LEADER
+        )
+        bondling_config.role_swap_completed_days = 0
+        logger.info(
+            "契灵身份已互换：%s -> %s",
+            previous_status.value,
+            bondling_config.user_status.value,
+        )
+        return True
 
     def run(self):
         cong = self.config.bondling_fairyland
@@ -157,8 +222,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                         continue
                     if self.appear(self.I_CREATE_TEAM, interval=1):
                         self.ensure_private()
-                        self.appear_then_click(self.I_CREATE_TEAM, interval=2)
-                        continue
+                        self.ui_click(self.I_CREATE_TEAM, self.I_GI_IN_ROOM, interval=1.5)
+                        return True
                     # 求援
                     if self.appear(self.I_BALL_AREA, interval=1):
                         return False
@@ -246,17 +311,21 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
     def run_member(self):
         logger.hr('Start run member', 2)
         # 开始等待队长拉人
-        wait_time = self.config.bondling_fairyland.invite_config.wait_time
+        wait_time = self.config.bondling_fairyland.bondling_config.member_wait_time
         wait_timer = Timer(wait_time.minute * 60)
         wait_timer.start()
         success = True
 
-        # 进入战斗流程
-        self.device.stuck_record_add('BATTLE_STATUS_S')
+        # 队员等待邀请属于正常等待，不启用战斗卡死检测。
+        # 真正进入战斗后由 run_general_battle() 负责启用卡死检测。
+        self.device.stuck_record_clear()
 
         while 1:
 
             self.screenshot()
+            # 等待邀请、等待队长开战期间，使用任务自己的计时器判断超时。
+            # 清除战斗卡死标记，避免无人邀请时被误判为游戏卡死并重启。
+            self.device.stuck_record_clear()
 
             if wait_timer.reached():
                 logger.info(f"队员等待超时:{wait_timer.current()}, 退出")
@@ -274,19 +343,21 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
 
             if self.is_in_room(False):
                 logger.info("契灵：已经在组队房间中")
+                # 房间内等待队长开战也由 wait_battle() 自己计时。
+                self.device.stuck_record_clear()
                 if self.wait_battle(wait_time=self.config.bondling_fairyland.invite_config.wait_time):
                     self.run_general_battle(self.config.bondling_fairyland.battle_config)
                     wait_timer.reset()
-                    # 进入战斗流程
-                    self.device.stuck_record_add('BATTLE_STATUS_S')
+                    # 战斗结束后回到等待邀请状态，不保留战斗卡死标记。
+                    self.device.stuck_record_clear()
                 else:
                     break
             # 队长秒开的时候，检测是否进入到战斗中
             elif self.is_in_battle(False):
                 self.run_general_battle(self.config.bondling_fairyland.battle_config)
                 wait_timer.reset()
-                # 进入战斗流程
-                self.device.stuck_record_add('BATTLE_STATUS_S')
+                # 战斗结束后回到等待邀请状态，不保留战斗卡死标记。
+                self.device.stuck_record_clear()
                 continue
 
         while 1:
@@ -647,6 +718,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         success = True
         while 1:
             self.screenshot()
+            # 房间内等待开战使用 wait_battle() 的计时器，不触发全局卡死检测。
+            self.device.stuck_record_clear()
 
             # 如果自己在探索界面或者是庭院，那就是房间已经被销毁了
             if self.appear(self.I_CHECK_MAIN) or self.appear(self.I_CHECK_EXPLORATION) or self.appear(

@@ -45,7 +45,12 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralRoom, GameUi, SwitchSoul, 
         self.check_lock(self.conf.general_battle_config.lock_team_enable, self.I_OWT_LOCK, self.I_OWT_UNLOCK)
         # 创建队伍
         logger.info('Create team')
-        self.ui_click(self.I_OWT_TEAM, self.I_CHECK_TEAM, interval=1)
+        while 1:
+            self.screenshot()
+            if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
+                break
+            if self.appear_then_click(self.I_OWT_TEAM, interval=1):
+                continue
         # 创建房间
         self.create_room()
         self.ensure_private()

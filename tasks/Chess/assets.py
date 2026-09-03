@@ -167,5 +167,3 @@ class ChessAssets:
 	O_HEALTH_8 = RuleOcr(roi=(1186,510,31,24), area=(1186,510,31,24), mode="Single", method="Default", keyword="", name="health_8")
 	#
 	O_FREE_REFRESH_COUNT = RuleOcr(roi=(1183,392,38,24), area=(1183,392,38,24), mode="Digit", method="Default", keyword="", name="free_refresh_count")
-
-

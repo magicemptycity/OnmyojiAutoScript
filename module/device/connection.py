@@ -550,8 +550,10 @@ class Connection(ConnectionAttr):
         # Try to connect
         for trial in range(3):
             try:
-                msg = self.adb_client.connect(serial)
-            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as e:
+                # adbutils 默认不设置连接超时。ADB 服务异常时 connect() 可能永久阻塞，
+                # 从而无法进入“模拟器未运行”的自动恢复流程。
+                msg = self.adb_client.connect(serial, timeout=10)
+            except (AdbTimeout, ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as e:
                 logger.warning(f'ADB connect {serial} failed: {e}')
                 retry_sleep(trial)
                 continue

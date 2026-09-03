@@ -117,6 +117,9 @@ class BattleContext:
     buff: Union[BuffClass | list[BuffClass] | None] = None
     # 最近一次稳定识别到的战斗页面；用于驱动连战和超时逻辑。
     last_page: Page | None = None
+    # 本轮是否至少稳定识别过准备页或战斗页。
+    # 退出匹配器只能在此之后生效，避免点击挑战后的加载过渡帧误判为已退出。
+    battle_page_confirmed: bool = False
     # 单次调用内的连战轮次计数；首轮从 1 开始。
     continuous_count: int = 1
     # 结算结束后暂时识别不到战斗页面时的首个时间戳；用于 x 秒兜底。
@@ -498,6 +501,7 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         context.battle_timer = Timer(self._resolve_battle_timeout(config)).start()
         context.long_refresh_timer = Timer(180).start()
         context.last_page = None
+        context.battle_page_confirmed = False
         context.reward_no_battle_ts = None
         context.quick_exit = bool(config.quick_exit)
         context.quick_exit_timer = None
@@ -570,15 +574,20 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         logger.info("Timed inspection hit: recover battle auto mode")
         self.ui_click(hand_marker, auto_marker, interval=0.8)
 
-    def _tick_long_battle(self, context: BattleContext) -> None:
+    def _tick_long_battle(self, context: BattleContext, page: Page | None) -> None:
         """按固定周期刷新长战斗卡死保护标记。
 
         Args:
             context: 当前战斗上下文对象。
+            page: 当前截图识别到的页面。
 
         Returns:
-            None: 需要刷新时原地重置底层长等待状态。
+            None: 仅在确认仍处于战斗页时刷新长等待状态。
         """
+        # 页面没有识别为准备页或战斗页时，不能认为战斗仍在正常进行。
+        # 如果此时也刷新卡死计时器，游戏关闭或截图失联就会一直被掩盖。
+        if page not in {page_battle_prepare, page_battle}:
+            return
         if context.long_refresh_timer.reached():
             logger.info("Refresh long battle stuck timer")
             self.device.stuck_record_clear()
@@ -622,11 +631,16 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         """
         if context.quick_exit:
             return
-        if context.last_page not in {page_battle_prepare, page_battle}:
-            return
         if context.battle_timer.reached():
             logger.warning(f"Battle timeout reached: {context.battle_timer.limit}s")
-            context.quick_exit = True
+            if context.last_page in {page_battle_prepare, page_battle}:
+                # 已经确认进入战斗，保留原来的快速退出流程。
+                context.quick_exit = True
+            else:
+                # 从进入通用战斗开始一直没有识别到战斗页，不能继续无限等待。
+                raise GameStuckError(
+                    f"Battle page not found within {context.battle_timer.limit}s"
+                )
 
     def _in_settlement_stage(self, context: BattleContext, page: Page | None) -> bool:
         """判断当前是否处于结算收尾阶段
@@ -746,8 +760,15 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         Returns:
             BattleAction: 根据结算收尾状态推导出的动作决策。
         """
-        # 非连战且设置了退出检测器, 则根据退出检测器检测是否已经退出
-        if not config.continuous_battle and exit_matcher is not None and self._evaluate_exit_matcher(exit_matcher):
+        # 点击挑战后的首个加载帧可能暂时识别不到任何战斗页，但仍残留副本页特征。
+        # 在至少确认过准备页或战斗页前，不能用 exit matcher 判定战斗已经结束；
+        # 否则会在真正进入战斗时直接返回 Lose，并遗留在奖励页。
+        if (
+            context.battle_page_confirmed
+            and not config.continuous_battle
+            and exit_matcher is not None
+            and self._evaluate_exit_matcher(exit_matcher)
+        ):
             logger.info("Exit matcher hit")
             return BattleAction.EXIT_WIN if context.is_win else BattleAction.EXIT_LOSE
         # 上个页面还是战斗中的页面但此时是未知界面, 且奖励计时也未开启, 则认为当前是页面抖动继续战斗(式神助战...)
@@ -864,10 +885,12 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         try:
             while True:
                 self.screenshot()
-                self._tick_long_battle(context)
-                self._tick_timeout(context)
                 page = GameUi.detect_page_in(self, page_battle_prepare, page_battle, page_battle_result,
                                              page_reward, include_global=False)
+                if page in {page_battle_prepare, page_battle}:
+                    context.battle_page_confirmed = True
+                self._tick_timeout(context)
+                self._tick_long_battle(context, page)
                 context.reward_no_battle_ts = None if page else context.reward_no_battle_ts
                 self._sync_prepare_click_timer(context, page)
                 self._ensure_battle_stuck_guard(context, page)
