@@ -159,6 +159,9 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
         while 1:
             self.screenshot()
             
+            # 御魂模式的活动位面弹窗出现在猫咪奖励处理之前，先关闭它。
+            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
+                continue
             # 检查猫咪奖励
             if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
                 continue

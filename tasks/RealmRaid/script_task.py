@@ -9,7 +9,13 @@ from tasks.GameUi.default_pages import page_exploration
 
 from tasks.base_task import BaseTask
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
-from tasks.Component.GeneralBattle.general_battle import BattleAction, BattleContext, ExitMatcher, GeneralBattle
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleAction,
+    BattleContext,
+    BattleSettlementProfile,
+    ExitMatcher,
+    GeneralBattle,
+)
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_realm_raid
 from tasks.RealmRaid.assets import RealmRaidAssets
@@ -45,6 +51,27 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
     CLICK_REACTION_DELAY = (0.18, 0.22)
     PREPARE_CLICK_DELAY_RANGE = (2.5, 3.5)
     SETTLEMENT_CLICK_INTERVAL_RANGE = (0.65, 0.95)
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile:
+        """返回个人突破专用的结算/奖励页安全点击范围。
+
+        与寮突破保持相同的独立点击策略：每次结算只从当前页面声明的
+        一个安全区域中随机选择，不复用通用战斗的默认结算区域。
+        """
+        return BattleSettlementProfile(
+            name="realm_raid",
+            result_win_areas=(
+                self.C_RESULT_WIN_RANDOM_CENTER,
+                self.C_RESULT_WIN_RANDOM_RIGHT,
+            ),
+            reward_areas=(
+                self.C_REWARD_RANDOM_LEFT,
+                self.C_REWARD_RANDOM_RIGHT,
+                self.C_REWARD_RANDOM_DOWN,
+                self.C_REWARD_RANDOM_BOTTOM,
+                self.C_REWARD_RANDOM_TOP,
+            ),
+        )
 
     def _handle_result(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
         if config.quick_exit:

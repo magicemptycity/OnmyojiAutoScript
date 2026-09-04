@@ -37,6 +37,96 @@ PREPARE_CLICK_DELAY = 3.0
 QUICK_EXIT_WAIT_TIMEOUT = 5.0
 
 
+@dataclass(frozen=True)
+class BattleSettlementProfile:
+    """声明单个副本的结算页/奖励页安全点击范围。
+
+    未提供某个阶段的范围时，该阶段继续使用通用默认行为：结算页左右
+    等概率点击，奖励页按左/上/右/下的既有权重点击。提供多个范围时，
+    每次结算点击只从其中随机选择一个范围，不会在同一轮连续点击所有范围。
+    """
+
+    # 仅用于点击日志，便于定位某个副本采用的结算方案。
+    name: str = "custom"
+    # `None` 表示继续使用基类默认区域；非空 tuple 表示完全覆盖对应阶段。
+    result_areas: tuple[RuleClick, ...] | None = None
+    result_weights: tuple[float, ...] | None = None
+    # 可选：分别覆盖胜利/失败结算页；未设置时回退到 result_areas。
+    result_win_areas: tuple[RuleClick, ...] | None = None
+    result_win_weights: tuple[float, ...] | None = None
+    result_lose_areas: tuple[RuleClick, ...] | None = None
+    result_lose_weights: tuple[float, ...] | None = None
+    reward_areas: tuple[RuleClick, ...] | None = None
+    reward_weights: tuple[float, ...] | None = None
+
+    def __post_init__(self) -> None:
+        self._validate_phase("result", self.result_areas, self.result_weights)
+        self._validate_phase("result_win", self.result_win_areas, self.result_win_weights)
+        self._validate_phase("result_lose", self.result_lose_areas, self.result_lose_weights)
+        self._validate_phase("reward", self.reward_areas, self.reward_weights)
+
+    @staticmethod
+    def _validate_phase(
+        phase: str,
+        areas: tuple[RuleClick, ...] | None,
+        weights: tuple[float, ...] | None,
+    ) -> None:
+        if areas is None:
+            if weights is not None:
+                raise ValueError(
+                    f"Settlement {phase} weights require explicit click areas",
+                )
+            return
+        if not areas:
+            raise ValueError(f"Settlement {phase} click areas cannot be empty")
+        if weights is None:
+            return
+        if len(weights) != len(areas):
+            raise ValueError(
+                f"Settlement {phase} weights must match click area count",
+            )
+        if any(weight <= 0 for weight in weights):
+            raise ValueError(
+                f"Settlement {phase} weights must all be greater than zero",
+            )
+
+    def choose_click(
+        self,
+        phase: str,
+        fallback_factory: Callable[[], RuleClick],
+    ) -> RuleClick:
+        """为当前结算点击挑选一个新的 RuleClick 实例。"""
+
+        if phase == "result":
+            areas, weights = self.result_areas, self.result_weights
+        elif phase == "result_win":
+            areas, weights = self.result_win_areas, self.result_win_weights
+            if areas is None:
+                areas, weights = self.result_areas, self.result_weights
+        elif phase == "result_lose":
+            areas, weights = self.result_lose_areas, self.result_lose_weights
+            if areas is None:
+                areas, weights = self.result_areas, self.result_weights
+        elif phase == "reward":
+            areas, weights = self.reward_areas, self.reward_weights
+        else:
+            raise ValueError(f"Unknown settlement phase: {phase}")
+
+        if areas is None:
+            return fallback_factory()
+        source = (
+            random.choices(areas, weights=weights, k=1)[0]
+            if weights is not None
+            else random.choice(areas)
+        )
+        # 不修改 assets 中共享 RuleClick 的 name/坐标，避免不同副本互相污染。
+        return RuleClick(
+            roi_front=source.roi_front,
+            roi_back=source.roi_back,
+            name=f"SETTLEMENT_{phase.upper()}_{self.name}_{source.name}",
+        )
+
+
 @dataclass
 class BattleBehaviorState:
     """记录一组一次性行为在某个生命周期内的执行状态。"""
@@ -113,6 +203,8 @@ class BattleContext:
     prepare_click_timer: Timer
     # 战斗结算页连续点击的间隔计时器。
     settlement_click_timer: Timer
+    # 当前调用使用的副本结算点击方案；为空时使用通用默认安全区域。
+    settlement_profile: BattleSettlementProfile | None = None
     # 当前调用需要开启的 buff 配置；供 handler 和子类覆写逻辑直接读取。
     buff: Union[BuffClass | list[BuffClass] | None] = None
     # 最近一次稳定识别到的战斗页面；用于驱动连战和超时逻辑。
@@ -190,6 +282,16 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
 
         Returns:
             ExitMatcher | None: 默认结束识别条件；`None` 表示禁用快速结束，回退到 2 秒兜底。
+        """
+
+        return None
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile | None:
+        """返回任务级默认结算点击方案。
+
+        子任务可覆写此方法，为整个副本声明 result/reward 的安全点击范围；
+        未覆盖的阶段仍沿用通用默认范围。若同一副本不同入口需要不同方案，
+        请在 ``run_general_battle(..., settlement_profile=...)`` 中显式传入。
         """
 
         return None
@@ -302,6 +404,7 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         config: GeneralBattleConfig,
         buff: Union[BuffClass | list[BuffClass] | None],
         battle_key: str,
+        settlement_profile: BattleSettlementProfile | None,
     ) -> BattleContext:
         """构建一次战斗调用期使用的战斗上下文。
 
@@ -325,6 +428,7 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             timed_battle_inspections=self._build_timed_battle_inspections(config, battle_key),
             prepare_click_timer=Timer(self._next_prepare_click_delay()),
             settlement_click_timer=Timer(self._next_settlement_click_interval()),
+            settlement_profile=settlement_profile,
             buff=buff,
             quick_exit=bool(config.quick_exit),
         )
@@ -550,13 +654,27 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
     def _settlement_click(
         self,
         context: BattleContext,
-        click_factory: Callable[[], RuleClick] = random_click,
+        *,
+        phase: str,
+        fallback_factory: Callable[[], RuleClick],
     ) -> bool:
-        """按当前任务声明的浮动间隔点击一次战斗结算页。"""
+        """按当前副本结算方案和浮动间隔点击一次安全区域。"""
         timer = context.settlement_click_timer
         if timer.started() and not timer.reached():
             return False
-        self.click(click_factory())
+
+        profile = context.settlement_profile
+        click = (
+            profile.choose_click(phase, fallback_factory)
+            if profile is not None
+            else fallback_factory()
+        )
+        logger.info(
+            "Settlement click: "
+            f"phase={phase}, profile={profile.name if profile else 'default'}, "
+            f"area={click.name}, roi={click.roi_front}",
+        )
+        self.click(click)
         timer.limit = self._next_settlement_click_interval()
         timer.reset()
         return True
@@ -724,7 +842,11 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         context.is_win = not self.appear(self.I_FALSE, threshold=0.8)
         if context.last_page != page_battle_result:
             self.device.click_record_clear()
-        self._settlement_click(context)
+        self._settlement_click(
+            context,
+            phase="result_win" if context.is_win else "result_lose",
+            fallback_factory=random_click,
+        )
         return BattleAction.CONTINUE
 
     def _handle_reward(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
@@ -744,7 +866,11 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         self.appear_then_click(self.I_GB_SKIN_CONFIRM, interval=0.8)
         if context.last_page != page_reward:
             self.device.click_record_clear()
-        self._settlement_click(context, reward_random_click)
+        self._settlement_click(
+            context,
+            phase="reward",
+            fallback_factory=reward_random_click,
+        )
         return BattleAction.CONTINUE
 
     def _handle_missing_battle_page(self, context: BattleContext, config: GeneralBattleConfig,
@@ -854,6 +980,7 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         buff: Union[BuffClass | list[BuffClass]] = None,
         battle_key: str = "default",
         exit_matcher: ExitMatcher | None = None,
+        settlement_profile: BattleSettlementProfile | None = None,
     ) -> bool:
         """
         运行基于 Page FSM 的通用战斗。
@@ -865,6 +992,8 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             exit_matcher: 本次调用专用的结束识别条件。
                 优先级高于 `_exit_matcher()`；适合同一任务不同入口回不同页面的场景。
                 传 `None` 时会继续尝试任务级 `_exit_matcher()`，若仍为空则回退到 2 秒兜底。
+            settlement_profile: 本次调用专用的结算点击方案。
+                优先级高于 `_settlement_click_profile()`；可分别覆盖结算页和奖励页的安全点击范围。
 
         Returns:
             bool: `True` 表示本轮战斗获胜，`False` 表示失败或主动退出。
@@ -879,7 +1008,17 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         logger.info(f"Current count: {self.current_count}")
         self.device.stuck_record_add("BATTLE_STATUS_S")
         self.device.click_record_clear()
-        context = self._build_context(config, buff, battle_key)
+        resolved_settlement_profile = (
+            settlement_profile
+            if settlement_profile is not None
+            else self._settlement_click_profile()
+        )
+        context = self._build_context(
+            config,
+            buff,
+            battle_key,
+            resolved_settlement_profile,
+        )
         self._battle_context = context
         resolved_exit_matcher = exit_matcher if exit_matcher is not None else self._exit_matcher()
         try:

@@ -10,7 +10,7 @@ from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.GameUi.game_ui import GameUi
-from tasks.GameUi.page import any_of, page_main, page_shikigami_records, page_soul_zones
+from tasks.GameUi.page import page_main, page_shikigami_records, page_soul_zones
 from tasks.SameHeartTeam.assets import SameHeartTeamAssets
 from tasks.SameHeartTeam.script_task import ScriptTask as SameHeartTeamScriptTask
 from tasks.SameHeartTeamOrochi.config import SameHeartTeamOrochi, SameHeartTeamOrochiConfig
@@ -128,6 +128,9 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
         while True:
             self.screenshot()
             
+            # 活动位面弹窗出现在猫咪奖励处理之前，先关闭它。
+            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
+                continue
             # 检查猫咪奖励
             if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
                 continue

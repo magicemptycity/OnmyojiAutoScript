@@ -15,6 +15,78 @@
 - 当 `GeneralBattleConfig.lock_team_enable = True` 时，基类会改为“连续停留在准备页 3 秒后再点击准备”。
 - 这个 3 秒窗口只统计连续停留时长；中途离开 `page_battle_prepare` 后会重置，下一次重新进入准备页时重新计时。
 
+## 副本结算点击方案
+
+默认行为保持不变：
+
+- 结算页 `page_battle_result` 继续调用 `random_click()`，仅在左、右安全区域中等概率选择。
+- 奖励页 `page_reward` 继续调用 `reward_random_click()`，按左/上/右/下 `5/10/45/40` 的既有权重选择。
+
+当某个副本的结算或奖励页面不适合默认区域时，可使用
+`BattleSettlementProfile` 单独声明安全点击范围。一个阶段给出多个范围时，
+每次结算点击只会随机选中其中一个范围；不会在同一轮连续点击所有范围。
+未声明的阶段自动回退到上述默认行为。
+
+结算页还可以按胜负分别配置：`result_win_areas` / `result_win_weights`
+用于胜利结算，`result_lose_areas` / `result_lose_weights` 用于失败结算。
+如果没有配置对应的胜利或失败范围，则依次回退到 `result_areas`，最后回退
+到系统默认区域。因此只配置一边不会影响另一边。
+
+`RuleClick` 只作为范围模板使用。通用战斗会为每次自定义点击创建新的 `RuleClick`，不会改写资产中共享区域的名称或坐标。
+
+### 任务级覆写
+
+适合同一个副本所有入口都使用同一结算方案：
+
+```python
+from module.atom.click import RuleClick
+from tasks.Component.GeneralBattle.general_battle import BattleSettlementProfile
+
+def _settlement_click_profile(self) -> BattleSettlementProfile:
+    return BattleSettlementProfile(
+        name="example_dungeon",
+        # 只覆写结算页；奖励页仍保留默认 5/10/45/40 权重。
+        result_areas=(
+            RuleClick((1120, 560, 120, 100), (1120, 560, 120, 100), name="result_right"),
+        ),
+    )
+```
+
+也可以分别为两个阶段提供多个区域与权重：
+
+```python
+return BattleSettlementProfile(
+    name="example_dungeon",
+    result_areas=(self.C_RESULT_LEFT, self.C_RESULT_RIGHT),
+    result_weights=(1, 3),
+    # 可选：分别覆盖胜利和失败结算；未配置时使用 result_areas。
+    result_win_areas=(self.C_RESULT_WIN_RIGHT,),
+    result_lose_areas=(self.C_RESULT_LOSE_LEFT, self.C_RESULT_LOSE_RIGHT),
+    reward_areas=(self.C_REWARD_RIGHT, self.C_REWARD_BOTTOM),
+    reward_weights=(2, 5),
+)
+```
+
+权重数量必须与区域数量一致，且每一项都必须大于 0；未提供权重时，每个区域等概率。
+
+### 单次调用覆写
+
+适合同一任务的不同入口需要不同方案。传给 `run_general_battle()` 的
+`settlement_profile` 优先级高于任务级 `_settlement_click_profile()`：
+
+```python
+self.run_general_battle(
+    config=self.config.example.general_battle_config,
+    battle_key="example_team",
+    settlement_profile=BattleSettlementProfile(
+        name="example_team",
+        reward_areas=(self.C_TEAM_REWARD_RIGHT,),
+    ),
+)
+```
+
+没有任务覆写、也没有调用参数时，完全走原有默认点击逻辑。
+
 ## 定时巡检
 
 `GeneralBattle` 在 `page_battle` 阶段提供统一的定时巡检框架：

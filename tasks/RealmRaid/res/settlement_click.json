@@ -1,0 +1,44 @@
+[
+  {
+    "itemName": "result_win_random_center",
+    "roiFront": "30,108,1205,515",
+    "roiBack": "30,108,1205,515",
+    "description": "中间随机点击"
+  },
+  {
+    "itemName": "result_win_random_right",
+    "roiFront": "686,272,580,433",
+    "roiBack": "686,272,580,433",
+    "description": "右下随机点击"
+  },
+  {
+    "itemName": "reward_random_left",
+    "roiFront": "40,45,185,584",
+    "roiBack": "40,45,185,584",
+    "description": "左边随机点"
+  },
+  {
+    "itemName": "reward_random_right",
+    "roiFront": "1060,108,197,592",
+    "roiBack": "1060,108,197,592",
+    "description": "右边随机点"
+  },
+  {
+    "itemName": "reward_random_down",
+    "roiFront": "36,304,1226,321",
+    "roiBack": "36,304,1226,321",
+    "description": "下面随机点"
+  },
+  {
+    "itemName": "reward_random_bottom",
+    "roiFront": "600,600,660,100",
+    "roiBack": "600,600,660,100",
+    "description": "下面随机点2"
+  },
+  {
+    "itemName": "reward_random_top",
+    "roiFront": "29,111,1215,51",
+    "roiBack": "29,111,1215,51",
+    "description": "上面随机点"
+  }
+]

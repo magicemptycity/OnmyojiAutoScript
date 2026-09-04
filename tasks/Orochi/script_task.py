@@ -30,8 +30,13 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         reward_page = self.navigator.resolve_page(page_reward)
         if reward_page is None:
             return
-        reward_page.recognizer = any_of(self.I_GI_SURE, self.I_GREED_GHOST, self.I_PET_PRESENT,
-                                        reward_page.recognizer)
+        reward_page.recognizer = any_of(
+            self.I_GI_SURE,
+            self.I_GREED_GHOST,
+            self.I_PET_PRESENT,
+            self.I_UI_BACK_RED,
+            reward_page.recognizer,
+        )
 
     def _exit_matcher(self) -> ExitMatcher | None:
         return any_of(self.I_GI_EMOJI_1, self.I_GI_EMOJI_2, self.I_CHECK_EXPLORATION)
@@ -198,6 +203,9 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         while 1:
             self.screenshot()
 
+            # 活动位面弹窗出现在猫咪奖励处理之前，先关闭它。
+            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
+                continue
             # 检查猫咪奖励
             if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
                 continue
@@ -254,6 +262,9 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
 
         while 1:
             self.screenshot()
+            # 活动位面弹窗出现在猫咪奖励处理之前，先关闭它。
+            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
+                continue
             # 检查猫咪奖励
             if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
                 continue
@@ -307,6 +318,9 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
             if self.check_and_invite(self.config.orochi.invite_config.default_invite):
                 continue
 
+            # 活动位面弹窗出现在猫咪奖励处理之前，先关闭它。
+            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
+                continue
             # 检查猫咪奖励
             if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
                 continue

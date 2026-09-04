@@ -7,7 +7,10 @@ import random
 
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.RyouToppa.assets import RyouToppaAssets
-from tasks.Component.GeneralBattle.general_battle import GeneralBattle
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleSettlementProfile,
+    GeneralBattle,
+)
 from tasks.Component.config_base import ConfigBase, Time
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_realm_raid, page_main, page_kekkai_toppa, page_shikigami_records
@@ -84,6 +87,27 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
     CLICK_REACTION_DELAY = (0.18, 0.22)
     PREPARE_CLICK_DELAY_RANGE = (2.5, 3.5)
     SETTLEMENT_CLICK_INTERVAL_RANGE = (0.65, 0.95)
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile:
+        """返回寮突破专用的结算/奖励页安全点击范围。
+
+        寮突破的结算页与奖励页布局不同于通用战斗；每次仅从对应页面
+        已标注的独立区域中随机选择一个点击。未声明权重时，各区域等概率。
+        """
+        return BattleSettlementProfile(
+            name="ryou_toppa",
+            result_win_areas=(
+                self.C_RESULT_WIN_RANDOM_CENTER,
+                self.C_RESULT_WIN_RANDOM_RIGHT,
+            ),
+            reward_areas=(
+                self.C_REWARD_RANDOM_LEFT,
+                self.C_REWARD_RANDOM_RIGHT,
+                self.C_REWARD_RANDOM_DOWN,
+                self.C_REWARD_RANDOM_BOTTOM,
+                self.C_REWARD_RANDOM_TOP,
+            ),
+        )
 
     def run(self):
         """

@@ -116,3 +116,20 @@ class RealmRaidAssets:
 	C_PARTITION_9 = RuleClick(roi_front=(900,418,222,116), roi_back=(900,418,222,116), name="partition_9")
 
 
+	# Click Rule Assets
+	# 中间随机点击
+	C_RESULT_WIN_RANDOM_CENTER = RuleClick(roi_front=(30,108,1205,515), roi_back=(30,108,1205,515), name="result_win_random_center")
+	# 右下随机点击
+	C_RESULT_WIN_RANDOM_RIGHT = RuleClick(roi_front=(686,272,580,433), roi_back=(686,272,580,433), name="result_win_random_right")
+	# 左边随机点
+	C_REWARD_RANDOM_LEFT = RuleClick(roi_front=(40,45,185,584), roi_back=(40,45,185,584), name="reward_random_left")
+	# 右边随机点
+	C_REWARD_RANDOM_RIGHT = RuleClick(roi_front=(1060,108,197,592), roi_back=(1060,108,197,592), name="reward_random_right")
+	# 下面随机点
+	C_REWARD_RANDOM_DOWN = RuleClick(roi_front=(36,304,1226,321), roi_back=(36,304,1226,321), name="reward_random_down")
+	# 下面随机点2
+	C_REWARD_RANDOM_BOTTOM = RuleClick(roi_front=(600,600,660,100), roi_back=(600,600,660,100), name="reward_random_bottom")
+	# 上面随机点
+	C_REWARD_RANDOM_TOP = RuleClick(roi_front=(29,111,1215,51), roi_back=(29,111,1215,51), name="reward_random_top")
+
+
