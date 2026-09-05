@@ -59,6 +59,38 @@ class GeneralBattleAssets:
 	C_RANDOM_BOTTOM = RuleClick(roi_front=(462,599,492,78), roi_back=(462,599,492,78), name="random_bottom")
 	# 整体随机点击 
 	C_RANDOM_ALL = RuleClick(roi_front=(42,94,1207,543), roi_back=(42,94,1207,543), name="random_all")
+	#
+	C_RANDOM_1 = RuleClick(roi_front=(1166,562,100,151), roi_back=(1166,562,100,151), name="random_1")
+	#
+	C_RANDOM_2 = RuleClick(roi_front=(1179,378,100,151), roi_back=(1179,378,100,151), name="random_2")
+	#
+	C_RANDOM_3 = RuleClick(roi_front=(1177,275,100,151), roi_back=(1177,275,100,151), name="random_3")
+	#
+	C_RANDOM_4 = RuleClick(roi_front=(1043,628,134,87), roi_back=(1043,628,134,87), name="random_4")
+	#
+	C_RANDOM_5 = RuleClick(roi_front=(874,626,134,87), roi_back=(874,626,134,87), name="random_5")
+	#
+	C_RANDOM_6 = RuleClick(roi_front=(1176,70,100,151), roi_back=(1176,70,100,151), name="random_6")
+	#
+	C_RANDOM_7 = RuleClick(roi_front=(1083,44,140,103), roi_back=(1083,44,140,103), name="random_7")
+	#
+	C_RANDOM_8 = RuleClick(roi_front=(912,46,140,103), roi_back=(912,46,140,103), name="random_8")
+	#
+	C_RANDOM_9 = RuleClick(roi_front=(566,655,188,59), roi_back=(566,655,188,59), name="random_9")
+	#
+	C_RANDOM_10 = RuleClick(roi_front=(6,117,91,132), roi_back=(6,117,91,132), name="random_10")
+	#
+	C_RANDOM_11 = RuleClick(roi_front=(0,295,55,192), roi_back=(0,295,55,192), name="random_11")
+	#
+	C_RANDOM_12 = RuleClick(roi_front=(0,439,100,151), roi_back=(0,439,100,151), name="random_12")
+	#
+	C_RANDOM_13 = RuleClick(roi_front=(238,685,182,34), roi_back=(238,685,182,34), name="random_13")
+	#
+	C_RANDOM_14 = RuleClick(roi_front=(668,50,141,102), roi_back=(668,50,141,102), name="random_14")
+	#
+	C_RANDOM_15 = RuleClick(roi_front=(13,619,99,94), roi_back=(13,619,99,94), name="random_15")
+	#
+	C_RANDOM_16 = RuleClick(roi_front=(89,684,123,35), roi_back=(89,684,123,35), name="random_16")
 
 
 	# Image Rule Assets

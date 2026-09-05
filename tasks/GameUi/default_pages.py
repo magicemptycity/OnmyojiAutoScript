@@ -35,6 +35,54 @@ from tasks.Restart.assets import RestartAssets
 from tasks.RyouToppa.assets import RyouToppaAssets
 
 
+class SettlementRandomClick(RuleClick):
+    """在单个结算安全区域内按中心椭圆正态分布取点。"""
+
+    def coord(self) -> tuple[int, int]:
+        x, y, width, height = self.roi_front
+        center_x = x + (width - 1) / 2
+        center_y = y + (height - 1) / 2
+        sigma_x = max(width / 6, 0.5)
+        sigma_y = max(height / 6, 0.5)
+
+        for _ in range(12):
+            point_x = round(random.gauss(center_x, sigma_x))
+            point_y = round(random.gauss(center_y, sigma_y))
+            if x <= point_x < x + width and y <= point_y < y + height:
+                return point_x, point_y
+        return round(center_x), round(center_y)
+
+
+def settlement_random_click() -> RuleClick:
+    """按编号递减权重选择结算安全区域，再按中心椭圆正态分布取点。"""
+    area_names = sorted(
+        (
+            name for name in vars(GeneralBattleAssets)
+            if name.startswith('C_RANDOM_') and name[9:].isdigit()
+        ),
+        key=lambda name: int(name[9:]),
+    )
+    areas = tuple(getattr(GeneralBattleAssets, name) for name in area_names)
+    if not areas:
+        raise RuntimeError('No settlement random click areas configured')
+    # 每四个编号共用一档权重：
+    # 1-4为4，5-8为3，9-12为2，13-16为1。
+    weights = tuple(
+        max(1, 4 - (int(name[9:]) - 1) // 4)
+        for name in area_names
+    )
+    area = random.choices(areas, weights=weights, k=1)[0]
+    click = SettlementRandomClick(
+        roi_front=tuple(area.roi_front),
+        roi_back=tuple(area.roi_back),
+        name='SETTLEMENT_RANDOM_CLICK',
+    )
+    if random.random() < 0.15:
+        click.burst_count = random.randint(2, 3)
+        click.burst_interval = (0.1, 0.2)
+    return click
+
+
 def random_click(
     low: int | None = None,
     high: int | None = None,
@@ -61,17 +109,8 @@ def random_click(
 
 
 def reward_random_click() -> RuleClick:
-    """按左10%、上10%、右40%、下40%选择奖励页面点击区域。"""
-    return random.choices(
-        (
-            GeneralBattleAssets.C_RANDOM_LEFT,
-            GeneralBattleAssets.C_RANDOM_TOP,
-            GeneralBattleAssets.C_RANDOM_RIGHT,
-            GeneralBattleAssets.C_RANDOM_BOTTOM,
-        ),
-        weights=(10, 10, 40, 40),
-        k=1,
-    )[0]
+    """奖励页使用全部结算安全区域及中心椭圆正态分布。"""
+    return settlement_random_click()
 
 
 def handle_login_page(task) -> bool:
@@ -482,7 +521,7 @@ page_battle_result = Page(
     category="global",
     priority=25
 )
-page_battle_result.add_enter_success_hooks(lambda _task: random_click())
+page_battle_result.add_enter_success_hooks(lambda _task: settlement_random_click())
 
 page_reward = Page(
     any_of(
