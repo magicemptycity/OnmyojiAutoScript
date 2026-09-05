@@ -28,7 +28,7 @@ from tasks.Component.Login.service import LoginService
 from tasks.DailyTrifles.assets import DailyTriflesAssets
 from tasks.GlobalGame.assets import GlobalGameAssets
 from tasks.GameUi.assets import GameUiAssets
-from tasks.GameUi.matcher import any_of, all_of
+from tasks.GameUi.matcher import any_of
 from tasks.GameUi.page_definition import Page
 from tasks.KekkaiUtilize.assets import KekkaiUtilizeAssets
 from tasks.Restart.assets import RestartAssets
@@ -111,6 +111,13 @@ def random_click(
 def reward_random_click() -> RuleClick:
     """奖励页使用全部结算安全区域及中心椭圆正态分布。"""
     return settlement_random_click()
+
+
+def detect_relax_page(task) -> bool:
+    """识别闲庭，并让庭院标志接入多皮肤循环检测。"""
+    if not task.appear(task.I_BACK_BROWN):
+        return False
+    return task.appear(task.I_CHECK_MAIN)
 
 
 def handle_login_page(task) -> bool:
@@ -211,8 +218,9 @@ page_activity.connect(page_main, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_ac
 page_main.connect(page_activity, GameUiAssets.I_MAIN_GOTO_ACTIVITY, key="page_main->page_activity")
 
 # 闲庭仍会命中庭院主页标志，因此使用更高优先级先识别闲庭，再点击左上角返回庭院。
+# I_CHECK_MAIN 必须从任务实例读取，以便失配时触发多庭院皮肤循环识别。
 page_relax = Page(
-    all_of(GameUiAssets.I_CHECK_MAIN, GameUiAssets.I_BACK_BROWN),
+    detect_relax_page,
     category="global",
     priority=90,
 )
