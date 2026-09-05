@@ -221,6 +221,13 @@ class BaseTask(GlobalGameAssets, CostumeBase):
         else:
             appear = target.match(self.device.image, threshold=threshold, frame_id=self.device.image_frame_id)
 
+        if (
+            not appear
+            and isinstance(target, RuleImage)
+            and target is getattr(self, 'I_CHECK_MAIN', None)
+        ):
+            appear = self.detect_random_main_costume(threshold=threshold)
+
         if appear and interval:
             self.interval_timer[timer_key].reset()
 
@@ -479,11 +486,22 @@ class BaseTask(GlobalGameAssets, CostumeBase):
             if not self.interval_timer[click.name].reached():
                 return False
 
-        x, y = click.coord()
-        if isinstance(click, RuleLongClick):
-            self.device.long_click(x=x, y=y, duration=click.duration / 1000, control_name=click.name)
-        elif isinstance(click, RuleClick) or isinstance(click, RuleImage) or isinstance(click, RuleOcr):
-            self.device.click(x=x, y=y, control_name=click.name)
+        burst_count = max(1, int(getattr(click, 'burst_count', 1)))
+        burst_interval = getattr(click, 'burst_interval', (0.1, 0.2))
+        if burst_count > 1:
+            logger.info(
+                f'Burst click in same area: count={burst_count}, '
+                f'interval={burst_interval[0]}-{burst_interval[1]}s'
+            )
+        for click_index in range(burst_count):
+            if click_index:
+                sleep(random.uniform(*burst_interval))
+            # 连点时每次重新取点：保持在同一规则区域内，但不重复同一坐标。
+            x, y = click.coord()
+            if isinstance(click, RuleLongClick):
+                self.device.long_click(x=x, y=y, duration=click.duration / 1000, control_name=click.name)
+            elif isinstance(click, RuleClick) or isinstance(click, RuleImage) or isinstance(click, RuleOcr):
+                self.device.click(x=x, y=y, control_name=click.name)
 
         # 执行后，如果有限制时间，则重置限制时间
         if interval:

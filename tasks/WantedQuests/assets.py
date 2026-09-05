@@ -176,5 +176,3 @@ class WantedQuestsAssets:
 	# Swipe Rule Assets
 	# 手指向上滑动 
 	S_WQ_LIST_UP = RuleSwipe(roi_front=(60,250,2,4), roi_back=(65,200,2,4), mode="default", name="wq_list_up")
-
-

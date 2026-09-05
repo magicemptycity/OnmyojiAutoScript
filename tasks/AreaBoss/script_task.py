@@ -14,11 +14,13 @@ from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.AreaBoss.assets import AreaBossAssets
 from tasks.AreaBoss.config_boss import AreaBossFloor
 from module.logger import logger
-from module.exception import TaskEnd
+from module.exception import GameStuckError, TaskEnd
 from module.atom.image import RuleImage
 
 
 class ScriptTask(GeneralBattle, GameUi, SwitchSoul, AreaBossAssets):
+
+    FILTER_REOPEN_MAX_RETRIES = 3
 
     def _exit_matcher(self) -> ExitMatcher:
         return self.I_AB_CLOSE_RED
@@ -403,33 +405,57 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, AreaBossAssets):
         logger.info("openFilter")
         self.ui_click(self.I_FILTER, self.I_AB_FILTER_OPENED, interval=3)
 
-    def switch_to_collect(self):
-        while 1:
+    def _switch_filter_category(
+        self,
+        selected_marker: RuleImage,
+        category_click: RuleClick,
+        category_name: str,
+    ) -> None:
+        """切换地域鬼王筛选分类，并恢复意外关闭的筛选面板。"""
+        reopen_count = 0
+        while True:
             self.screenshot()
-            if self.appear(self.I_AB_FILTER_TITLE_COLLECTION):
-                break
+            if self.appear(selected_marker):
+                return
             if self.appear(self.I_AB_FILTER_OPENED):
-                self.click(self.C_AB_COLLECTION_BTN, 1.5)
+                self.click(category_click, 1.5)
                 continue
+            if not self.appear(self.I_FILTER):
+                continue
+            if reopen_count >= self.FILTER_REOPEN_MAX_RETRIES:
+                raise GameStuckError(
+                    f'AreaBoss filter closed unexpectedly while selecting '
+                    f'{category_name} after {reopen_count} retries'
+                )
+            reopen_count += 1
+            logger.warning(
+                f'AreaBoss filter closed unexpectedly while selecting '
+                f'{category_name}, reopen '
+                f'{reopen_count}/{self.FILTER_REOPEN_MAX_RETRIES}'
+            )
+            self.open_filter()
+
+    def switch_to_collect(self):
+        self._switch_filter_category(
+            self.I_AB_FILTER_TITLE_COLLECTION,
+            self.C_AB_COLLECTION_BTN,
+            'collection',
+        )
 
     def switch_to_famous(self):
-        while 1:
-            self.screenshot()
-            if self.appear(self.I_AB_FILTER_TITLE_FAMOUS):
-                break
-            if self.appear(self.I_AB_FILTER_OPENED):
-                self.click(self.C_AB_FAMOUS_BTN, 1.5)
-                continue
+        self._switch_filter_category(
+            self.I_AB_FILTER_TITLE_FAMOUS,
+            self.C_AB_FAMOUS_BTN,
+            'famous',
+        )
 
     def switch_to_reward(self):
         self.open_filter()
-        while 1:
-            self.screenshot()
-            if self.appear(self.I_AB_FILTER_TITLE_REWARD):
-                break
-            if self.appear(self.I_AB_FILTER_OPENED):
-                self.click(self.C_AB_REWARD_BTN, 1.5)
-                continue
+        self._switch_filter_category(
+            self.I_AB_FILTER_TITLE_REWARD,
+            self.C_AB_REWARD_BTN,
+            'reward',
+        )
 
     def check_common_chars(self, bossName, name):
         # 将两个字符串转为集合，去除重复的字符

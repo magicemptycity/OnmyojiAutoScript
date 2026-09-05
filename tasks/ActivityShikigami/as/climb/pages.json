@@ -1,0 +1,56 @@
+[
+  {
+    "itemName": "to_battle_main",
+    "imageName": "as_to_battle_main.png",
+    "roiFront": "318,179,90,104",
+    "roiBack": "287,125,149,201",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "进入爬塔主界面"
+  },
+  {
+    "itemName": "to_battle_boss",
+    "imageName": "as_to_battle_boss.png",
+    "roiFront": "125,419,89,91",
+    "roiBack": "97,402,145,138",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "进入首领战斗页面"
+  },
+  {
+    "itemName": "battle_main_to_records",
+    "imageName": "as_battle_main_to_records.png",
+    "roiFront": "1015,560,39,42",
+    "roiBack": "674,539,439,157",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "从爬塔主界面进入式神录"
+  },
+  {
+    "itemName": "check_battle_pass",
+    "imageName": "as_check_battle_pass.png",
+    "roiFront": "151,18,134,40",
+    "roiBack": "141,0,157,67",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "爬塔主界面标志"
+  },
+  {
+    "itemName": "to_battle_climb",
+    "imageName": "climb_to_battle_climb.png",
+    "roiFront": "68,98,140,33",
+    "roiBack": "32,83,247,97",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": ""
+  },
+  {
+    "itemName": "check_climb_main",
+    "imageName": "climb_check_climb_main.png",
+    "roiFront": "151,18,134,40",
+    "roiBack": "141,0,157,67",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": ""
+  }
+]

@@ -16,8 +16,8 @@ from tasks.RealmRaid.assets import RealmRaidAssets
 from module.logger import logger
 from module.exception import TaskEnd
 from module.atom.image_grid import ImageGrid
-from module.base.utils import point2str
 from module.base.timer import Timer
+from module.base.utils import point2str
 from module.exception import GamePageUnknownError
 
 
@@ -63,6 +63,10 @@ area_map = (
         "finished_sign": (RyouToppaAssets.I_AREA_8_FINISHED, RyouToppaAssets.I_AREA_8_FINISHED_NEW)
     }
 )
+
+TOPPA_CLICK_FAILURE_LIMIT = 4
+TOPPA_POPUP_WAIT_TIMEOUT = 3.0
+TOPPA_BATTLE_WAIT_TIMEOUT = 5.0
 
 
 def random_delay(min_value: float = 1.0, max_value: float = 2.0, decimal: int = 1):
@@ -274,7 +278,12 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
             p1 = (safe_pos_x, safe_pos_y)
             p2 = (safe_pos_x, safe_pos_y - 101)
             logger.info('Swipe %s -> %s, %s ' % (point2str(*p1), point2str(*p2), duration))
-            self.device.swipe_adb(p1, p2, duration=duration)
+            self.device.swipe(
+                p1,
+                p2,
+                duration=duration,
+                control_name='RYOU_TOPPA_REFRESH',
+            )
             time.sleep(2)
 
     def attack_area(self, index: int):
@@ -290,21 +299,68 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
             time.sleep(delay)
         rcl = area_map[index].get("rule_click")
         # 塔塔开！
-        click_failure_count = 0
+        popup_failure_count = 0
+        battle_failure_count = 0
+        popup_wait_timer = None
+        battle_wait_timer = None
         self.device.click_record_clear()
         while True:
             self.screenshot()
             if self.is_in_battle(False):
                 logger.info("Start attach area [%s]" % str(index + 1))
                 return self.run_general_battle(config=self.config.ryou_toppa.general_battle_config)
-            if click_failure_count >= 5:
-                logger.warning("Click failure, check your click position")
+
+            failure_count = popup_failure_count + battle_failure_count
+            if failure_count >= TOPPA_CLICK_FAILURE_LIMIT:
+                logger.warning(
+                    f'挑战进入实际失败达到{TOPPA_CLICK_FAILURE_LIMIT}次，'
+                    '跳过当前区域：'
+                    f'popup={popup_failure_count}, battle={battle_failure_count}'
+                )
                 return False
-            if self.appear_then_click(RealmRaidAssets.I_FIRE, interval=2, threshold=0.8):
-                click_failure_count += 1
+
+            # 点击挑战按钮后只等待战斗出现。等待期间不重复点击，只有等待
+            # 超时才算一次真实的挑战进入失败。
+            if battle_wait_timer is not None:
+                if not battle_wait_timer.reached():
+                    continue
+                battle_wait_timer = None
+                battle_failure_count += 1
+                logger.warning(
+                    '点击挑战按钮后未进入战斗：'
+                    f'{popup_failure_count + battle_failure_count}/'
+                    f'{TOPPA_CLICK_FAILURE_LIMIT}'
+                )
                 continue
+
+            # 挑战浮窗已出现时点击挑战按钮，并开启独立的战斗等待窗口。
+            if self.appear(RealmRaidAssets.I_FIRE, threshold=0.8):
+                popup_wait_timer = None
+                if self.appear_then_click(
+                    RealmRaidAssets.I_FIRE,
+                    interval=2,
+                    threshold=0.8,
+                ):
+                    battle_wait_timer = Timer(TOPPA_BATTLE_WAIT_TIMEOUT).start()
+                continue
+
+            # 点击结界卡片后等待挑战浮窗出现。浮窗等待超时才算一次
+            # 结界卡片点击失败，不能把“已经发出点击”直接当作失败。
+            if popup_wait_timer is not None:
+                if not popup_wait_timer.reached():
+                    continue
+                popup_wait_timer = None
+                popup_failure_count += 1
+                logger.warning(
+                    '点击目标后挑战浮窗未出现：'
+                    f'{popup_failure_count + battle_failure_count}/'
+                    f'{TOPPA_CLICK_FAILURE_LIMIT}'
+                )
+                continue
+
             if self.click(rcl, interval=5):
-                click_failure_count += 1
+                time.sleep(random.uniform(0, 0.3))
+                popup_wait_timer = Timer(TOPPA_POPUP_WAIT_TIMEOUT).start()
                 continue
 
 

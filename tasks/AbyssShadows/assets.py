@@ -116,7 +116,7 @@ class AbyssShadowsAssets:
 	I_CHECK_SHENSHE = RuleImage(roi_front=(72,76,45,115), roi_back=(31,27,119,207), threshold=0.8, method="Template matching", file="./tasks/AbyssShadows/res/res_check_shenshe.png")
 	# 狭间暗域页面标志 
 	I_CHECK_ABYSS = RuleImage(roi_front=(1082,14,52,50), roi_back=(992,0,247,80), threshold=0.8, method="Template matching", file="./tasks/AbyssShadows/res/res_check_abyss.png")
-	# 极难度 
+	# 极难度
 	I_DIFFICULTY_EXTREME = RuleImage(roi_front=(644,593,40,39), roi_back=(620,383,89,263), threshold=0.8, method="Template matching", file="./tasks/AbyssShadows/res/res_difficulty_extreme.png")
 
 
@@ -148,5 +148,4 @@ class AbyssShadowsAssets:
 	# Swipe Rule Assets
 	# 滑到狭间 
 	S_TO_ABBSY_SHADOWS = RuleSwipe(roi_front=(752,395,62,66), roi_back=(758,193,62,48), mode="default", name="to_abbsy_shadows")
-
 

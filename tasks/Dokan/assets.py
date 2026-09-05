@@ -92,7 +92,7 @@ class DokanAssets:
 	I_RYOU_DOKAN_IN_FIELD2 = RuleImage(roi_front=(1131,562,88,48), roi_back=(1131,562,88,48), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_in_field2.png")
 	# 馆主战,第一阵容 
 	I_RYOU_DOKAN_BATTLE_MASTER_FIRST = RuleImage(roi_front=(1113,205,50,28), roi_back=(1080,180,160,70), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_battle_master_first.png")
-	# 馆主战,第二阵容 
+	# 馆主战,第二阵容
 	I_RYOU_DOKAN_BATTLE_MASTER_SECOND = RuleImage(roi_front=(1114,208,48,25), roi_back=(1080,180,160,70), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_battle_master_second.png")
 	# 状态：战斗结算，可能是打完小朋友了，也可能是失败了。 
 	I_RYOU_DOKAN_BATTLE_OVER = RuleImage(roi_front=(571,503,106,49), roi_back=(571,503,106,49), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_battle_over.png")
@@ -123,7 +123,7 @@ class DokanAssets:
 	# 场景检测：神社 
 	I_SCENE_SHENSHE = RuleImage(roi_front=(477,165,63,65), roi_back=(477,165,65,80), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/scene_shenshe.png")
 	# 道馆 地图界面 建立道馆按钮 
-	I_RYOU_DOKAN_CREATE_DOKAN = RuleImage(roi_front=(230,580,130,120), roi_back=(230,580,130,120), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_create_dokan.png")
+	I_RYOU_DOKAN_CREATE_DOKAN = RuleImage(roi_front=(240,600,94,90), roi_back=(240,600,94,90), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_create_dokan.png")
 	# 道馆 地图界面 点击建立道馆按钮后弹窗中的 确认按钮 
 	I_RYOU_DOKAN_CREATE_DOKAN_ENSURE = RuleImage(roi_front=(0,0,1280,720), roi_back=(0,0,1280,720), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_create_dokan_ensure.png")
 	# 道馆信息 右上角关闭按钮 
@@ -160,6 +160,8 @@ class DokanAssets:
 	I_RYOU_DOKAN_CHEERING = RuleImage(roi_front=(65,601,71,33), roi_back=(44,568,112,100), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_cheering.png")
 	# 助威灰色不可点击 
 	I_RYOU_DOKAN_CHEERING_GRAY = RuleImage(roi_front=(65,601,71,33), roi_back=(44,568,112,100), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_cheering_gray.png")
+	#  
+	I_RYOU_DOKAN_HAVE_DOKAN = RuleImage(roi_front=(240,600,94,90), roi_back=(240,600,94,90), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_have_dokan.png")
 
 
 	# List Rule Assets
@@ -188,5 +190,4 @@ class DokanAssets:
 	# Swipe Rule Assets
 	# 道馆选择界面 右侧侧边栏 手指向上滑动 
 	S_DOKAN_LIST_UP = RuleSwipe(roi_front=(1100,420,30,21), roi_back=(1240,240,30,21), mode="default", name="dokan_list_up")
-
 

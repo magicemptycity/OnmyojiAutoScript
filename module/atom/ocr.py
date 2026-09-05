@@ -85,7 +85,7 @@ class RuleOcr(Digit, DigitCounter, Duration, Single, Full, Quantity):
         else:
             area = self.roi
 
-        x, y, w, h = self.area
+        x, y, w, h = area
         x = np.random.randint(x, x + w)
         y = np.random.randint(y, y + h)
         return x, y

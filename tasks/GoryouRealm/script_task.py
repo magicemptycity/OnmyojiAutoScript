@@ -51,6 +51,8 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, GoryouRealmAssets):
                 logger.info('Enter GoryouRealm')
                 break
             if self.click(match_click[goryou_class], interval=1):
+                sleep(0.2)
+                self.click(self.C_GR_LEVEL_3)
                 continue
         self.check_lock(con.general_battle_config.lock_team_enable, self.I_GR_LOCK, self.I_GR_UNLOCK)
         # 开始循环
