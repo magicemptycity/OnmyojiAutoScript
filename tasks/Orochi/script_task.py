@@ -42,6 +42,8 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         return any_of(self.I_GI_EMOJI_1, self.I_GI_EMOJI_2, self.I_CHECK_EXPLORATION)
 
     def _handle_reward(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
+        if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
+            return BattleAction.CONTINUE
         # 无论胜利与否, 都会出现是否邀请一次队友, 区别在于, 失败的话不会出现那个勾选默认邀请的框
         if self.config.orochi.orochi_config.user_status == UserStatus.LEADER and \
             self.check_and_invite(self.config.orochi.invite_config.default_invite):
@@ -203,9 +205,6 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         while 1:
             self.screenshot()
 
-            # 活动位面弹窗出现在猫咪奖励处理之前，先关闭它。
-            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
-                continue
             # 检查猫咪奖励
             if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
                 continue
@@ -262,9 +261,6 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
 
         while 1:
             self.screenshot()
-            # 活动位面弹窗出现在猫咪奖励处理之前，先关闭它。
-            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
-                continue
             # 检查猫咪奖励
             if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
                 continue
@@ -318,9 +314,6 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
             if self.check_and_invite(self.config.orochi.invite_config.default_invite):
                 continue
 
-            # 活动位面弹窗出现在猫咪奖励处理之前，先关闭它。
-            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
-                continue
             # 检查猫咪奖励
             if self.appear_then_click(self.I_PET_PRESENT, action=self.C_RANDOM_RIGHT, interval=1):
                 continue
