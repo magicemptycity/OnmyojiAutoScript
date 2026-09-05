@@ -937,7 +937,11 @@
       "float_time": "00:00:00"
     },
     "general_config": {
-      "task_sequence": "大富翁,爬塔,伪神降临",
+      "task_sequence": [
+        "大富翁",
+        "伪神",
+        "爬塔"
+      ],
       "throw_limit": 0,
       "ap_limit": 0,
       "pass_limit": "0",

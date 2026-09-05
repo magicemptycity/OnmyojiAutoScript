@@ -10,8 +10,8 @@ from tasks.ActivityShikigami.base_act import BaseAct
 
 ACTIVITY_METHOD_FIELDS = {
     '大富翁': 'run_rich_man',
+    '伪神': 'run_fakegod',
     '爬塔': 'run_climb',
-    '伪神降临': 'run_fakegod',
 }
 
 

@@ -2,6 +2,7 @@
 """式神活动统一配置。"""
 
 from datetime import time, timedelta
+from enum import Enum
 import re
 
 from pydantic import BaseModel, Field, model_validator, validator
@@ -12,10 +13,17 @@ from tasks.Component.config_base import ConfigBase, Time
 from tasks.Component.config_scheduler import Scheduler
 
 
+class ActivityTask(str, Enum):
+    RICH_MAN = '大富翁'
+    FAKE_GOD = '伪神'
+    CLIMB = '爬塔'
+
+
+ACTIVITY_EXECUTION_ORDER = ('大富翁', '伪神', '爬塔')
 ACTIVITY_NAME_TO_FIELD = {
     '大富翁': 'rich_man',
+    '伪神': 'fakegod',
     '爬塔': 'climb',
-    '伪神降临': 'fakegod',
 }
 ACTIVITY_NAME_ALIASES = {
     'richman': '大富翁',
@@ -24,18 +32,22 @@ ACTIVITY_NAME_ALIASES = {
     'climb': '爬塔',
     'normal': '爬塔',
     '爬塔': '爬塔',
-    'fakegod': '伪神降临',
-    'fake_god': '伪神降临',
-    '伪神': '伪神降临',
-    '伪神降临': '伪神降临',
+    'fakegod': '伪神',
+    'fake_god': '伪神',
+    '伪神': '伪神',
+    '伪神降临': '伪神',
 }
 CLIMB_TYPES = ('pass', 'ap', 'boss', 'ap100')
 BATTLE_TYPES = ('rich_man', *CLIMB_TYPES, 'fakegod')
 
 
 class GeneralConfig(ConfigBase):
-    task_sequence: str = Field(
-        default='大富翁,爬塔,伪神降临',
+    task_sequence: list[ActivityTask] = Field(
+        default=[
+            ActivityTask.RICH_MAN,
+            ActivityTask.FAKE_GOD,
+            ActivityTask.CLIMB,
+        ],
         title='Activity Task Sequence',
         description='activity_task_sequence_help',
     )
@@ -92,16 +104,14 @@ class GeneralConfig(ConfigBase):
 
     @property
     def task_sequence_v(self) -> list[str]:
-        names = []
-        for raw_name in self.task_sequence.split(','):
-            name = ACTIVITY_NAME_ALIASES.get(raw_name.strip().lower())
-            if name is None:
-                raise ValueError(
-                    f'任务启用顺序仅支持 {", ".join(ACTIVITY_NAME_TO_FIELD)}，当前为 {raw_name.strip()}'
-                )
-            if name not in names and self.activity_enabled(name):
-                names.append(name)
-        return names
+        selected = {
+            item.value if isinstance(item, ActivityTask) else str(item)
+            for item in self.task_sequence
+        }
+        return [
+            name for name in ACTIVITY_EXECUTION_ORDER
+            if name in selected and self.activity_enabled(name)
+        ]
 
     @property
     def climb_sequence_v(self) -> list[str]:
@@ -148,6 +158,32 @@ class GeneralConfig(ConfigBase):
         if any(not part.isdigit() for part in parts):
             raise ValueError('门票战斗次数只能填写非负整数')
         return ','.join(str(int(part)) for part in parts)
+
+    @validator('task_sequence', pre=True, always=True)
+    def parse_task_sequence(cls, value):
+        """兼容旧逗号字符串，并将多选结果规范为固定的三个选项。"""
+        if value is None:
+            values = list(ACTIVITY_EXECUTION_ORDER)
+        elif isinstance(value, str):
+            values = value.split(',')
+        elif isinstance(value, (list, tuple, set)):
+            values = value
+        else:
+            raise ValueError('任务启用项必须为多选列表')
+
+        selected = []
+        for raw_name in values:
+            if isinstance(raw_name, ActivityTask):
+                name = raw_name.value
+            else:
+                name = ACTIVITY_NAME_ALIASES.get(str(raw_name).strip().lower())
+            if name is None:
+                raise ValueError(
+                    f'任务启用项仅支持 {", ".join(ACTIVITY_EXECUTION_ORDER)}，当前为 {raw_name}'
+                )
+            if name not in selected:
+                selected.append(name)
+        return selected
 
     @validator('limit_time', pre=True, always=True)
     def parse_limit_time(cls, value):
