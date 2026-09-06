@@ -1,0 +1,86 @@
+[
+  {
+    "itemName": "alone_result_win_random_top",
+    "roiFront": "15,12,813,45",
+    "roiBack": "118,12,710,45",
+    "description": "单人战斗结算上面随机点"
+  },
+  {
+    "itemName": "alone_result_win_random_bottom",
+    "roiFront": "450,547,810,160",
+    "roiBack": "118,12,710,45",
+    "description": "单人战斗结算下面随机点"
+  },
+  {
+    "itemName": "alone_result_win_random_center",
+    "roiFront": "150,57,1000,490",
+    "roiBack": "10,110,1260,510",
+    "description": "单人战斗结算中间随机点"
+  },
+  {
+    "itemName": "alone_result_win_random_left",
+    "roiFront": "15,57,125,650",
+    "roiBack": "15,57,125,650",
+    "description": "单人战斗结算左边随机点"
+  },
+  {
+    "itemName": "alone_result_win_random_right",
+    "roiFront": "462,57,808,490",
+    "roiBack": "608,110,662,600",
+    "description": "单人战斗结算右边随机点"
+  },
+  {
+    "itemName": "team_result_win_random_top",
+    "roiFront": "125,10,700,90",
+    "roiBack": "10,110,1260,510",
+    "description": "组队战斗结算上面随机点"
+  },
+  {
+    "itemName": "team_result_win_random_bottom",
+    "roiFront": "462,605,800,100",
+    "roiBack": "608,110,662,600",
+    "description": "组队战斗结算下面随机点"
+  },
+  {
+    "itemName": "team_result_win_random_center",
+    "roiFront": "420,100,448,280",
+    "roiBack": "608,110,662,600",
+    "description": "组队战斗结算中间随机点"
+  },
+  {
+    "itemName": "team_result_win_random_left",
+    "roiFront": "10,100,410,530",
+    "roiBack": "10,100,130,610",
+    "description": "组队战斗结算左边随机点"
+  },
+  {
+    "itemName": "team_result_win_random_right",
+    "roiFront": "868,48,402,662",
+    "roiBack": "608,110,662,600",
+    "description": "组队战斗结算右边随机点"
+  },
+  {
+    "itemName": "reward_random_left",
+    "roiFront": "12,24,150,600",
+    "roiBack": "608,110,662,600",
+    "description": "通用奖励左边随机点"
+  },
+  {
+    "itemName": "reward_random_right",
+    "roiFront": "1100,175,170,535",
+    "roiBack": "608,110,662,600",
+    "description": "通用奖励右边随机点"
+  },
+  {
+    "itemName": "reward_random_down",
+    "roiFront": "462,500,800,200",
+    "roiBack": "608,110,662,600",
+    "description": "通用奖励下边随机点"
+  },
+  {
+    "itemName": "reward_random_top",
+    "roiFront": "180,24,650,124",
+    "roiBack": "608,110,662,600",
+    "description": "通用奖励上边随机点"
+  }
+]

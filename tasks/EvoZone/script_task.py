@@ -5,7 +5,13 @@ from time import sleep
 from datetime import time, datetime, timedelta
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
 
-from tasks.Component.GeneralBattle.general_battle import GeneralBattle, ExitMatcher, BattleContext, BattleAction
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleAction,
+    BattleContext,
+    BattleSettlementProfile,
+    ExitMatcher,
+    GeneralBattle,
+)
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
@@ -21,6 +27,40 @@ from module.exception import TaskEnd
 
 
 class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi, EvoZoneAssets, SwitchSoul):
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile:
+        """返回觉醒单人或组队专用的结算/奖励页点击范围。"""
+        reward_areas = (
+            self.C_REWARD_RANDOM_LEFT,
+            self.C_REWARD_RANDOM_TOP,
+            self.C_REWARD_RANDOM_RIGHT,
+            self.C_REWARD_RANDOM_DOWN,
+        )
+        if self.config.evo_zone.evo_zone_config.user_status == UserStatus.ALONE:
+            return BattleSettlementProfile(
+                name="evo_zone_alone",
+                result_win_areas=(
+                    self.C_ALONE_RESULT_WIN_RANDOM_TOP,
+                    self.C_ALONE_RESULT_WIN_RANDOM_BOTTOM,
+                    self.C_ALONE_RESULT_WIN_RANDOM_CENTER,
+                    self.C_ALONE_RESULT_WIN_RANDOM_LEFT,
+                    self.C_ALONE_RESULT_WIN_RANDOM_RIGHT,
+                ),
+                reward_areas=reward_areas,
+                reward_weights=(15, 15, 30, 40),
+            )
+        return BattleSettlementProfile(
+            name="evo_zone_team",
+            result_win_areas=(
+                self.C_TEAM_RESULT_WIN_RANDOM_TOP,
+                self.C_TEAM_RESULT_WIN_RANDOM_BOTTOM,
+                self.C_TEAM_RESULT_WIN_RANDOM_CENTER,
+                self.C_TEAM_RESULT_WIN_RANDOM_LEFT,
+                self.C_TEAM_RESULT_WIN_RANDOM_RIGHT,
+            ),
+            reward_areas=reward_areas,
+            reward_weights=(15, 15, 30, 40),
+        )
 
     def _register_custom_pages(self) -> None:
         reward_page = self.navigator.resolve_page(page_reward)

@@ -125,12 +125,12 @@ class ScriptTask(GameUi, DelegationAssets):
             if self.ocr_appear(self.O_D_DONE_CARD, interval=1):
                 # RuleOcr.ocr 已将识别到的“完成”文字真实位置写入 area。
                 # 在文字右侧 x+150、宽 90、高 65 的范围内正态随机点击。
-                x, y, _, _ = self.O_D_DONE.area
+                x, y, _, _ = self.O_D_DONE_CARD.area
                 click_x = random_normal_distribution_int(x + 150, x + 240)
                 click_y = random_normal_distribution_int(y, y + 65)
                 logger.info(
                     '领取完成奖励：识别区域=%s，偏移点击范围=(%s, %s, 90, 65)，实际=(%s, %s)',
-                    self.O_D_DONE.area,
+                    self.O_D_DONE_CARD.area,
                     x + 150,
                     y,
                     click_x,

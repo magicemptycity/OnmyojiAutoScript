@@ -8,7 +8,12 @@ from module.exception import TaskEnd
 from module.logger import logger
 from module.base.timer import Timer
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
-from tasks.Component.GeneralBattle.general_battle import BattleAction, BattleContext, GeneralBattle
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleAction,
+    BattleContext,
+    BattleSettlementProfile,
+    GeneralBattle,
+)
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
@@ -30,6 +35,47 @@ class ScriptTask(GameUi,  GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom
     同心队独立任务（仅队长模式，无邀请）。
     支持御魂和觉醒两种副本。
     """
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile | None:
+        """按同心队当前副本类型返回对应的结算/奖励页点击范围。"""
+        mode = self.config.same_heart_team.common_config.same_heart_team_mode
+        if mode == SameHeartTeamMode.OROCHI:
+            return BattleSettlementProfile(
+                name="same_heart_team_orochi",
+                result_win_areas=(
+                    self.C_TEAM_RESULT_WIN_RANDOM_TOP,
+                    self.C_TEAM_RESULT_WIN_RANDOM_BOTTOM,
+                    self.C_TEAM_RESULT_WIN_RANDOM_CENTER,
+                    self.C_TEAM_RESULT_WIN_RANDOM_LEFT,
+                    self.C_TEAM_RESULT_WIN_RANDOM_RIGHT,
+                ),
+                reward_areas=(
+                    self.C_REWARD_RANDOM_LEFT,
+                    self.C_REWARD_RANDOM_TOP,
+                    self.C_REWARD_RANDOM_RIGHT,
+                    self.C_REWARD_RANDOM_DOWN,
+                ),
+                reward_weights=(15, 15, 30, 40),
+            )
+        if mode == SameHeartTeamMode.AWAKEN:
+            return BattleSettlementProfile(
+                name="same_heart_team_awaken",
+                result_win_areas=(
+                    EvoZoneAssets.C_TEAM_RESULT_WIN_RANDOM_TOP,
+                    EvoZoneAssets.C_TEAM_RESULT_WIN_RANDOM_BOTTOM,
+                    EvoZoneAssets.C_TEAM_RESULT_WIN_RANDOM_CENTER,
+                    EvoZoneAssets.C_TEAM_RESULT_WIN_RANDOM_LEFT,
+                    EvoZoneAssets.C_TEAM_RESULT_WIN_RANDOM_RIGHT,
+                ),
+                reward_areas=(
+                    EvoZoneAssets.C_REWARD_RANDOM_LEFT,
+                    EvoZoneAssets.C_REWARD_RANDOM_TOP,
+                    EvoZoneAssets.C_REWARD_RANDOM_RIGHT,
+                    EvoZoneAssets.C_REWARD_RANDOM_DOWN,
+                ),
+                reward_weights=(15, 15, 30, 40),
+            )
+        return None
 
     def _register_custom_pages(self) -> None:
         reward_page = self.navigator.resolve_page(page_reward)

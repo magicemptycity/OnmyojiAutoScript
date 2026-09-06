@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from module.exception import TaskEnd
 from module.logger import logger
-from tasks.Component.GeneralBattle.general_battle import GeneralBattle
+from tasks.Component.GeneralBattle.general_battle import BattleSettlementProfile, GeneralBattle
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
@@ -21,6 +21,26 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
     """
     同心队觉醒任务
     """
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile:
+        """返回同心队觉醒专用的组队结算/奖励页点击范围。"""
+        return BattleSettlementProfile(
+            name="same_heart_team_awaken",
+            result_win_areas=(
+                self.C_TEAM_RESULT_WIN_RANDOM_TOP,
+                self.C_TEAM_RESULT_WIN_RANDOM_BOTTOM,
+                self.C_TEAM_RESULT_WIN_RANDOM_CENTER,
+                self.C_TEAM_RESULT_WIN_RANDOM_LEFT,
+                self.C_TEAM_RESULT_WIN_RANDOM_RIGHT,
+            ),
+            reward_areas=(
+                self.C_REWARD_RANDOM_LEFT,
+                self.C_REWARD_RANDOM_TOP,
+                self.C_REWARD_RANDOM_RIGHT,
+                self.C_REWARD_RANDOM_DOWN,
+            ),
+            reward_weights=(15, 15, 30, 40),
+        )
 
     name = 'SameHeartTeamAwaken'
 

@@ -5,7 +5,12 @@ from datetime import datetime, timedelta
 from module.exception import TaskEnd
 from module.logger import logger
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
-from tasks.Component.GeneralBattle.general_battle import BattleAction, BattleContext, GeneralBattle
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleAction,
+    BattleContext,
+    BattleSettlementProfile,
+    GeneralBattle,
+)
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
@@ -40,6 +45,26 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, SwitchS
         if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
             return BattleAction.CONTINUE
         return super()._handle_reward(context, config)
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile:
+        """返回同心队御魂专用的组队结算/奖励页点击范围。"""
+        return BattleSettlementProfile(
+            name="same_heart_team_orochi",
+            result_win_areas=(
+                self.C_TEAM_RESULT_WIN_RANDOM_TOP,
+                self.C_TEAM_RESULT_WIN_RANDOM_BOTTOM,
+                self.C_TEAM_RESULT_WIN_RANDOM_CENTER,
+                self.C_TEAM_RESULT_WIN_RANDOM_LEFT,
+                self.C_TEAM_RESULT_WIN_RANDOM_RIGHT,
+            ),
+            reward_areas=(
+                self.C_REWARD_RANDOM_LEFT,
+                self.C_REWARD_RANDOM_TOP,
+                self.C_REWARD_RANDOM_RIGHT,
+                self.C_REWARD_RANDOM_DOWN,
+            ),
+            reward_weights=(15, 15, 30, 40),
+        )
 
     task_name = 'SameHeartTeamOrochi'
 
