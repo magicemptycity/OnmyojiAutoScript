@@ -15,6 +15,7 @@ from module.config.utils import convert_to_underscore, parse_next_server_weekday
 from tasks.MultiAccountTaskOrchestration.task_name_resolver import TaskNameResolver
 from tasks.Restart.server_update import build_server_update_delay_target, is_server_update_window
 from tasks.Component.MultiAccount.multi_account_priority import MultiAccountPriorityMixin
+from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccounts
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.tree_switch_account import TreeSwitchAccount
 from tasks.GameUi.game_ui import GameUi
@@ -65,13 +66,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
 
         for account_info in self.fade_conf.account_list:
             self._yield_to_higher_priority_task()
-            if not self._sync_account_from_public(account_info):
-                logger.error("多账号任务编排公共账号不存在：%s", account_info.public_account_identifier)
-                overall_failed = True
-                continue
-            if not account_info.is_valid():
-                continue
-            if not self._is_account_in_scope(account_info):
+            if not self._prepare_runnable_account(account_info, log_skip=True):
                 continue
             logger.hr(f"处理账号 {account_info.character}-{account_info.svr}", 2)
             logger.info("开始处理账号 %s-%s", account_info.character, account_info.svr)
@@ -89,6 +84,9 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
                     )
                     continue
 
+            # 账号可能在本轮排队期间被全局停用；切号前再确认一次。
+            if not self._is_shared_account_enabled(account_info, log_skip=True):
+                continue
             if not self._switch_account(account_info):
                 overall_failed = True
                 logger.warning(
@@ -307,7 +305,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         """收集账号下到点的顺序任务组，按原生 Scheduler 规则排序。"""
         due_plan = []
         for account_index, account_info in enumerate(self.fade_conf.account_list):
-            if not self._sync_account_from_public(account_info) or not account_info.is_valid() or not self._is_account_in_scope(account_info):
+            if not self._prepare_runnable_account(account_info, log_skip=True):
                 continue
             for batch_index, batch in enumerate(self._enabled_fixed_time_batches(account_info)):
                 if batch.scheduler.next_run > now:
@@ -324,7 +322,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             raise TaskEnd(self.task_name)
         due_plan = []
         for account_index, account_info in enumerate(self.fade_conf.account_list):
-            if not self._sync_account_from_public(account_info) or not account_info.is_valid() or not self._is_account_in_scope(account_info):
+            if not self._prepare_runnable_account(account_info, log_skip=True):
                 continue
             for item_index, batch in enumerate(self._enabled_fixed_time_batches(account_info)):
                 if batch.scheduler.next_run <= now and (task_names := self._fixed_batch_task_names_to_run(batch)):
@@ -340,6 +338,8 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             self._yield_to_higher_priority_task()
             account_id = id(account_info)
             if account_id in failed_account_ids:
+                continue
+            if not self._is_shared_account_enabled(account_info, log_skip=True):
                 continue
             if current_account_id != account_id:
                 self.current_account_info = account_info
@@ -411,13 +411,13 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         targets = [
             batch.scheduler.next_run
             for account in self.fade_conf.account_list
-            if self._is_account_in_scope(account)
+            if self._prepare_runnable_account(account)
             for batch in self._enabled_fixed_time_batches(account)
         ]
         targets.extend(
             scheduler.next_run
             for account in self.fade_conf.account_list
-            if self._is_account_in_scope(account)
+            if self._prepare_runnable_account(account)
             for entry in self._enabled_single_tasks(account)
             if (scheduler := self._single_task_scheduler(entry)) is not None
         )
@@ -432,22 +432,66 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         """返回当前执行范围内今天尚未完整完成任务的有效账号。"""
         accounts = []
         for account_info in self.fade_conf.account_list:
-            if not self._sync_account_from_public(account_info):
-                continue
-            if not account_info.is_valid() or not self._is_account_in_scope(account_info):
+            if not self._prepare_runnable_account(account_info):
                 continue
             if not self._is_account_completed_today(account_info):
                 accounts.append(f"{account_info.character}-{account_info.svr}")
         return accounts
 
-    def _sync_account_from_public(self, account_info: MultiAccountRepeatNewAccount) -> bool:
+    def _shared_public_account(self, account_info):
+        """读取当前 OAS 实例中该运行账号对应的最新公共账号状态。
+
+        配置页可在本轮任务运行期间停用账号，因此此处优先从磁盘读取公共
+        账号库；这样下一个待处理账号在切换前就能看到最新总开关。读取失败
+        时才回退到当前任务启动时的配置快照。
+        """
+        identifier = account_info.public_account_identifier
+        try:
+            latest = self.config.model.__class__.read_json(self.config.config_name)
+            library = SharedPublicAccounts.model_validate(
+                latest.get("multi_account_shared_accounts", {})
+            )
+            return library.find(identifier)
+        except Exception as exc:
+            logger.warning("读取公共账号总开关失败，使用当前配置快照：%s", exc)
+            library = getattr(self.config, "multi_account_shared_accounts", None)
+            return library.find(identifier) if library is not None else None
+
+    def _sync_account_from_public(self, account_info) -> bool:
         """从可复用的公共账号库同步登录信息。"""
-        library = getattr(self.config, "multi_account_shared_accounts", None)
-        source = library.find(account_info.public_account_identifier) if library is not None else None
+        source = self._shared_public_account(account_info)
         if source is None:
             return False
         account_info.sync_public_account(source)
         return True
+
+    def _is_shared_account_enabled(self, account_info, *, log_skip: bool = False) -> bool:
+        """检查当前 OAS 实例的账号总开关，不修改该账号的任务和调度状态。"""
+        source = self._shared_public_account(account_info)
+        if source is None:
+            return False
+        if source.enabled:
+            return True
+        if log_skip:
+            logger.info(
+                "公共账号 %s（%s-%s）已全局停用，跳过账号切换和任务执行",
+                source.identifier,
+                source.character,
+                source.svr,
+            )
+        return False
+
+    def _prepare_runnable_account(self, account_info, *, log_skip: bool = False) -> bool:
+        """统一准备新版多账号运行账号，先拦截全局停用再进入任何切号逻辑。"""
+        if not self._sync_account_from_public(account_info):
+            if log_skip:
+                logger.error("新版多账号公共账号不存在：%s", account_info.public_account_identifier)
+            return False
+        return (
+            account_info.is_valid()
+            and self._is_account_in_scope(account_info)
+            and self._is_shared_account_enabled(account_info, log_skip=log_skip)
+        )
 
     def _save_repeat_config(self) -> None:
         """只保存当前循环任务状态，避免覆盖页面刚修改的其他配置。"""

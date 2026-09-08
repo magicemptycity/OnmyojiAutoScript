@@ -480,6 +480,7 @@ async def list_public_accounts(script_name: str):
             "account": item.account,
             "account_alias": item.account_alias,
             "apple_or_android": item.apple_or_android,
+            "enabled": item.enabled,
         })
     return {"accounts": accounts}
 
@@ -582,8 +583,10 @@ async def copy_public_accounts_to_scripts(
         for source_account in source_accounts:
             target_account = target_library.find(source_account.identifier)
             if target_account is None:
-                target_library.account_list.append(source_account.model_copy(deep=True))
-                target_account = target_library.account_list[-1]
+                target_account = source_account.model_copy(deep=True)
+                # 新复制到其他 OAS 实例的账号默认启用；总开关不跨实例传播。
+                target_account.enabled = True
+                target_library.account_list.append(target_account)
             else:
                 # 标识相同视为同一个公共账号，只更新登录和角色资料，保留引用关系。
                 target_account.character = source_account.character
@@ -591,6 +594,8 @@ async def copy_public_accounts_to_scripts(
                 target_account.account = source_account.account
                 target_account.account_alias = source_account.account_alias
                 target_account.apple_or_android = source_account.apple_or_android
+                # 账号总开关只属于目标 OAS 实例，复制登录资料时不能把源实例的停用状态带过去。
+                target_account.enabled = True
             for section in target_sections.values():
                 for task_account in section.account_list:
                     if task_account.public_account_identifier == target_account.identifier:
@@ -605,6 +610,19 @@ async def copy_public_accounts_to_scripts(
             **target_sections,
         )
     return {"target_count": len(target_names), "account_count": len(source_accounts)}
+
+
+@multi_account_task_orchestration_app.put('/{script_name}/shared-accounts/{identifier}/enable')
+async def set_public_account_enabled(script_name: str, identifier: str, enable: bool):
+    """切换当前 OAS 实例内的账号总开关，不触碰任一功能的私有任务配置。"""
+    library = _library(script_name)
+    account = _public_account(library, identifier)
+    account.enabled = enable
+    _save(script_name, multi_account_shared_accounts=library)
+    await _broadcast_multi_account_overview(script_name)
+    return True
+
+
 @multi_account_task_orchestration_app.delete('/{script_name}/shared-accounts/{identifier}')
 async def delete_public_account(script_name: str, identifier: str):
     library = _library(script_name)

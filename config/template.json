@@ -2679,7 +2679,8 @@
       "svr": "",
       "account": "",
       "account_alias": "",
-      "apple_or_android": true
+      "apple_or_android": true,
+      "enabled": true
     }
   },
   "multi_account_repeat_new": {

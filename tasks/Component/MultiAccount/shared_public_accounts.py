@@ -21,6 +21,12 @@ class SharedPublicAccount(ConfigBase, extra="allow"):
     account: str = Field(default="", description="account_help")
     account_alias: str = Field(default="", description="account_alias_help")
     apple_or_android: bool = Field(default=True, description="apple_or_android_help")
+    # 仅属于当前 OAS 实例的全局运行开关；不影响其他实例的同名公共账号。
+    enabled: bool = Field(
+        default=True,
+        title="启用账号",
+        description="停用后，新版多账号功能会跳过该账号，不会切换账号或执行其任务。",
+    )
 
     def is_valid(self) -> bool:
         return bool(self.identifier.strip() and self.character.strip() and self.svr.strip())

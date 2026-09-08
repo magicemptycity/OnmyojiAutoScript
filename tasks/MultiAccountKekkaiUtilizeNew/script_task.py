@@ -50,6 +50,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
         overall_failed = False
         for index, account in pending:
             self._yield_to_higher_priority_task()
+            if not self._is_shared_account_enabled(account, log_skip=True):
+                continue
             self.current_account_info = account
             self._publish_utilize_overview({"account_index": index + 1})
             logger.hr(f"处理账号 {account.character}-{account.svr}", 2)
@@ -84,9 +86,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
         """筛选到期账号，并在切号前处理公共/私有禁止蹭卡时段。"""
         pending: list[tuple[int, MultiAccountKekkaiUtilizeNewAccount]] = []
         for index, account in enumerate(self.fade_conf.account_list):
-            if not self._sync_account_from_public(account) or not account.is_valid():
-                continue
-            if not self._is_account_in_scope(account):
+            if not self._prepare_runnable_account(account, log_skip=True):
                 continue
 
             if not account.scheduler.enable:
@@ -278,6 +278,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
         target = build_server_update_delay_target(now)
         delayed = 0
         for account in self.fade_conf.account_list:
+            if not self._prepare_runnable_account(account):
+                continue
             if account.scheduler.enable and account.scheduler.next_run < target:
                 self._set_account_next_run(account, target)
                 delayed += 1
@@ -291,7 +293,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
         next_runs = [
             account.scheduler.next_run
             for account in self.fade_conf.account_list
-            if account.is_valid() and account.scheduler.enable
+            if self._prepare_runnable_account(account) and account.scheduler.enable
         ]
         self.fade_conf.scheduler.next_run = (
             min(next_runs).replace(microsecond=0)
@@ -351,12 +353,3 @@ class ScriptTask(MultiAccountRepeatNewBase):
             state_queue.put({
                 "multi_account_overview": {"kind": "utilize", "active": active}
             })
-
-    def _sync_account_from_public(self, account: MultiAccountKekkaiUtilizeNewAccount) -> bool:
-        library = getattr(self.config, "multi_account_shared_accounts", None)
-        source = library.find(account.public_account_identifier) if library is not None else None
-        if source is None:
-            logger.error("多账号多任务蹭卡新公共账号不存在：%s", account.public_account_identifier)
-            return False
-        account.sync_public_account(source)
-        return True

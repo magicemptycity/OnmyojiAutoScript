@@ -189,8 +189,6 @@ class ConfigModel(ConfigBase):
     multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)
     multi_account_hunt: MultiAccountHunt = Field(default_factory=MultiAccountHunt)
     multi_account_repeat: MultiAccountRepeat = Field(default_factory=MultiAccountRepeat)
-    # 兼容已创建过“多账号多任务新专属公共账号”的旧配置；新版功能只读取通用公共账号库。
-    multi_account_repeat_new_accounts: SharedPublicAccounts | None = None
     multi_account_shared_accounts: SharedPublicAccounts = Field(default_factory=SharedPublicAccounts)
     multi_account_task_orchestration: MultiAccountTaskOrchestration = Field(default_factory=MultiAccountTaskOrchestration)
     multi_account_repeat_new_normal: MultiAccountRepeatNewNormal = Field(default_factory=MultiAccountRepeatNewNormal)

@@ -38,6 +38,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
     def run(self):
         logger.hr(self._current_task_display_name(), 1)
         self.fade_conf = getattr(self.config, self.multi_account_config_attr)
+        self._account_scope = getattr(self, "current_account_info", None)
         now = datetime.now()
         overall_failed = False
 
@@ -63,6 +64,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
         current_account_id: int | None = None
         for account_index, _, _, account, entry in due_plan:
             self._yield_to_higher_priority_task()
+            if not self._is_shared_account_enabled(account, log_skip=True):
+                continue
             account_id = id(account)
             if account_id in failed_account_ids:
                 continue
@@ -119,7 +122,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
             tuple[int, int, int, MultiAccountRepeatTimedAccount, MultiAccountRepeatTimedTask]
         ] = []
         for account_index, account in enumerate(self.fade_conf.account_list):
-            if not self._sync_account_from_public(account) or not account.is_valid():
+            if not self._prepare_runnable_account(account, log_skip=True):
                 continue
             for task_index, entry in enumerate(account.task_list):
                 scheduler = self._entry_scheduler(entry.task_name, entry)
@@ -146,6 +149,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
         delay_target = build_server_update_delay_target(now)
         delayed_tasks: list[str] = []
         for account in self.fade_conf.account_list:
+            if not self._prepare_runnable_account(account):
+                continue
             for entry in account.task_list:
                 scheduler = self._entry_scheduler(entry.task_name, entry)
                 if not getattr(scheduler, "enable", False) or not entry.task_name or entry.next_run >= delay_target:
@@ -172,6 +177,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
         next_runs = [
             entry.next_run
             for account in self.fade_conf.account_list
+            if self._prepare_runnable_account(account)
             for entry in account.task_list
             if (
                 getattr(self._entry_scheduler(entry.task_name, entry), "enable", False)
