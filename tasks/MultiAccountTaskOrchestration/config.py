@@ -54,6 +54,12 @@ class MultiAccountRepeatNewAccount(ConfigBase, extra="allow"):
     account: str = Field(default="")
     account_alias: str = Field(default="")
     apple_or_android: bool = Field(default=True)
+    # 仅控制当前新版多账号功能；不影响公共账号总开关及其他新版功能。
+    enabled: bool = Field(
+        default=True,
+        title="启用该功能账号",
+        description="停用后仅当前功能跳过该账号，保留任务、调度和运行记录。",
+    )
     last_complete_time: datetime = Field(default=datetime(2023, 1, 1), title="上次完整完成时间")
     task_progress_time: datetime = Field(default=datetime(2023, 1, 1), title="任务进度记录时间")
     completed_task_list: MultiLine = Field(

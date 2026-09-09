@@ -208,6 +208,7 @@ async def list_accounts(script_name: str):
             "character": account.character,
             "svr": account.svr,
             "enabled": scheduler.enable,
+            "account_enabled": account.enabled,
             "next_run": next_run.isoformat(sep=" ", timespec="seconds"),
             "next_utilize_time": next_run.isoformat(sep=" ", timespec="seconds"),
             "priority": scheduler.priority,
@@ -298,6 +299,17 @@ async def set_account_scheduler_arg(script_name: str, account_index: int, argume
     account.scheduler = candidate
     account.next_utilize_time = candidate.next_run
     _save(script_name, section)
+    await _broadcast_overview(script_name)
+    return True
+
+
+@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/account-enable')
+async def set_account_local_enabled(script_name: str, account_index: int, enable: bool):
+    """切换蹭卡新内的账号开关，不修改该账号 Scheduler 和禁卡配置。"""
+    section = _section(script_name)
+    account = _account(section, account_index)
+    account.enabled = enable
+    _save(script_name, multi_account_kekkai_utilize_new=section)
     await _broadcast_overview(script_name)
     return True
 

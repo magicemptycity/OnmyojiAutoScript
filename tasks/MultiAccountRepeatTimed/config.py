@@ -67,6 +67,12 @@ class MultiAccountRepeatTimedAccount(ConfigBase, extra="allow"):
     account: str = Field(default="")
     account_alias: str = Field(default="")
     apple_or_android: bool = Field(default=True)
+    # 仅控制“多账号多任务定时”内的该账号，不影响公共账号和其他新版功能。
+    enabled: bool = Field(
+        default=True,
+        title="启用该功能账号",
+        description="停用后仅定时功能跳过该账号，保留任务、调度和运行记录。",
+    )
     last_complete_time: datetime = Field(default=datetime(2023, 1, 1), title="上次完整完成时间")
     completed_task_list: MultiLine = Field(
         default="",

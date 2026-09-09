@@ -64,6 +64,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
         current_account_id: int | None = None
         for account_index, _, _, account, entry in due_plan:
             self._yield_to_higher_priority_task()
+            if not self._is_function_account_enabled(account, log_skip=True):
+                continue
             if not self._is_shared_account_enabled(account, log_skip=True):
                 continue
             account_id = id(account)

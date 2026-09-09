@@ -378,6 +378,7 @@ async def list_task_accounts(script_name: str):
             "account": item.account,
             "account_alias": item.account_alias,
             "apple_or_android": item.apple_or_android,
+            "enabled": item.enabled,
             # 固定时间版只读取每个时间段内的任务；普通 task_list 仅为旧配置兼容保留。
             "fixed_time_batches": [
                 _serialize_fixed_batch(item, batch)
@@ -408,6 +409,17 @@ async def add_task_account(script_name: str, public_account_identifier: str):
     section.account_list = [item for item in section.account_list if item.public_account_identifier.strip()]
     section.account_list.append(account)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    return True
+
+
+@multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/enable')
+async def set_task_account_enabled(script_name: str, account_index: int, enable: bool):
+    """仅切换当前功能内的账号开关，保留该账号全部任务、调度和运行记录。"""
+    section = _section(script_name)
+    account = _task_account(section, account_index)
+    account.enabled = enable
+    _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 

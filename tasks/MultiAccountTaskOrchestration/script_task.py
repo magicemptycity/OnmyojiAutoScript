@@ -85,6 +85,8 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
                     continue
 
             # 账号可能在本轮排队期间被全局停用；切号前再确认一次。
+            if not self._is_function_account_enabled(account_info, log_skip=True):
+                continue
             if not self._is_shared_account_enabled(account_info, log_skip=True):
                 continue
             if not self._switch_account(account_info):
@@ -339,6 +341,8 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             account_id = id(account_info)
             if account_id in failed_account_ids:
                 continue
+            if not self._is_function_account_enabled(account_info, log_skip=True):
+                continue
             if not self._is_shared_account_enabled(account_info, log_skip=True):
                 continue
             if current_account_id != account_id:
@@ -465,6 +469,20 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         account_info.sync_public_account(source)
         return True
 
+    def _is_function_account_enabled(self, account_info, *, log_skip: bool = False) -> bool:
+        """检查当前新版功能内的账号开关，不影响其他新版功能。"""
+        if getattr(account_info, "enabled", True):
+            return True
+        if log_skip:
+            logger.info(
+                "%s 中账号 %s（%s-%s）已停用，跳过账号切换和任务执行",
+                self._current_task_display_name(),
+                account_info.public_account_identifier,
+                account_info.character,
+                account_info.svr,
+            )
+        return False
+
     def _is_shared_account_enabled(self, account_info, *, log_skip: bool = False) -> bool:
         """检查当前 OAS 实例的账号总开关，不修改该账号的任务和调度状态。"""
         source = self._shared_public_account(account_info)
@@ -490,6 +508,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         return (
             account_info.is_valid()
             and self._is_account_in_scope(account_info)
+            and self._is_function_account_enabled(account_info, log_skip=log_skip)
             and self._is_shared_account_enabled(account_info, log_skip=log_skip)
         )
 

@@ -182,7 +182,7 @@
   {
     "itemName": "check_mall",
     "imageName": "page_check_mall.png",
-    "roiFront": "147,527,82,82",
+    "roiFront": "147,527,82,62",
     "roiBack": "147,527,82,82",
     "method": "Template matching",
     "threshold": 0.8,
@@ -214,6 +214,15 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "组队页面标志"
+  },
+  {
+    "itemName": "check_team_new",
+    "imageName": "page_check_team_new.png",
+    "roiFront": "32,585,82,65",
+    "roiBack": "0,563,148,139",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "组队页面标志(新号) "
   },
   {
     "itemName": "check_nawu",

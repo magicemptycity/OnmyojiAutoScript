@@ -40,6 +40,12 @@ class MultiAccountKekkaiUtilizeNewAccount(ConfigBase, extra="allow"):
     account: str = Field(default="")
     account_alias: str = Field(default="")
     apple_or_android: bool = Field(default=True)
+    # 仅控制“多账号多任务蹭卡新”内的该账号，和下方 Scheduler.Enable 分离。
+    enabled: bool = Field(
+        default=True,
+        title="启用该功能账号",
+        description="停用后仅蹭卡新跳过该账号，保留 Scheduler、禁卡时段和私有配置。",
+    )
     # 每个账号都是一个独立的“虚拟 OAS 蹭卡任务”，拥有完整 Scheduler。
     scheduler: UtilizeScheduler = Field(default_factory=UtilizeScheduler)
     # 兼容旧配置与旧客户端；运行时与 scheduler.next_run 始终同步。
