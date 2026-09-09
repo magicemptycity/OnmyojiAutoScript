@@ -8,7 +8,6 @@ from module.logger import logger
 from tasks.Component.Costume.config import (
     MainType,
     CostumeConfig,
-    ThemeType,
     ShikigamiType,
     BattleType,
     CourtyardAffairType,
@@ -21,7 +20,7 @@ from tasks.Component.CustomCourtyardAffair.assets import CustomCourtyardAffairAs
 # 庭院皮肤
 # 主界面皮肤（使用字典推导式动态生成）
 main_costume_model = {
-    getattr(MainType, f"COSTUME_MAIN_{i}"): {
+    getattr(MainType, f'COSTUME_MAIN_{i}'): {
         'I_CHECK_MAIN': f'I_CHECK_MAIN_{i}',
         'I_MAIN_GOTO_EXPLORATION': f'I_MAIN_GOTO_EXPLORATION_{i}',
         'I_MAIN_GOTO_SUMMON': f'I_MAIN_GOTO_SUMMON_{i}',
@@ -32,23 +31,9 @@ main_costume_model = {
         'I_HARVEST_JADE': f'I_HARVEST_JADE_{i}',
         'I_HARVEST_MAIL': f'I_HARVEST_MAIL_{i}',
         'I_HARVEST_SOUL': f'I_HARVEST_SOUL_{i}',
-        'I_HARVEST_GUILD_REWARD': f'I_HARVEST_GUILD_REWARD_{i}'
-    } for i in range(1, 18)
-}
-
-theme_costume_model = {
-    ThemeType.COSTUME_THEME_1: {
-        'I_MAIN_SCROLL_CLOSE': 'I_MAIN_SCROLL_CLOSE_1',
-        'I_MAIN_GOTO_SHIKIGAMI_RECORDS': 'I_MAIN_GOTO_SHIKIGAMI_RECORDS_1',
-        'I_MAIN_GOTO_ONMYODO': 'I_MAIN_GOTO_ONMYODO_1',
-        'I_MAIN_GOTO_FRIENDS': 'I_MAIN_GOTO_FRIENDS_1',
-        'I_MAIN_GOTO_DAILY': 'I_MAIN_GOTO_DAILY_1',
-        'I_MAIN_GOTO_MALL': 'I_MAIN_GOTO_MALL_1',
-        'I_MAIN_GOTO_GUILD': 'I_MAIN_GOTO_GUILD_1',
-        'I_MAIN_GOTO_TEAM': 'I_MAIN_GOTO_TEAM_1',
-        'I_MAIN_GOTO_COLLECTION': 'I_MAIN_GOTO_COLLECTION_1',
-        'I_MAIN_GOTO_TRAVEL': 'I_MAIN_GOTO_TRAVEL_1',
-    },
+        'I_HARVEST_GUILD_REWARD': f'I_HARVEST_GUILD_REWARD_{i}',
+    }
+    for i in range(1, 18)
 }
 
 # 战斗主题（使用循环处理常规情况 + 特例处理）
@@ -61,16 +46,18 @@ for i in range(1, 15):
         'I_BATTLE_INFO': f'I_BATTLE_INFO_{i}',
     }
     if i in [8, 12, 13, 14]:  # 特殊处理
-        entry.update({
-            'I_WIN': f'I_WIN_{i}',
-            'I_DE_WIN': f'I_DE_WIN_{i}',
-            'I_FALSE': f'I_FALSE_{i}'
-        })
-    battle_theme_model[getattr(BattleType, f"COSTUME_BATTLE_{i}")] = entry
+        entry.update(
+            {
+                'I_WIN': f'I_WIN_{i}',
+                'I_DE_WIN': f'I_DE_WIN_{i}',
+                'I_FALSE': f'I_FALSE_{i}',
+            }
+        )
+    battle_theme_model[getattr(BattleType, f'COSTUME_BATTLE_{i}')] = entry
 
 # 幕间主题
 shikigami_costume_model = {
-    getattr(ShikigamiType, f"COSTUME_SHIKIGAMI_{i}"): {
+    getattr(ShikigamiType, f'COSTUME_SHIKIGAMI_{i}'): {
         # GameUi 进出式神录
         'I_CHECK_RECORDS': f'I_CHECK_RECORDS_{i}',
         'I_RECORD_SOUL_BACK': f'I_RECORD_SOUL_BACK_{i}',
@@ -93,29 +80,28 @@ shikigami_costume_model = {
 
 # 庭院事务皮肤
 courtyard_affair_model = {
-    getattr(CourtyardAffairType, f"CUSTOM_COURTYARD_AFFAIR_{i}"): {
+    getattr(CourtyardAffairType, f'CUSTOM_COURTYARD_AFFAIR_{i}'): {
         'I_CHECK_COURTYARD_AFFAIRS': f'I_CHECK_COURTYARD_AFFAIRS_{i}',
         'I_ONE_COMPLETE': f'I_ONE_COMPLETE_{i}',
         'I_ENTER_DAILY': f'I_ENTER_DAILY_{i}',
         'I_CHECK_IN_DAILY': f'I_CHECK_IN_DAILY_{i}',
-    } for i in range(1, 2)
+    }
+    for i in range(1, 2)
 }
 
 
 class CostumeBase:
-    def check_costume(self, config: CostumeConfig=None):
+    def check_costume(self, config: CostumeConfig = None):
         if config is None:
             config: CostumeConfig = self.config.model.global_game.costume_config
         self.check_costume_main(config.costume_main_type)
-        self.check_costume_theme(config.costume_theme_type)
         self.check_costume_battle(config.costume_battle_type)
         self.check_costume_shikigami(config.costume_shikigami_type)
         self.check_custom_courtyard_affair(config.custom_courtyard_affair)
 
-    def replace_img(self,
-                    asset_before: str,
-                    asset_after: RuleImage,
-                    rp_roi_back: bool = True):
+    def replace_img(
+        self, asset_before: str, asset_after: RuleImage, rp_roi_back: bool = True
+    ):
         if not hasattr(self, asset_before):
             return
         # setattr(self, asset_before, asset_after)
@@ -136,14 +122,6 @@ class CostumeBase:
             if assert_value is None:
                 continue
             self.replace_img(key, assert_value)
-
-    def check_costume_theme(self, theme_type: ThemeType):
-        if theme_type == ThemeType.COSTUME_THEME_DEFAULT:
-            return
-        logger.info(f'Switch courtyard theme {theme_type}')
-        costume_assets = CostumeAssets()
-        for key, value in theme_costume_model[theme_type].items():
-            self.replace_img(key, getattr(costume_assets, value))
 
     def check_costume_battle(self, battle_type: BattleType):
         if battle_type == BattleType.COSTUME_BATTLE_DEFAULT:

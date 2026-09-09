@@ -10,6 +10,7 @@ import time
 import os
 import inflection
 import json
+import copy
 
 from datetime import date
 import threading
@@ -55,6 +56,8 @@ class Script:
         # Key: str, task name, value: int, failure count
         self.failure_record = {}
         self.last_task_runtime_outcome: dict[str, Any] | None = None
+        self.task_hoarding_until: datetime | None = None
+        self.task_hoarding_released = False
         # 运行loop的线程
         self.loop_thread: Thread = None
         self.anti_ban_guard: AntiBanGuard = AntiBanGuard()
@@ -74,24 +77,16 @@ class Script:
 
     @cached_property
     def device(self) -> Device | None:
-        from module.device.device import Device
-
-        max_retry = 3
-        for attempt in range(1, max_retry + 1):
-            try:
-                return Device(config=self.config)
-            except RequestHumanTakeover:
-                logger.critical('Request human takeover')
-                exit(1)
-            except Exception as exc:
-                if attempt >= max_retry:
-                    logger.exception(exc)
-                    exit(1)
-                logger.warning(
-                    f'Device initialization failed, retrying '
-                    f'({attempt + 1}/{max_retry}) after 5 seconds: {exc}'
-                )
-                time.sleep(5)
+        try:
+            from module.device.device import Device
+            device = Device(config=self.config)
+            return device
+        except RequestHumanTakeover:
+            logger.critical('Request human takeover')
+            exit(1)
+        except Exception as e:
+            logger.exception(e)
+            exit(1)
 
     @cached_property
     def checker(self):
@@ -316,6 +311,40 @@ class Script:
             if self.config.should_reload():
                 return False
 
+    def _hoard_next_task(self, task, now: datetime):
+        """在空闲时延迟首个到期任务，窗口内到达的任务一并等待。"""
+        duration = self.config.script.optimization.task_hoarding_duration
+        if duration <= 0 or not self.config.pending_task:
+            self.task_hoarding_until = None
+            self.task_hoarding_released = False
+            return task
+
+        if (self.config.model.running_task or self.task_hoarding_released
+                or (self.is_first_task and task.command == 'Restart')
+                or (task.next_run > now and self.task_hoarding_until is None)):
+            return task
+
+        if self.task_hoarding_until is None:
+            self.task_hoarding_until = now + timedelta(minutes=duration)
+            logger.info(
+                f"Task hoarding started for {duration:g} minutes, "
+                f"release at {self.task_hoarding_until.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+
+        if now < self.task_hoarding_until:
+            task = copy.deepcopy(task)
+            task.next_run = max(self.task_hoarding_until, task.next_run)
+            logger.info(
+                f"Task hoarding active, defer pending tasks until "
+                f"{self.task_hoarding_until.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            return task
+
+        self.task_hoarding_until = None
+        self.task_hoarding_released = True
+        logger.info("Task hoarding window ended, resume scheduled task execution")
+        return task
+
     def get_next_task(self) -> str:
         """
         获取下一个任务的名字, 大驼峰。
@@ -323,22 +352,21 @@ class Script:
         """
         while True:
             task = self.config.get_next()
-            self.config.task = task
-            if self.state_queue:
-                self.state_queue.put({"schedule": self.config.get_schedule_data()})
             now = datetime.now()
             antiban_wake = self.anti_ban_guard.wake_time(now, self.config.script.anti_ban)
             if antiban_wake is not None:
                 task.next_run = max(task.next_run, antiban_wake)
+            task = self._hoard_next_task(task, now)
+            self.config.task = task
+            if self.state_queue:
+                self.state_queue.put({"schedule": self.config.get_schedule_data()})
             # 任务时间到了返回任务名称
             if task.next_run <= now:
                 return task.command
             # 根据策略执行等待逻辑
             wait_until = task.next_run
-            weekly_refresh = self.config.weekly_schedule_refresh_at(now)
-            if weekly_refresh is not None and weekly_refresh < wait_until:
-                wait_until = weekly_refresh
-                logger.info(f'Wake scheduler for weekly daily sync at {wait_until}')
+            if self.task_hoarding_until and self.config.waiting_task:
+                wait_until = min(wait_until, self.config.waiting_task[0].next_run)
             decision = self.runtime.handle_wait_during_idle(wait_until)
             if decision == ScriptRuntimeDecision.RESCHEDULE:
                 logger.info('Idle wait requested scheduler refresh, reload config and reschedule')
@@ -418,11 +446,7 @@ class Script:
             module_path = str(Path.cwd() / 'tasks' / command / (module_name + '.py'))
             logger.info(f'module_path: {module_path}, module_name: {module_name}')
             task_module = load_module(module_name, module_path)
-            task_object = task_module.ScriptTask(config=self.config, device=self.device)
-            # Inner multi-account tasks publish their virtual running state through
-            # the same queue as the native scheduler overview.
-            task_object.state_queue = self.state_queue
-            task_object.run()
+            task_module.ScriptTask(config=self.config, device=self.device).run()
         except Exception as e:
             return self._handle_task_exception(e, command)
         return False

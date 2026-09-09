@@ -26,6 +26,7 @@ class MainType(str, Enum):
     COSTUME_MAIN_16 = 'costume_main_16'  # 琦梦茨庭
     COSTUME_MAIN_17 = 'costume_main_17'  # 狐栖归处
 
+
 # 结界皮肤
 class RealmType(str, Enum):
     COSTUME_REALM_DEFAULT = 'costume_realm_default'  # 妖扇结界
@@ -34,7 +35,6 @@ class RealmType(str, Enum):
 # 主题，就是庭院最右下角的展开按钮
 class ThemeType(str, Enum):
     COSTUME_THEME_DEFAULT = 'costume_theme_default'  # 伊始之卷
-    COSTUME_THEME_1 = 'costume_theme_1'  # 新语明宵
 
 
 # 幕间，就是式神录这里
@@ -52,6 +52,7 @@ class ShikigamiType(str, Enum):
     COSTUME_SHIKIGAMI_10 = 'costume_shikigami_10'  # 今宵胧明
     COSTUME_SHIKIGAMI_11 = 'costume_shikigami_11'  # 花札幕台
     COSTUME_SHIKIGAMI_12 = 'costume_shikigami_12'  # 拾光之窗
+
 
 # 签到主题
 class SignType(str, Enum):
@@ -82,16 +83,33 @@ class CourtyardAffairType(str, Enum):
     CUSTOM_COURTYARD_AFFAIR_DEFAULT = 'custom_courtyard_affair_default'  # 默认
     CUSTOM_COURTYARD_AFFAIR_1 = 'custom_courtyard_affair_1'  # 龙仪星引
 
+
 class CostumeConfig(BaseModel):
     # 皮肤配置
-    costume_main_type: MainType = Field(default=MainType.COSTUME_MAIN, description='costume_main_type_help')
-    costume_realm_type: RealmType = Field(default=RealmType.COSTUME_REALM_DEFAULT, description='costume_realm_type_help')
-    costume_theme_type: ThemeType = Field(default=ThemeType.COSTUME_THEME_DEFAULT, description='costume_theme_type_help')
-    costume_shikigami_type: ShikigamiType = Field(default=ShikigamiType.COSTUME_SHIKIGAMI_DEFAULT, description='costume_shikigami_type_help')
-    costume_sign_type: SignType = Field(default=SignType.COSTUME_SIGN_DEFAULT, description='costume_sign_type_help')
-    costume_battle_type: BattleType = Field(default=BattleType.COSTUME_BATTLE_DEFAULT, description='costume_battle_type_help')
-    custom_courtyard_affair: CourtyardAffairType = Field(default=CourtyardAffairType.CUSTOM_COURTYARD_AFFAIR_DEFAULT)
+    costume_main_type: MainType = Field(
+        default=MainType.COSTUME_MAIN, description='costume_main_type_help'
+    )
+    costume_realm_type: RealmType = Field(
+        default=RealmType.COSTUME_REALM_DEFAULT, description='costume_realm_type_help'
+    )
+    costume_theme_type: ThemeType = Field(
+        default=ThemeType.COSTUME_THEME_DEFAULT, description='costume_theme_type_help'
+    )
+    costume_shikigami_type: ShikigamiType = Field(
+        default=ShikigamiType.COSTUME_SHIKIGAMI_DEFAULT,
+        description='costume_shikigami_type_help',
+    )
+    costume_sign_type: SignType = Field(
+        default=SignType.COSTUME_SIGN_DEFAULT, description='costume_sign_type_help'
+    )
+    costume_battle_type: BattleType = Field(
+        default=BattleType.COSTUME_BATTLE_DEFAULT,
+        description='costume_battle_type_help',
+    )
+    custom_courtyard_affair: CourtyardAffairType = Field(
+        default=CourtyardAffairType.CUSTOM_COURTYARD_AFFAIR_DEFAULT
+    )
 
-    @field_validator("costume_realm_type", mode="before")
+    @field_validator('costume_realm_type', mode='before')
     def convert_old_value(cls, v):
         return RealmType.COSTUME_REALM_DEFAULT
