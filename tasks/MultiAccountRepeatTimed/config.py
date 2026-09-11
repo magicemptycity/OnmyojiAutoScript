@@ -13,6 +13,7 @@ from tasks.Component.config_base import ConfigBase, MultiLine
 from tasks.Component.config_scheduler import Scheduler
 from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
 from tasks.MultiAccountRepeatTimed.task_name_resolver import TaskNameResolver
+from tasks.MultiAccountTaskOrchestration.config import MultiAccountTaskConfigMode
 
 
 class MultiAccountRepeatTimedConfig(ConfigBase, extra="allow"):
@@ -34,6 +35,7 @@ class MultiAccountRepeatTimedTask(ConfigBase, extra="allow"):
     """一个账号下的任务和私有参数；启用状态使用任务自身 scheduler.enable。"""
 
     task_name: str = Field(default="")
+    config_mode: MultiAccountTaskConfigMode = Field(default=MultiAccountTaskConfigMode.PRIVATE, title="配置来源")
     private_config: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
 
     @model_validator(mode="before")

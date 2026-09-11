@@ -210,6 +210,8 @@ class ScriptTask(MultiAccountRepeatNewBase):
     def _apply_account_utilize_config(self, account: MultiAccountKekkaiUtilizeNewAccount):
         """临时套用账号独立蹭卡配置，并由 Pydantic 统一转换存储格式。"""
         backup = copy.deepcopy(self.config.kekkai_utilize.utilize_config)
+        if getattr(account.config_mode, "value", account.config_mode) == "public":
+            return backup
         overrides = account.private_config.get("utilize_config", {})
         if not isinstance(overrides, dict):
             raise ValueError("账号私有蹭卡配置无效：utilize_config 必须是对象")

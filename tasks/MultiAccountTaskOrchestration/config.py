@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 from typing import Any
+from enum import Enum
 
 from pydantic import Field, model_serializer, model_validator
 
@@ -14,6 +15,11 @@ from tasks.Component.config_scheduler import ScheduleMode, Scheduler
 from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
 from tasks.MultiAccountTaskOrchestration.task_name_resolver import TaskNameResolver
 from module.config.utils import convert_to_underscore
+
+
+class MultiAccountTaskConfigMode(str, Enum):
+    PUBLIC = "public"
+    PRIVATE = "private"
 
 
 class MultiAccountRepeatNewConfig(ConfigBase, extra="allow"):
@@ -37,6 +43,7 @@ class MultiAccountRepeatNewTask(ConfigBase, extra="allow"):
     task_name: str = Field(default="")
     # 仅编排模式使用任务自身 scheduler 私有覆盖；保留 enable 以兼容新普通旧数据。
     enable: bool = Field(default=True)
+    config_mode: MultiAccountTaskConfigMode = Field(default=MultiAccountTaskConfigMode.PRIVATE, title="配置来源")
     private_config: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
     # 自动保存的配置型运行记录（例如每日琐事的 done_record），按账号和任务隔离。
     runtime_record: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
@@ -131,6 +138,7 @@ class MultiAccountRepeatNewFixedTimeBatchTask(ConfigBase, extra="allow"):
     task_name: str = Field(default="")
     # 停用时保留该任务项及其私有配置，后续重新启用可直接恢复。
     enable: bool = Field(default=True, title="启用顺序任务组任务")
+    config_mode: MultiAccountTaskConfigMode = Field(default=MultiAccountTaskConfigMode.PRIVATE, title="配置来源")
     private_config: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
     runtime_record: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
 

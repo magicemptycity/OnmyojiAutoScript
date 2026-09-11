@@ -338,13 +338,37 @@ async def quick_schedule_account(script_name: str, account_index: int, run_now: 
 @multi_account_kekkai_utilize_new_app.get('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/utilize-args')
 async def get_account_utilize_args(script_name: str, account_index: int):
     account = _account(_section(script_name), account_index)
-    return {"utilize_config": _serialize_group(_account_utilize_config(account))}
+    use_private = getattr(account.config_mode, "value", account.config_mode) == "private"
+    active = (
+        _account_utilize_config(account)
+        if use_private
+        else mm.config_cache(script_name).model.kekkai_utilize.utilize_config
+    )
+    arguments = _serialize_group(active)
+    arguments.insert(0, {
+        "name": "config_mode",
+        "title": "config_mode",
+        "description": "config_mode_help",
+        "default": "private",
+        "value": getattr(account.config_mode, "value", account.config_mode),
+        "type": "enum",
+        "enumEnum": ["public", "private"],
+    })
+    return {"utilize_config": arguments}
 
 
 @multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/utilize-args/{argument}/value')
 async def set_account_utilize_arg(script_name: str, account_index: int, argument: str, types: str, value):
     section = _section(script_name)
     account = _account(section, account_index)
+    if convert_to_underscore(argument) == "config_mode":
+        if value not in {"public", "private"}:
+            raise HTTPException(status_code=400, detail="配置来源无效")
+        account.config_mode = value
+        _save(script_name, section)
+        return True
+    if getattr(account.config_mode, "value", account.config_mode) != "private":
+        raise HTTPException(status_code=400, detail="当前使用公共配置，请先切换为私有配置")
     candidate = _account_utilize_config(account)
     try:
         candidate = _validated_model_value(
@@ -376,7 +400,9 @@ async def copy_account_utilize_args(script_name: str, account_index: int, target
     for target_index in targets:
         if target_index == account_index:
             continue
-        _account(section, target_index).private_config = copy.deepcopy(source.private_config)
+        target = _account(section, target_index)
+        target.config_mode = source.config_mode
+        target.private_config = copy.deepcopy(source.private_config)
         copied += 1
     if not copied:
         raise HTTPException(status_code=400, detail="没有可复制的目标账号")

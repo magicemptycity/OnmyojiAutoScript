@@ -12,6 +12,7 @@ from tasks.Component.MultiAccount.multi_account_config import (
 from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
 from tasks.Component.config_base import ConfigBase, Time
 from tasks.KekkaiUtilize.config import UtilizeConfig, UtilizeScheduler
+from tasks.MultiAccountTaskOrchestration.config import MultiAccountTaskConfigMode
 
 
 class MultiAccountKekkaiUtilizeNewConfig(ConfigBase, extra="allow"):
@@ -54,7 +55,8 @@ class MultiAccountKekkaiUtilizeNewAccount(ConfigBase, extra="allow"):
         title="下一次蹭卡时间",
     )
     last_complete_time: datetime = Field(default=datetime(2023, 1, 1))
-    # 每个账号始终使用自己的一份配置；初始值来自结界蹭卡默认配置。
+    config_mode: MultiAccountTaskConfigMode = Field(default=MultiAccountTaskConfigMode.PRIVATE, title="配置来源")
+    # 私有模式使用账号自己的配置；公共模式读取当前 OAS 实例蹭卡配置。
     private_config: dict[str, Any] = Field(
         default_factory=lambda: {"utilize_config": UtilizeConfig().model_dump()},
         json_schema_extra={"default": {}},

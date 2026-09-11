@@ -15,6 +15,7 @@ from module.config.utils import (
 )
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
+from module.server.multi_account_config_mode import is_config_mode_field, with_config_mode_group
 from tasks.MultiAccountRepeatTimed.config import (
     MultiAccountRepeatTimedAccount,
     MultiAccountRepeatTimedTask,
@@ -519,14 +520,25 @@ async def get_private_args(script_name: str, account_index: int, task_name: str)
         remove_scheduler=False,
     )
     if entry is None:
-        return task_args
-    for group_name, arguments in entry.private_config.items():
-        if not isinstance(arguments, dict) or group_name not in task_args:
-            continue
-        for argument in task_args[group_name]:
-            if argument.get("name") in arguments:
-                argument["value"] = arguments[argument["name"]]
-    return task_args
+        entry = MultiAccountRepeatTimedTask(
+            task_name=convert_to_underscore(task_name.strip()),
+            private_config={"scheduler": {"enable": False}},
+        )
+    if getattr(entry.config_mode, "value", entry.config_mode) == "private":
+        for group_name, arguments in entry.private_config.items():
+            if not isinstance(arguments, dict) or group_name not in task_args:
+                continue
+            for argument in task_args[group_name]:
+                if argument.get("name") in arguments:
+                    argument["value"] = arguments[argument["name"]]
+    else:
+        task_args = copy.deepcopy(mm.config_cache(script_name).model.script_task(entry.task_name))
+        scheduler_values = entry.private_config.get("scheduler", {})
+        if isinstance(scheduler_values, dict) and "scheduler" in task_args:
+            for item in task_args["scheduler"]:
+                if item.get("name") in scheduler_values:
+                    item["value"] = scheduler_values[item["name"]]
+    return with_config_mode_group(task_args, entry)
 
 
 @multi_account_repeat_timed_app.put('/{script_name}/multi_account_repeat_timed/accounts/{account_index}/tasks/{task_name}/{group}/{argument}/value')
@@ -537,6 +549,16 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     if not isinstance(task_config, BaseModel):
         raise HTTPException(status_code=400, detail="任务配置不存在")
     entry = _ensure_disabled_task_entry(account, task_name)
+    normalized_group = convert_to_underscore(group)
+    normalized_argument = convert_to_underscore(argument)
+    if is_config_mode_field(normalized_group, normalized_argument):
+        if value not in {"public", "private"}:
+            raise HTTPException(status_code=400, detail="配置来源无效")
+        entry.config_mode = value
+        _save_timed_section(script_name, section)
+        return True
+    if getattr(entry.config_mode, "value", entry.config_mode) != "private":
+        raise HTTPException(status_code=400, detail="当前使用公共配置，请先切换为私有配置")
     private = copy.deepcopy(entry.private_config)
     private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
     candidate = task_config.__class__()
@@ -600,6 +622,7 @@ async def copy_private_args_to_accounts(
         scheduler = copied_config.get("scheduler")
         if isinstance(scheduler, dict):
             scheduler["next_run"] = target_entry.next_run.strftime("%Y-%m-%d %H:%M:%S")
+        target_entry.config_mode = source_entry.config_mode
         target_entry.private_config = copied_config
         copied_count += 1
     if not copied_count:

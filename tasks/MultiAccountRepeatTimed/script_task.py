@@ -253,21 +253,23 @@ class ScriptTask(MultiAccountRepeatNewBase):
 
         public_backup = copy.deepcopy(public_config)
         # 私有配置只覆盖默认配置，不能把已经修改过的公共配置带入账号任务。
-        active = (
-            public_config.__class__()
-            if self._has_private_task_overrides(task_entry.private_config)
-            else copy.deepcopy(public_config)
-        )
+        use_private = getattr(task_entry.config_mode, "value", task_entry.config_mode) == "private"
+        active = public_config.__class__() if use_private else copy.deepcopy(public_config)
+        # 运行记录只恢复任务产生的状态；用户当前保存的私有配置必须最后
+        # 应用，避免历史记录覆盖后来修改的角色、层数、次数及调度参数。
+        if task_entry.runtime_record:
+            active = active.__class__.model_validate(
+                self._deep_merge(active.model_dump(), task_entry.runtime_record)
+            )
+        overrides = task_entry.private_config if use_private else {
+            "scheduler": task_entry.private_config.get("scheduler", {})
+        }
         try:
-            active = model_with_group_overrides(active, task_entry.private_config)
+            active = model_with_group_overrides(active, overrides)
         except (ValidationError, ValueError) as exc:
             raise ValueError(f"账号私有配置无效：{task_name}: {exc}") from exc
 
         baseline = active.model_dump()
-        if task_entry.runtime_record:
-            active = active.__class__.model_validate(
-                self._deep_merge(baseline, task_entry.runtime_record)
-            )
         BaseModel.__setattr__(self.config.model, task_key, active)
         logger.info(
             "为账号 %s-%s 套用任务 %s 的私有配置和运行记录",

@@ -12,6 +12,7 @@ from module.config.model_overrides import model_with_group_overrides
 from module.config.utils import convert_to_underscore, parse_next_server_weekday, parse_tomorrow_server
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
+from module.server.multi_account_config_mode import is_config_mode_field, with_config_mode_group
 from tasks.MultiAccountTaskOrchestration.config import (
     MultiAccountRepeatNewAccount,
     MultiAccountRepeatNewFixedTimeBatch,
@@ -833,7 +834,17 @@ async def get_fixed_time_batch_task_args(script_name: str, account_index: int, b
         entry.task_name if entry is not None else task_name,
         remove_scheduler=True,
     )
-    return _apply_private_args(task_args, entry.private_config) if entry is not None else task_args
+    if entry is None:
+        entry = MultiAccountRepeatNewFixedTimeBatchTask(
+            task_name=convert_to_underscore(task_name.strip()),
+            enable=False,
+        )
+    if getattr(entry.config_mode, "value", entry.config_mode) == "private":
+        task_args = _apply_private_args(task_args, entry.private_config)
+    else:
+        task_args = copy.deepcopy(mm.config_cache(script_name).model.script_task(entry.task_name))
+        task_args.pop("scheduler", None)
+    return with_config_mode_group(task_args, entry)
 
 
 @multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/tasks/{task_name}/{group}/{argument}/value')
@@ -850,6 +861,16 @@ async def set_fixed_time_batch_task_arg(
     if not isinstance(task_config, BaseModel):
         raise HTTPException(status_code=400, detail="任务配置不存在")
     entry = _ensure_disabled_batch_task_entry(batch, task_name)
+    normalized_group = convert_to_underscore(group)
+    normalized_argument = convert_to_underscore(argument)
+    if is_config_mode_field(normalized_group, normalized_argument):
+        if value not in {"public", "private"}:
+            raise HTTPException(status_code=400, detail="配置来源无效")
+        entry.config_mode = value
+        _save(script_name, multi_account_repeat_new_fixed=section)
+        return True
+    if getattr(entry.config_mode, "value", entry.config_mode) != "private":
+        raise HTTPException(status_code=400, detail="当前使用公共配置，请先切换为私有配置")
 
     private = copy.deepcopy(entry.private_config)
     private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
@@ -908,7 +929,12 @@ async def get_private_args(script_name: str, account_index: int, task_name: str)
     account = _task_account(_section(script_name), account_index)
     entry = _task_entry(account, task_name)
     task_args = _default_task_args(script_name, entry.task_name, remove_scheduler=True)
-    return _apply_private_args(task_args, entry.private_config)
+    if getattr(entry.config_mode, "value", entry.config_mode) == "private":
+        task_args = _apply_private_args(task_args, entry.private_config)
+    else:
+        task_args = copy.deepcopy(mm.config_cache(script_name).model.script_task(entry.task_name))
+        task_args.pop("scheduler", None)
+    return with_config_mode_group(task_args, entry)
 
 
 @multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/tasks/{task_name}/{group}/{argument}/value')
@@ -916,7 +942,17 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
-    if convert_to_underscore(group) == "scheduler":
+    normalized_group = convert_to_underscore(group)
+    normalized_argument = convert_to_underscore(argument)
+    if is_config_mode_field(normalized_group, normalized_argument):
+        if value not in {"public", "private"}:
+            raise HTTPException(status_code=400, detail="配置来源无效")
+        entry.config_mode = value
+        _save(script_name, multi_account_repeat_new_fixed=section)
+        return True
+    if getattr(entry.config_mode, "value", entry.config_mode) != "private":
+        raise HTTPException(status_code=400, detail="当前使用公共配置，请先切换为私有配置")
+    if normalized_group == "scheduler":
         raise HTTPException(status_code=400, detail="不能在私有配置中修改调度参数")
     task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
     if not isinstance(task_config, BaseModel):
@@ -973,6 +1009,7 @@ async def copy_private_args_to_accounts(
             # 目标账号未配置此任务时，先创建任务项，默认状态不继承源账号。
             target_entry = MultiAccountRepeatNewTask(task_name=source_entry.task_name)
             target_account.task_list.append(target_entry)
+        target_entry.config_mode = source_entry.config_mode
         target_entry.private_config = copy.deepcopy(source_entry.private_config)
         copied_count += 1
     if not copied_count:
