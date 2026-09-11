@@ -93,6 +93,53 @@ class NeteaseAccountUi:
     def account_matches(self, actual: str | None, expected: str) -> bool:
         return self.normalize_account(actual) == self.normalize_account(expected)
 
+    def nodes(self, root, resource_id: str):
+        """查找带指定资源 ID 后缀的控件节点。"""
+        return self._nodes(root, resource_id)
+
+    def clickable_node(self, root, resource_id: str):
+        """返回指定资源 ID 中第一个可见可点击控件。"""
+        return next(
+            (node for node in self._nodes(root, resource_id)
+             if node.attrib.get("clickable") == "true"
+             and node.attrib.get("enabled") == "true"),
+            None,
+        )
+
+    def click_node(self, node, control_name: str) -> bool:
+        """点击已从当前控件树中获取的节点。"""
+        try:
+            left, top, right, bottom = self._bounds(node)
+            self.device.click(
+                (left + right) // 2,
+                (top + bottom) // 2,
+                control_name=control_name,
+            )
+            return True
+        except Exception:
+            return False
+
+    def click_resource(self, resource_id: str, control_name: str) -> bool:
+        """按控件树资源 ID 点击控件并返回是否成功。"""
+        try:
+            root = self.dump()
+            node = self.clickable_node(root, resource_id)
+            return self.click_node(node, control_name) if node is not None else False
+        except Exception:
+            return False
+
+    def current_user_center_account(self, root=None) -> str | None:
+        """读取用户中心页面当前选中的网易账号。"""
+        try:
+            root = root if root is not None else self.dump()
+            for node in self._nodes(root, "netease_mpay__login_center_username"):
+                text = node.attrib.get("text", "").strip()
+                if text:
+                    return text
+        except Exception:
+            return None
+        return None
+
     def _click_bounds(self, bounds: tuple[int, int, int, int], name: str) -> None:
         left, top, right, bottom = bounds
         self.device.click(

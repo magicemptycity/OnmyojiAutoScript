@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from module.logger import logger
 from tasks.Component.SwitchAccount.netease_account_ui import (
     AccountUiUnavailable,
@@ -36,6 +38,95 @@ class TreeSwitchAccount(SwitchAccount):
             if normalized_alias and actual.startswith(normalized_alias):
                 return True
         return False
+
+    def _account_ui(self) -> NeteaseAccountUi:
+        return self._netease_account_ui()
+
+    def login(self, accountInfo) -> bool:
+        """新多账号专用登录流程：网易账号阶段只使用控件树。"""
+        is_account_logon = False
+        character_selected = False
+        for _ in range(120):
+            self.screenshot()
+            ui = self._account_ui()
+            root = ui.dump()
+
+            # 本轮状态判断复用同一份控件树；点击后由 click_resource 重新读取。
+            # 登录平台页：只处理控件树，不依赖平台图片。
+            platform_id = (
+                "netease_mpay__android"
+                if getattr(accountInfo, "apple_or_android", True)
+                else "netease_mpay__ios"
+            )
+            if (node := ui.clickable_node(root, platform_id)) is not None and ui.click_node(
+                node, f"网易登录平台-{platform_id}"
+            ):
+                is_account_logon = True
+                time.sleep(2)
+                continue
+
+            # 登录账号页：即使账号列表尚未展开，也要先点击当前账号项展开列表，
+            # 再由 NeteaseAccountUi 完成滚动、匹配和确认。
+            try:
+                account_list_visible = bool(ui.nodes(root, "netease_mpay__user_list"))
+                account_page_visible = bool(ui.nodes(root, "netease_mpay__login_user_item"))
+                if account_list_visible or account_page_visible:
+                    if not self.selectAccount(accountInfo):
+                        logger.error("控件树中未找到目标网易账号：%s", getattr(accountInfo, "account", ""))
+                        return False
+                    time.sleep(0.5)
+                    if not self._account_ui().click_resource("netease_mpay__login", "网易账号登录"):
+                        logger.error("控件树中未找到网易登录按钮")
+                        return False
+                    continue
+            except AccountUiUnavailable as exc:
+                logger.error("网易账号控件树不可用：%s", exc)
+                return False
+
+            # 用户中心页：控件树读取当前账号并点击切换账号。
+            try:
+                current = ui.current_user_center_account(root)
+                user_center_visible = bool(ui.nodes(root, "netease_mpay__switch_account"))
+                if current is not None and self._account_matches(accountInfo, current):
+                    is_account_logon = True
+                    if self._account_ui().click_resource("netease_mpay__close_window", "关闭网易用户中心"):
+                        time.sleep(0.5)
+                    continue
+                # 当前账号文本偶尔尚未加载，但用户中心切换按钮已存在时，
+                # 仍应直接打开账号列表，不能回退到图片点击后卡住。
+                if user_center_visible and self._account_ui().click_resource(
+                    "netease_mpay__switch_account", "网易用户中心-切换账号"
+                ):
+                    is_account_logon = False
+                    time.sleep(1)
+                    continue
+            except AccountUiUnavailable as exc:
+                logger.error("网易用户中心控件树不可用：%s", exc)
+                return False
+
+            # 登录页没有进入用户中心时，点击原有用户中心入口；
+            # 这是从庭院或重新登录页进入账号切换流程的必经步骤。
+            if not is_account_logon and self.click(self.C_SA_LOGIN_FORM_USER_CENTER, interval=1):
+                time.sleep(1)
+                continue
+
+            # 回到阴阳师后，服务器和角色仍沿用原有 OCR/图片识别。
+            if is_account_logon and not character_selected:
+                if self.select_target(accountInfo.character, accountInfo.svr):
+                    character_selected = True
+                    time.sleep(1)
+                    continue
+            if is_account_logon and character_selected:
+                logger.info("character %s-%s account:%s login Success", accountInfo.character, accountInfo.svr, accountInfo.account)
+                return True
+            time.sleep(0.5)
+
+        logger.error("character %s-%s account:%s login Failed", accountInfo.character, accountInfo.svr, accountInfo.account)
+        return False
+
+    def _account_info_matches(self, accountInfo, actual: str | None) -> bool:
+        """兼容新多账号账号模型在用户中心页面的账号匹配。"""
+        return self._account_matches(accountInfo, actual)
 
     def is_account_selected(self, accountInfo) -> bool:
         if not getattr(accountInfo, "account", ""):

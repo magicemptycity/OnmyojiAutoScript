@@ -31,29 +31,12 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
         角色名匹配策略：完全匹配 → 删首匹配 → 删尾匹配
         服务器名匹配时点击下方30px，角色名匹配时点击上方30px。
 
-        注意：如果提供了服务器名，会先检查当前登录界面的服务器是否已是目标服务器。
-            若是则直接返回 True（不进行任何点击），这意味着调用者应认为角色已选中。
-            请确保在 login() 中调用时，此行为符合预期（例如，如果服务器已正确，
-            但角色尚未选中，则直接返回 True 可能导致角色未被实际点击选中）。
-
         @param characterName: 目标角色名
         @param svrName: 目标服务器名（可选）
         @return: True 表示选中成功，False 表示失败
         """
         logger.info("start select_target: character=%s, svr=%s", characterName, svrName)
 
-        # ---------- 保留原 switch_svr 的当前服务器检查 ----------
-        if svrName:
-            self.O_SA_LOGIN_FORM_SVR_NAME.keyword = svrName
-            self.O_SA_LOGIN_FORM_SVR_NAME_OLED.keyword = svrName
-            self.screenshot()
-            if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME):
-                logger.info("current svr is %s, no need to switch", svrName)
-                return True
-            if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME_OLED):
-                logger.info("current svr is %s, no need to switch", svrName)
-                return True
-        # ------------------------------------------------------
         self.O_SA_LOGIN_FORM_SVR_NAME.keyword = ""
         logger.info("Reset SVR name keyword: %s", self.O_SA_LOGIN_FORM_SVR_NAME.keyword)
         self.O_SA_LOGIN_FORM_SVR_NAME_OLED.keyword = ""
@@ -287,6 +270,18 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
     #         self.ui_click_until_disappear(self.I_SA_LOGIN_FORM_ANDROID, 1)
     #     return True
 
+    def _account_info_matches(self, accountInfo: AccountInfo, actual: str | None) -> bool:
+        """按账号模型匹配当前网易账号；旧流程保留原有别名规则。"""
+        return accountInfo.is_account_alias(actual)
+
+    def _select_login_platform_by_tree(self, accountInfo: AccountInfo) -> bool:
+        """控件树切号的可选扩展点；旧 OCR 切号默认不使用。"""
+        return False
+
+    def _click_switch_account_by_tree(self) -> bool:
+        """控件树切号的可选扩展点；旧 OCR 切号默认不使用。"""
+        return False
+
     def login(self, accountInfo: AccountInfo) -> bool:
         """
 
@@ -316,9 +311,14 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                 continue
 
             # 处于选择 苹果安卓界面
-            if self.appear(self.I_SA_LOGIN_FORM_APPLE):
-                btn = self.I_SA_LOGIN_FORM_ANDROID if accountInfo.apple_or_android else self.I_SA_LOGIN_FORM_APPLE
-                self.ui_click_until_disappear(btn)
+            platform_by_tree = False
+            platform_image_visible = self.appear(self.I_SA_LOGIN_FORM_APPLE)
+            if not platform_image_visible:
+                platform_by_tree = self._select_login_platform_by_tree(accountInfo)
+            if platform_image_visible or platform_by_tree:
+                if not platform_by_tree:
+                    btn = self.I_SA_LOGIN_FORM_ANDROID if accountInfo.apple_or_android else self.I_SA_LOGIN_FORM_APPLE
+                    self.ui_click_until_disappear(btn)
                 time.sleep(2)  # 等待平台选择生效
                 isAccountLogon = True
                 continue
@@ -381,7 +381,7 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                 # 如果当前已登录用户就是account
                 ocrRes = self.O_SA_LOGIN_FORM_USER_CENTER_ACCOUNT.ocr_single(self.device.image)
                 # NOTE 由于邮箱账号@符号极易被误识别为其他,故对账号信息做预处理 便于比对
-                if (accountInfo.account is None) or accountInfo.account == "" or accountInfo.is_account_alias(ocrRes):
+                if (accountInfo.account is None) or accountInfo.account == "" or self._account_info_matches(accountInfo, ocrRes):
                     logger.info("current is the account we want:ocr result %s", ocrRes)
                     isAccountLogon = True
                     self.ui_click_until_disappear(self.C_SA_LOGIN_FORM_USER_CENTER_CLOSE_BTN, interval=1,
@@ -389,6 +389,10 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                     time.sleep(1)  # 等待用户中心关闭
                     continue
                 #
+                if self._click_switch_account_by_tree():
+                    isAccountLogon = False
+                    time.sleep(1)  # 等待切换账号界面出现
+                    continue
                 if self.ui_click(self.I_SA_SWITCH_ACCOUNT_BTN, self.I_SA_NETEASE_GAME_LOGO):
                     isAccountLogon = False
                     time.sleep(1)  # 等待切换账号界面出现
