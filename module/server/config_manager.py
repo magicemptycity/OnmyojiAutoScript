@@ -10,6 +10,7 @@ from typing import Any, get_args, get_origin
 from pydantic import BaseModel, ValidationError
 
 from module.config.config_model import ConfigModel
+from module.config.weekly_schedule import WeeklySchedule
 from module.config.utils import convert_to_underscore, read_file, write_file
 from module.logger import logger
 
@@ -120,7 +121,14 @@ class ConfigManager:
 
     @staticmethod
     def _is_model_type(annotation: Any) -> bool:
-        return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+        # Python 3.13 中 list[Model] 等泛型别名也可能被 isinstance(..., type) 识别为真，
+        # 直接传给 issubclass 会抛出 TypeError。泛型字段应由后续的列表处理逻辑处理。
+        if get_origin(annotation) is not None or not isinstance(annotation, type):
+            return False
+        try:
+            return issubclass(annotation, BaseModel)
+        except TypeError:
+            return False
 
     @staticmethod
     def _list_item_model(annotation: Any) -> type[BaseModel] | None:
@@ -161,6 +169,8 @@ class ConfigManager:
             if key not in fields:
                 dynamic_field = ConfigManager._dynamic_list_item_model(str(key), fields)
                 if dynamic_field is None:
+                    if model_type.model_config.get('extra') == 'allow':
+                        continue
                     errors.append(
                         ConfigManager._format_field_error(
                             field_path,
@@ -521,6 +531,7 @@ class ConfigManager:
             template_content = f.read()
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(template_content)
+        WeeklySchedule.copy(template, file)
         logger.info(f'copy {template_path} to {file_path}')
 
 
@@ -566,6 +577,7 @@ class ConfigManager:
             return False
         try:
             old_path.rename(new_path)
+            WeeklySchedule.rename(old_name, new_name)
             logger.info(f'rename {old_path} to {new_path}')
             return True
         except Exception as e:
@@ -586,6 +598,7 @@ class ConfigManager:
             return False
         try:
             file_path.unlink()
+            WeeklySchedule.delete(file)
             logger.info(f'delete {file_path}')
             return True
         except Exception as e:

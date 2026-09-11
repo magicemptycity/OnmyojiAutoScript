@@ -3,7 +3,12 @@
 # github https://github.com/runhey
 from datetime import datetime
 
-from module.exception import RequestHumanTakeover, TaskEnd
+from module.exception import (
+    GameStuckError,
+    GameTooManyClickError,
+    RequestHumanTakeover,
+    TaskEnd,
+)
 from module.logger import logger
 from tasks.Component.Login.service import LoginService
 from tasks.Restart.server_update import delay_pending_tasks_for_server_update, is_server_update_window
@@ -28,7 +33,8 @@ class ScriptTask(BaseTask):
         try:
             self.recover_app()
             self.finish_recovery()
-        except RequestHumanTakeover:
+        except (RequestHumanTakeover, GameStuckError, GameTooManyClickError):
+            # 登录阶段的环境异常在停服窗口内按服务器更新处理，避免反复重启游戏。
             if not self.delay_pending_tasks(reason='login failed during Restart recovery'):
                 raise
         raise TaskEnd

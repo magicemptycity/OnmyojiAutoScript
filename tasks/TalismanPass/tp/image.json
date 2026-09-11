@@ -133,5 +133,32 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "本月 的右上方红点（截点用）"
+  },
+  {
+    "itemName": "accomplishments_1",
+    "imageName": "tp_accomplishments_1.png",
+    "roiFront": "1081,638,55,56",
+    "roiBack": "1035,606,245,114",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "成就入口"
+  },
+  {
+    "itemName": "accomplishments_2",
+    "imageName": "tp_accomplishments_2.png",
+    "roiFront": "102,21,72,42",
+    "roiBack": "102,21,72,42",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "成就页面标志"
+  },
+  {
+    "itemName": "accomplishments_3",
+    "imageName": "tp_accomplishments_3.png",
+    "roiFront": "1077,423,36,42",
+    "roiBack": "1077,423,36,42",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "没有可领取的成就奖励"
   }
 ]

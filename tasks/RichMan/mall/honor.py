@@ -33,9 +33,11 @@ class Honor(Special):
             if not mystery_bought and con.mystery_amulet and self.appear(self.I_HONOR_BLUE):
                 self._honor_mystery_amulet(con.mystery_amulet)
                 mystery_bought = True
+                swipe_count = 0
             if not black_bought and con.black_daruma_scrap and self.appear(self.I_HONOR_BLACK):
                 self._honor_black_daruma_scrap(con.black_daruma_scrap)
                 black_bought = True
+                swipe_count = 0
 
             # 如果所有需要购买的物品都已购买完成
             if (not con.mystery_amulet or mystery_bought) and (not con.black_daruma_scrap or black_bought):
@@ -45,7 +47,7 @@ class Honor(Special):
             if swipe_count >= max_swipes:
                 break
             # 如果滑动到底了
-            if self.appear(self.I_SP_SWIPE_CHECK):
+            if self.appear(self.I_HONOR_SWIPE_CHECK):
                 break
 
             # 向下滑动寻找商品

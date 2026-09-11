@@ -10,15 +10,46 @@ from module.atom.list import RuleList
 class EvoZoneAssets: 
 
 
+	# Click Rule Assets
+	# 单人战斗结算上面随机点 
+	C_ALONE_RESULT_WIN_RANDOM_TOP = RuleClick(roi_front=(118,12,710,45), roi_back=(118,12,710,45), name="alone_result_win_random_top")
+	# 单人战斗结算下面随机点 
+	C_ALONE_RESULT_WIN_RANDOM_BOTTOM = RuleClick(roi_front=(450,547,810,160), roi_back=(118,12,710,45), name="alone_result_win_random_bottom")
+	# 单人战斗结算中间随机点 
+	C_ALONE_RESULT_WIN_RANDOM_CENTER = RuleClick(roi_front=(150,57,1000,490), roi_back=(10,110,1260,510), name="alone_result_win_random_center")
+	# 单人战斗结算左边随机点 
+	C_ALONE_RESULT_WIN_RANDOM_LEFT = RuleClick(roi_front=(15,100,125,610), roi_back=(15,100,125,610), name="alone_result_win_random_left")
+	# 单人战斗结算右边随机点 
+	C_ALONE_RESULT_WIN_RANDOM_RIGHT = RuleClick(roi_front=(462,57,808,490), roi_back=(608,110,662,600), name="alone_result_win_random_right")
+	# 组队战斗结算上面随机点 
+	C_TEAM_RESULT_WIN_RANDOM_TOP = RuleClick(roi_front=(125,10,700,90), roi_back=(10,110,1260,510), name="team_result_win_random_top")
+	# 组队战斗结算下面随机点 
+	C_TEAM_RESULT_WIN_RANDOM_BOTTOM = RuleClick(roi_front=(462,605,800,100), roi_back=(608,110,662,600), name="team_result_win_random_bottom")
+	# 组队战斗结算中间随机点 
+	C_TEAM_RESULT_WIN_RANDOM_CENTER = RuleClick(roi_front=(420,100,448,280), roi_back=(608,110,662,600), name="team_result_win_random_center")
+	# 组队战斗结算左边随机点 
+	C_TEAM_RESULT_WIN_RANDOM_LEFT = RuleClick(roi_front=(10,100,410,530), roi_back=(10,100,130,610), name="team_result_win_random_left")
+	# 组队战斗结算右边随机点 
+	C_TEAM_RESULT_WIN_RANDOM_RIGHT = RuleClick(roi_front=(868,48,402,662), roi_back=(608,110,662,600), name="team_result_win_random_right")
+	# 通用奖励左边随机点 
+	C_REWARD_RANDOM_LEFT = RuleClick(roi_front=(12,24,150,600), roi_back=(608,110,662,600), name="reward_random_left")
+	# 通用奖励右边随机点 
+	C_REWARD_RANDOM_RIGHT = RuleClick(roi_front=(1100,175,170,535), roi_back=(608,110,662,600), name="reward_random_right")
+	# 通用奖励下边随机点 
+	C_REWARD_RANDOM_DOWN = RuleClick(roi_front=(462,500,800,200), roi_back=(608,110,662,600), name="reward_random_down")
+	# 通用奖励上边随机点 
+	C_REWARD_RANDOM_TOP = RuleClick(roi_front=(180,24,650,124), roi_back=(608,110,662,600), name="reward_random_top")
+
+
 	# Image Rule Assets
 	# 火麒麟进入 
 	I_FIRE_KIRIN = RuleImage(roi_front=(127,176,139,252), roi_back=(106,121,217,406), threshold=0.8, method="Template matching", file="./tasks/EvoZone/o/o_fire_kirin.png")
 	# 组队 
 	I_FORM_TEAM = RuleImage(roi_front=(961,602,96,55), roi_back=(937,555,153,154), threshold=0.8, method="Template matching", file="./tasks/EvoZone/o/o_form_team.png")
 	# description 
-	I_EVOZONE_LOCK = RuleImage(roi_front=(703,656,24,32), roi_back=(683,646,63,64), threshold=0.8, method="Template matching", file="./tasks/EvoZone/o/o_evozone_lock.png")
+	I_EVOZONE_LOCK = RuleImage(roi_front=(703,656,24,32), roi_back=(655,646,90,64), threshold=0.8, method="Template matching", file="./tasks/EvoZone/o/o_evozone_lock.png")
 	# description 
-	I_EVOZONE_UNLOCK = RuleImage(roi_front=(704,658,21,27), roi_back=(680,643,67,67), threshold=0.8, method="Template matching", file="./tasks/EvoZone/o/o_evozone_unlock.png")
+	I_EVOZONE_UNLOCK = RuleImage(roi_front=(704,658,21,27), roi_back=(655,643,90,67), threshold=0.8, method="Template matching", file="./tasks/EvoZone/o/o_evozone_unlock.png")
 	# 点击挑战 
 	I_EVOZONE_FIRE = RuleImage(roi_front=(1146,595,93,50), roi_back=(1125,570,131,124), threshold=0.6, method="Template matching", file="./tasks/EvoZone/o/o_evozone_fire.png")
 	# 式神录 

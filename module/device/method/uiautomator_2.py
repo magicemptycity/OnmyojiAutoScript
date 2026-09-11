@@ -1,3 +1,4 @@
+import time
 import typing as t
 import numpy as np
 import cv2
@@ -212,14 +213,34 @@ class Uiautomator2(Connection):
         path = [(int(x), int(y), d) for x, y, d in path]
         self._drag_along(path)
 
-    @retry
     def app_current_uiautomator2(self):
         """
         Returns:
             str: Package name.
+
+        If the focused app cannot be acquired during emulator startup,
+        retry 3 times and then wait 120 seconds before the next round.
+        Repeat for up to 3 rounds before raising.
         """
-        result = self.u2.app_current()
-        return result['package']
+        last_exception = None
+        for round_index in range(3):
+            for attempt in range(3):
+                try:
+                    result = self.u2.app_current()
+                    return result['package']
+                except OSError as e:
+                    last_exception = e
+                    logger.info(
+                        f'App current attempt {attempt + 1}/3 in round {round_index + 1}/3 failed: {e}'
+                    )
+                    if attempt < 2:
+                        time.sleep(1)
+                        continue
+            if round_index < 2:
+                logger.info('App current failed 3 times; waiting 120s before retrying')
+                time.sleep(120)
+
+        raise last_exception or OSError("Couldn't get focused app")
 
     @retry
     def app_start_uiautomator2(self, package_name=None):

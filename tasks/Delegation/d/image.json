@@ -88,5 +88,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "返回"
+  },
+  {
+    "itemName": "d_one_click_selection",
+    "imageName": "d_d_one_click_selection.png",
+    "roiFront": "1096,450,132,39",
+    "roiBack": "1086,439,152,59",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "一键选择式神按钮"
   }
 ]

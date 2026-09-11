@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from module.logger import logger
 from module.exception import TaskEnd
 from module.base.timer import Timer
+from module.base.utils import color_similar, get_color
 
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
 from tasks.DemonEncounter.config import BossType, DemonEncounter, convert_to_general_battle_config
@@ -53,6 +54,112 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
         self.goto_page(page_main)
         self.set_next_run(task='DemonEncounter', success=True, finish=False)
         raise TaskEnd('DemonEncounter')
+
+    def switch_preset_team(self, enable: bool = False, preset_group: int = 1, preset_team: int = 1):
+        """逢魔专用预设队伍切换，不修改公共通用战斗组件。"""
+        if not enable:
+            logger.info("Preset is disable")
+            return
+
+        logger.info("Preset is enable")
+        timeout_warning = "Demon preset switch timeout, use current team"
+
+        wait_preset_timer = Timer(4).start()
+        while True:
+            if wait_preset_timer.reached():
+                logger.warning(timeout_warning)
+                return
+            self.screenshot()
+            if self.appear(self.I_PRESET_ENSURE):
+                break
+            if self.appear(self.I_PRESENT_LESS_THAN_5):
+                break
+            if self.appear_then_click(self.I_PRESET, interval=1):
+                continue
+            if self.appear_then_click(self.I_PRESET_WIT_NUMBER, interval=1):
+                continue
+            if self.appear_then_click(self.O_PRESET, interval=1):
+                continue
+            if self.appear_then_click(self.O_PRESET_FULL, interval=1):
+                continue
+
+        logger.info("Click preset button")
+        group_click = self.__getattribute__("C_PRESET_GROUP_" + str(preset_group))
+        if group_click is None:
+            group_click = self.C_PRESET_GROUP_1
+        group_color_size = [self.C_PRESET_GROUP_1.roi_back[2], self.C_PRESET_GROUP_1.roi_back[3]]
+        unselected_color = (224.9, 208.3, 187.4)
+        logger.info("Select preset group")
+        choose_group_timer = Timer(4).start()
+        while True:
+            if choose_group_timer.reached():
+                logger.warning(timeout_warning)
+                return
+            self.screenshot()
+            color_tmp = get_color(
+                self.device.image,
+                (
+                    group_click.roi_back[0],
+                    group_click.roi_back[1],
+                    group_click.roi_back[0] + group_color_size[0],
+                    group_click.roi_back[1] + group_color_size[1],
+                ),
+            )
+            if color_similar(color_tmp, unselected_color):
+                self.click(group_click, interval=0.2)
+                continue
+            break
+
+        time.sleep(0.5)
+        team_click = self.__getattribute__("C_PRESET_TEAM_" + str(preset_team))
+        if team_click is None:
+            team_click = self.C_PRESET_TEAM_1
+
+        color_size = [5, 5]
+        unselected_color = (216.8, 185.0, 146.8)
+
+        logger.info("Select preset team")
+        choose_team_timer = Timer(4).start()
+
+        while True:
+            if choose_team_timer.reached():
+                logger.warning(timeout_warning)
+                return
+
+            self.screenshot()
+
+            color_tmp = get_color(
+                self.device.image,
+                (
+                    team_click.roi_back[0],
+                    team_click.roi_back[1],
+                    team_click.roi_back[0] + color_size[0],
+                    team_click.roi_back[1] + color_size[1],
+                ),
+            )
+
+            logger.info(f"Team color: {color_tmp}")
+
+            if color_similar(color_tmp, unselected_color):
+                self.click(team_click, interval=0.2)
+                continue
+            
+            break
+
+        self.click(team_click)
+        self.click(team_click)
+        time.sleep(0.5)
+        logger.info("Click preset ensure")
+        wait_ensure_timer = Timer(4).start()
+        while True:
+            if wait_ensure_timer.reached():
+                logger.warning(timeout_warning)
+                return
+            self.screenshot()
+            if not self.appear(self.I_PRESET_ENSURE):
+                break
+            if self.appear_then_click(self.I_PRESET_ENSURE, interval=1):
+                continue
 
     def checkout_soul(self):
         """

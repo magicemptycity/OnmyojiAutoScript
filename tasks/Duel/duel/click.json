@@ -10,5 +10,11 @@
     "roiFront": "105,23,52,47",
     "roiBack": "105,23,52,47",
     "description": "点击第五手上式神位置，获得式神名称"
+  },
+  {
+    "itemName": "d_xiaobai_reward",
+    "roiFront": "7,199,235,507",
+    "roiBack": "988,120,271,575",
+    "description": "小白点击范围"
   }
 ]

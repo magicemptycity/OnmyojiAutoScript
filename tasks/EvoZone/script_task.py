@@ -5,7 +5,13 @@ from time import sleep
 from datetime import time, datetime, timedelta
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
 
-from tasks.Component.GeneralBattle.general_battle import GeneralBattle, ExitMatcher, BattleContext, BattleAction
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleAction,
+    BattleContext,
+    BattleSettlementProfile,
+    ExitMatcher,
+    GeneralBattle,
+)
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
@@ -21,6 +27,40 @@ from module.exception import TaskEnd
 
 
 class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi, EvoZoneAssets, SwitchSoul):
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile:
+        """返回觉醒单人或组队专用的结算/奖励页点击范围。"""
+        reward_areas = (
+            self.C_REWARD_RANDOM_LEFT,
+            self.C_REWARD_RANDOM_TOP,
+            self.C_REWARD_RANDOM_RIGHT,
+            self.C_REWARD_RANDOM_DOWN,
+        )
+        if self.config.evo_zone.evo_zone_config.user_status == UserStatus.ALONE:
+            return BattleSettlementProfile(
+                name="evo_zone_alone",
+                result_win_areas=(
+                    self.C_ALONE_RESULT_WIN_RANDOM_TOP,
+                    self.C_ALONE_RESULT_WIN_RANDOM_BOTTOM,
+                    self.C_ALONE_RESULT_WIN_RANDOM_CENTER,
+                    self.C_ALONE_RESULT_WIN_RANDOM_LEFT,
+                    self.C_ALONE_RESULT_WIN_RANDOM_RIGHT,
+                ),
+                reward_areas=reward_areas,
+                reward_weights=(15, 15, 30, 40),
+            )
+        return BattleSettlementProfile(
+            name="evo_zone_team",
+            result_win_areas=(
+                self.C_TEAM_RESULT_WIN_RANDOM_TOP,
+                self.C_TEAM_RESULT_WIN_RANDOM_BOTTOM,
+                self.C_TEAM_RESULT_WIN_RANDOM_CENTER,
+                self.C_TEAM_RESULT_WIN_RANDOM_LEFT,
+                self.C_TEAM_RESULT_WIN_RANDOM_RIGHT,
+            ),
+            reward_areas=reward_areas,
+            reward_weights=(15, 15, 30, 40),
+        )
 
     def _register_custom_pages(self) -> None:
         reward_page = self.navigator.resolve_page(page_reward)
@@ -129,7 +169,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         logger.info('Create team')
         while 1:
             self.screenshot()
-            if self.appear(self.I_CHECK_TEAM):
+            if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
                 break
             if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                 continue
@@ -168,7 +208,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 if self.run_invite(config=self.config.evo_zone.invite_config):
                     self.run_general_battle(
                         config=self.config.evo_zone.general_battle_config,
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
                 else:
                     # 邀请失败，退出任务
@@ -185,7 +225,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     is_first = False
                     self.run_general_battle(
                         config=self.config.evo_zone.general_battle_config,
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
 
         # 当结束或者是失败退出循环的时候只有两个UI的可能，在房间或者是在组队界面
@@ -218,7 +258,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 if self.wait_battle(wait_time=self.config.evo_zone.invite_config.wait_time):
                     self.run_general_battle(
                         config=self.config.evo_zone.general_battle_config,
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
                 else:
                     break
@@ -226,7 +266,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
             if self.is_in_battle(False):
                 self.run_general_battle(
                     config=self.config.evo_zone.general_battle_config,
-                    exit_matcher=self.I_CHECK_TEAM,
+                    exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                 )
 
         while 1:
@@ -241,6 +281,12 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 pass
         return True
 
+    def _is_in_evozone_ready(self) -> bool:
+        """确认当前是觉醒副本挑战页，而非仅误识别到“挑战”按钮局部图像。"""
+        return self.appear(self.I_EVOZONE_FIRE) and (
+            self.appear(self.I_EVOZONE_LOCK) or self.appear(self.I_EVOZONE_UNLOCK)
+        )
+
     def run_alone(self):
         logger.info('Start run alone')
         self.goto_page(page_awake_zones)
@@ -252,7 +298,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         def is_in_evozone(screenshot=False) -> bool:
             if screenshot:
                 self.screenshot()
-            return self.appear(self.I_EVOZONE_FIRE)
+            return self._is_in_evozone_ready()
 
         while 1:
             self.screenshot()
@@ -270,10 +316,12 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 if self.appear_then_click(self.I_EVOZONE_FIRE, interval=1):
                     pass
 
-                if not self.appear(self.I_EVOZONE_FIRE):
+                if not self._is_in_evozone_ready():
                     self.run_general_battle(
                         config=self.config.evo_zone.general_battle_config,
-                        exit_matcher=self.I_EVOZONE_FIRE,
+                        # 结算后必须同时回到挑战按钮和锁定状态区域，才算真正回到副本页。
+                        # 仅命中挑战按钮局部图像时（如奖励页误识别）不得提前退出。
+                        exit_matcher=lambda task: task._is_in_evozone_ready(),
                     )
                     break
 

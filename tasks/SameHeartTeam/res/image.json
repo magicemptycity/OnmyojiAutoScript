@@ -1,0 +1,83 @@
+[
+  {
+    "itemName": "i_same_heart_team_gather",
+    "imageName": "res_i_same_heart_team_gather.png",
+    "roiFront": "1095,621,85,60",
+    "roiBack": "1052,544,228,176",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "同心队页面的--集结图标"
+  },
+  {
+    "itemName": "i_gather_unselected",
+    "imageName": "res_i_gather_unselected.png",
+    "roiFront": "463,255,16,16",
+    "roiBack": "418,242,462,41",
+    "method": "Template matching",
+    "threshold": 0.5,
+    "description": "未选中状态"
+  },
+  {
+    "itemName": "i_gather_selected",
+    "imageName": "res_i_gather_selected.png",
+    "roiFront": "558,255,16,16",
+    "roiBack": "418,242,462,41",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "被选中状态"
+  },
+  {
+    "itemName": "i_same_heart_team_up",
+    "imageName": "res_i_same_heart_team_up.png",
+    "roiFront": "969,637,56,54",
+    "roiBack": "897,567,383,153",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "同心队的组队按钮"
+  },
+  {
+    "itemName": "i_same_heart_team_close",
+    "imageName": "res_i_same_heart_team_close.png",
+    "roiFront": "742,34,42,40",
+    "roiBack": "636,0,309,99",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "解散同心队图标"
+  },
+  {
+    "itemName": "i_same_heart_team_enter",
+    "imageName": "res_i_same_heart_team_enter.png",
+    "roiFront": "32,585,82,65",
+    "roiBack": "0,494,412,226",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "同心队入口标志"
+  },
+  {
+    "itemName": "i_same_heart_team_gather_choose3",
+    "imageName": "res_i_same_heart_team_gather_choose3.png",
+    "roiFront": "410,480,464,48",
+    "roiBack": "393,471,495,72",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "觉醒副本，集结！"
+  },
+  {
+    "itemName": "i_same_heart_team_gather_choose2",
+    "imageName": "res_i_same_heart_team_gather_choose2.png",
+    "roiFront": "413,399,464,48",
+    "roiBack": "393,384,496,77",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "探索副本，集结！"
+  },
+  {
+    "itemName": "i_same_heart_team_gather_choose1",
+    "imageName": "res_i_same_heart_team_gather_choose1.png",
+    "roiFront": "414,318,464,48",
+    "roiBack": "393,303,502,75",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "御魂副本，集结！"
+  }
+]

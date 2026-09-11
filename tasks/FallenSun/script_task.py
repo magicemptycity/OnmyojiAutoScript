@@ -118,7 +118,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         logger.info('Create team')
         while 1:
             self.screenshot()
-            if self.appear(self.I_CHECK_TEAM):
+            if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
                 break
             if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                 continue
@@ -171,7 +171,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     self.run_general_battle(
                         config=self.config.fallen_sun.general_battle_config,
                         battle_key=self._fallen_sun_battle_key(),
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
                 else:
                     # 邀请失败，退出任务
@@ -190,7 +190,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     self.run_general_battle(
                         config=self.config.fallen_sun.general_battle_config,
                         battle_key=self._fallen_sun_battle_key(),
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
 
         # 当结束或者是失败退出循环的时候只有两个UI的可能，在房间或者是在组队界面
@@ -238,7 +238,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     self.run_general_battle(
                         config=self.config.fallen_sun.general_battle_config,
                         battle_key=self._fallen_sun_battle_key(),
-                        exit_matcher=self.I_CHECK_TEAM,
+                        exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
                 else:
                     break
@@ -247,7 +247,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 self.run_general_battle(
                     config=self.config.fallen_sun.general_battle_config,
                     battle_key=self._fallen_sun_battle_key(),
-                    exit_matcher=self.I_CHECK_TEAM,
+                    exit_matcher=any_of(self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                 )
 
         while 1:

@@ -6,6 +6,7 @@ config/*.ini
 config/*.yaml
 !config/deploy.*.yaml
 config/*.json
+config/weekly_schedule/*.json
 config/tmp*
 !config/template*.json
 config/*.crt
@@ -22,6 +23,7 @@ test.py
 test/
 
 # OnmyojiAutoScript
+/tests/
 *.user
 !module/gui/FluentUI/fluentuiplugin.dll
 build-fluentui-Desktop_*/

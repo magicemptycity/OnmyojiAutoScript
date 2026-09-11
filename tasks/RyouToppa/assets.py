@@ -29,6 +29,20 @@ class RyouToppaAssets:
 	C_AREA_8 = RuleClick(roi_front=(876,562,150,67), roi_back=(876,562,150,67), name="area_8")
 	# 在点击进攻后如果未进入战斗画面则点击的安全区域 
 	C_SAFE_AREA = RuleClick(roi_front=(182,213,160,229), roi_back=(182,213,160,229), name="safe_area")
+	# 中间随机点击
+	C_RESULT_WIN_RANDOM_CENTER = RuleClick(roi_front=(30,108,1205,515), roi_back=(30,108,1205,515), name="result_win_random_center")
+	# 右下随机点击
+	C_RESULT_WIN_RANDOM_RIGHT = RuleClick(roi_front=(686,272,580,433), roi_back=(686,272,580,433), name="result_win_random_right")
+	# 左边随机点
+	C_REWARD_RANDOM_LEFT = RuleClick(roi_front=(40,45,185,584), roi_back=(40,45,185,584), name="reward_random_left")
+	# 右边随机点
+	C_REWARD_RANDOM_RIGHT = RuleClick(roi_front=(1060,108,197,592), roi_back=(1060,108,197,592), name="reward_random_right")
+	# 下面随机点
+	C_REWARD_RANDOM_DOWN = RuleClick(roi_front=(36,304,1226,321), roi_back=(36,304,1226,321), name="reward_random_down")
+	# 下面随机点2
+	C_REWARD_RANDOM_BOTTOM = RuleClick(roi_front=(600,600,660,100), roi_back=(600,600,660,100), name="reward_random_bottom")
+	# 上面随机点
+	C_REWARD_RANDOM_TOP = RuleClick(roi_front=(29,111,1215,51), roi_back=(29,111,1215,51), name="reward_random_top")
 
 
 	# Image Rule Assets

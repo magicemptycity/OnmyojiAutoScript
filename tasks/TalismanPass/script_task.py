@@ -2,9 +2,14 @@
 # @author runhey
 # github https://github.com/runhey
 import time
+from datetime import datetime
+from pathlib import Path
+
+from module.base.utils import save_image
 
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_daily
+from tasks.TalismanPass.page import page_accomplishment, page_nawu
 from tasks.TalismanPass.assets import TalismanPassAssets
 from tasks.TalismanPass.config import TalismanConfig, LevelReward
 
@@ -29,9 +34,49 @@ class ScriptTask(GameUi, TalismanPassAssets):
         if con.harvest_soul:
             self.goto_page(page_main)
             self.harvest_soul()
+        # 收取成就奖励
+        if con.get_accomplishments:
+            self.get_accomplishment_reward()
+        # 收取纳物库截图
+        if con.get_nawu:
+            self.get_nawu_reward()
         self.goto_page(page_main)
         self.set_next_run(task='TalismanPass', success=True, finish=True)
         raise TaskEnd('TalismanPass')
+
+
+    def get_accomplishment_reward(self):
+        """领取花合战成就奖励。"""
+        self.goto_page(page_accomplishment)
+        timer = Timer(3).start()
+        while 1:
+            self.screenshot()
+            if timer.reached():
+                logger.info('成就奖励处理完成')
+                return
+            if self.appear(self.I_ACCOMPLISHMENTS_3, interval=1):
+                logger.info('没有可领取的成就奖励')
+                return
+            if self.ui_reward_appear_click():
+                self.device.click_record_clear()
+                timer.reset()
+                continue
+            if self.click(self.C_ACCOMPLISHMENTS_3_CLICK, interval=1):
+                timer.reset()
+
+    def get_nawu_reward(self):
+        """获取纳物库截图并发送通知。"""
+        self.goto_page(page_nawu)
+        self.screenshot()
+        image_dir = Path('./log/talisman_pass')
+        image_dir.mkdir(parents=True, exist_ok=True)
+        image_path = image_dir / f"nawu_{datetime.now():%Y%m%d_%H%M%S}.png"
+        save_image(self.device.image, str(image_path))
+        self.config.notifier.push_image(
+            image_path=image_path,
+            title='获取纳物库截图',
+            content='已获取纳物库截图，请查收附件。',
+        )
 
     def get_all(self):
         """

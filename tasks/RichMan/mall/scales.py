@@ -28,15 +28,28 @@ class Scales(Buy, MallNavbar):
         # 海国御魂
         self._scales_sea(con.picture_book_scrap, con.picture_book_rule)
 
-    def _scales_buy_confirm(self, start_click, number: int = None):
+    def _scales_buy_confirm(self, start_click, number: int = None) -> bool:
+        """打开购买确认界面，无法打开时视为已购买。"""
+        click_attempt = 0
         while 1:
             self.screenshot()
             if self.appear(self.I_BUY_PLUS):
                 break
             if self.appear(self.I_SCA_SELECT_1) and self.appear(self.I_SCA_SELECT_2):
-                return
+                return False
+
             if self.appear_then_click(start_click, interval=1):
+                click_attempt += 1
+                # 点击后等待购买数量框显示。
+                time.sleep(1)
+                self.screenshot()
+                if self.appear(self.I_BUY_PLUS):
+                    break
+                if click_attempt >= 3:
+                    logger.info('购买入口点击 3 次后未出现购买数量框，视为已购买')
+                    return False
                 continue
+
         # 设置购买的数量
         if number is None:
             self.appear_then_click(self.I_BUY_PLUS, interval=0.4)
@@ -58,10 +71,12 @@ class Scales(Buy, MallNavbar):
 
                 if self.appear_then_click(self.I_BUY_ADD, interval=0.6):
                     continue
+        return True
 
-    def _scales_buy_more(self, start_click, number: int = None):
+    def _scales_buy_more(self, start_click, number: int = None) -> bool:
         # 重写
-        self._scales_buy_confirm(start_click, number)
+        if not self._scales_buy_confirm(start_click, number):
+            return False
 
         # 购买确认
         while 1:
@@ -77,13 +92,14 @@ class Scales(Buy, MallNavbar):
                         continue
                 # 收获购买的东西
                 logger.info('Scales get success')
-                break
+                return True
 
             if self.click(self.C_BUY_MORE, interval=5):
                 continue
 
-    def _scales_buy_sea_more(self, start_click, number: int = None):
-        self._scales_buy_confirm(start_click, number)
+    def _scales_buy_sea_more(self, start_click, number: int = None) -> bool:
+        if not self._scales_buy_confirm(start_click, number):
+            return False
         while 1:
             self.screenshot()
             if self.appear(self.I_SCA_SELECT_1):
@@ -105,7 +121,7 @@ class Scales(Buy, MallNavbar):
                         continue
                 # 收获购买的东西
                 logger.info('Scales get success')
-                break
+                return True
 
             if self.appear_then_click(self.I_SCA_SELECT_1, interval=1.6):
                 continue
@@ -141,7 +157,8 @@ class Scales(Buy, MallNavbar):
                 logger.warning(f'紫色蛇皮不足,数量:{cu}')
                 return
             # 购买
-            self._scales_buy_more(self.I_SCA_OROCHI_SCALES)
+            if not self._scales_buy_more(self.I_SCA_OROCHI_SCALES):
+                return
             time.sleep(0.5)
 
     def _scales_orochi(self, buy_number: int):
@@ -181,9 +198,11 @@ class Scales(Buy, MallNavbar):
                 return
         # 购买
         if not money_enough:
-            self._scales_buy_more(self.I_SCA_OROCHI_SCALES)
+            if not self._scales_buy_more(self.I_SCA_OROCHI_SCALES):
+                return
         else:
-            self._scales_buy_more(self.I_SCA_OROCHI_SCALES, buy_number)
+            if not self._scales_buy_more(self.I_SCA_OROCHI_SCALES, buy_number):
+                return
         time.sleep(0.5)
 
     def _scales_demon(self, buy_number: int, buy_class: DemonClass=DemonClass.ODOKURO, buy_position: int=1):
@@ -274,10 +293,12 @@ class Scales(Buy, MallNavbar):
             buy_res_number = buy_number
         if buy_cycles_number:
             for i in range(buy_cycles_number):
-                self._scales_buy_more(self.I_SCA_DEMON_BUY)
+                if not self._scales_buy_more(self.I_SCA_DEMON_BUY):
+                    break
                 time.sleep(0.5)
         if buy_res_number:
-            self._scales_buy_more(self.I_SCA_DEMON_BUY, buy_res_number)
+            if not self._scales_buy_more(self.I_SCA_DEMON_BUY, buy_res_number):
+                return
             time.sleep(0.5)
 
         # 回到御魂礼盒界面

@@ -21,6 +21,8 @@ class DuelConfig(ConfigBase):
     switch_all_soul: bool = Field(default=False, description='switch_all_soul_help')
     # 限制时间
     limit_time: Time = Field(default=Time(minute=30), description='limit_time_help')
+    # 检查更高优先级任务
+    check_higher_priority_task: bool = Field(default=False, description='check_higher_priority_task_help')
     # 目标分数
     target_score: int = Field(default=2000, description='target_score_help')
     # 刷满荣誉就退出

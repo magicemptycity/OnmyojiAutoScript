@@ -17,6 +17,14 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
         self.character = self.config.restart.login_character_config.character
         self.O_LOGIN_SPECIFIC_SERVE.keyword = self.character
 
+    def _click_enter_game(self) -> bool:
+        """兼容横排旧登录页与竖排新登录页的进入按钮。"""
+        for rule in (self.O_LOGIN_ENTER_GAME, self.O_LOGIN_ENTER_GAME_VERTICAL):
+            if self.ocr_appear_click(rule, interval=3):
+                logger.info(f'Enter game button matched: {rule.name}')
+                return True
+        return False
+
     def _app_handle_login(self) -> bool:
         """
         最终是在庭院界面
@@ -31,7 +39,15 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
         skip_click_mx_cnt = 5
         login_success = False
 
+        # 总超时：5分钟
+        total_timeout = Timer(300).start()
+
         while 1:
+            # 检查总超时
+            if total_timeout.reached():
+                logger.critical('Login total timeout (5 min) reached, giving up')
+                raise GameStuckError('Login timeout')
+
             if not login_success and orientation_timer.reached():
                 self.device.get_orientation()
                 orientation_timer.reset()
@@ -39,6 +55,9 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
             self.screenshot()
             if self.appear_then_click(self.I_CANCEL_BATTLE, interval=0.8):
                 logger.info('Cancel continue battle')
+                continue
+            if self.appear_then_click(self.I_RETURN_CHESS_CANCEL, interval=0.8):
+                logger.info('Cancel return to chess battle')
                 continue
             if self.appear(self.I_CHECK_MAIN, interval=0.2) and not self.appear(self.I_MAIN_GOTO_SHIKIGAMI_RECORDS):
                 logger.info('The main had already appeared, but shikigami records had not yet appeared')
@@ -69,6 +88,9 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
                 continue
             if self.appear_then_click(self.I_WATCH_VIDEO_CANCEL, interval=0.6):
                 logger.info('Close video')
+                continue
+            if self.appear_then_click(self.I_CHOOSE, interval=0.6):
+                logger.info('Choose option')
                 continue
             if self.appear_then_click(self.I_LOGIN_RED_CLOSE, interval=0.6):
                 logger.info('Close red close')
@@ -121,7 +143,7 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
                 if self.click(self.C_LOGIN_ANIMATION_CENTER, interval=5):  # 点击屏幕中央触发跳过显示
                     skip_click_mx_cnt -= 1
 
-            if self.ocr_appear_click(self.O_LOGIN_ENTER_GAME, interval=3):
+            if self._click_enter_game():
                 skip_login_animation = False  # 进入登录页面后不再处理登录动画逻辑
                 self.wait_until_appear(self.I_LOGIN_SPECIFIC_SERVE, True, wait_time=5)
                 continue
@@ -129,16 +151,35 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
         return login_success
 
     def app_handle_login(self) -> bool:
+        """
+        处理登录流程，最多重试3次
+        """
         self.device.stuck_record_clear()
         self.device.click_record_clear()
-        try:
-            self._app_handle_login()
-            return True
-        except (GameTooManyClickError, GameStuckError) as e:
-            logger.warning(e)
-            self.device.app_stop()
-            self.device.app_start()
 
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            logger.info(f'Login attempt {attempt}/{max_retries}')
+            try:
+                result = self._app_handle_login()
+                if result:
+                    logger.info('Login successful')
+                    return True
+            except (GameStuckError, GameTooManyClickError) as e:
+                logger.warning(f'Login attempt {attempt} failed: {e}')
+                if attempt < max_retries:
+                    logger.info('Restarting game for next attempt...')
+                    self.device.app_stop()
+                    self.device.app_start()
+                else:
+                    logger.critical('All login attempts exhausted')
+                    raise RequestHumanTakeover('Login failed after 3 retries')
+            except Exception as e:
+                # 其他未预期的异常，直接抛出
+                logger.critical(f'Unexpected exception during login: {e}')
+                raise
+
+        # 理论上不会走到这里，但为了安全
         logger.critical('Login failed')
         logger.critical('Onmyoji server may be under maintenance, or you may lost network connection')
         raise RequestHumanTakeover

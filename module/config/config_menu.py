@@ -21,7 +21,7 @@ class ConfigMenu:
         # 刷御魂
         self.menu["Soul Zones"] = ['Orochi', 'Sougenbi', 'FallenSun', 'EternitySea', 'SixRealms', 'OtherWorldTwilight']
         # 日常的任务
-        self.menu["Daily Task"] = ['DailyTrifles', 'AreaBoss', 'GoldYoukai', 'ExperienceYoukai', 'Nian',
+        self.menu["Daily Task"] = ['DailyTrifles', 'DailyTriflesSpecial', 'SameHeartTeam', 'SameHeartTeamOrochi', 'SameHeartTeamAwaken', 'AreaBoss', 'GoldYoukai', 'ExperienceYoukai', 'Nian',
                                    'TalismanPass', 'DemonEncounter', 'Pets', 'SoulsTidy', 'Delegation', 'WantedQuests',
                                    'Tako', 'AutoCheckinBigGod']
         # 很肝的任务
@@ -33,15 +33,36 @@ class ConfigMenu:
             "Hyakkiyakou",
             "HeroTest",
             "FindJade",
-            "MemoryScrolls"
+            "MemoryScrolls",
         ]
         # 阴阳寮
         self.menu["Guild"] = ['KekkaiUtilize', 'KekkaiActivation', 'RealmRaid', 'RyouToppa', 'Dokan', 'CollectiveMissions',
-                              'Hunt' , 'AbyssShadows', 'GuildBanquet', 'DemonRetreat', 'GuildActivityMonitor']
+                              'Hunt', 'AbyssShadows', 'GuildBanquet', 'DemonRetreat', 'GuildActivityMonitor']
+        # 多账号专属
+        self.menu["多账号专属"] = [
+            'MultiAccountAccounts',
+            'MultiAccountKekkaiUtilize',
+            'MultiAccountKekkaiUtilizeNew',
+            'MultiAccountKekkaiActivation',
+            'MultiAccountDelegation',
+            'MultiAccountAreaBoss',
+            'MultiAccountHunt',
+            'MultiAccountRepeat',
+            'MultiAccountTaskOrchestration',
+            'MultiAccountRepeatNewNormal',
+            'MultiAccountRepeatNewFixed',
+            'MultiAccountRepeatTimed',
+            'MultiAccountRepeatMorning',
+            'MultiAccountRepeatAfternoon',
+            'MultiAccountRepeatMidnight',
+            'MultiAccountRepeatDay',
+            'MultiAccountRepeatWeek',
+            'MultiAccountRepeatMonth',
+        ]
         # 每周任务
-        self.menu["Weekly Task"] = ['TrueOrochi', 'RichMan', 'Secret', 'WeeklyTrifles', 'MysteryShop', 'Duel']
+        self.menu["Weekly Task"] = ['TrueOrochi', 'RichMan', 'Secret', 'WeeklyTrifles', 'MysteryShop', 'Duel', 'Chess']
         # 活动的任务
-        self.menu["Activity Task"] = ['ActivityShikigami', 'MartialTournament', 'MetaDemon', 'FrogBoss', 'FloatParade', 'Quiz', 'KittyShop', 'DyeTrials', 'GuguArtStudio']
+        self.menu["Activity Task"] = ['ActivityShikigami', 'MetaDemon', 'FrogBoss', 'FloatParade', 'Quiz', 'KittyShop', 'DyeTrials', 'GuguArtStudio']
         # 开发工具
         self.menu["Tools"] = ['Image Rule', 'Ocr Rule', 'Click Rule', 'Long Click Rule', 'Swipe Rule', 'List Rule']
 

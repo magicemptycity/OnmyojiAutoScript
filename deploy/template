@@ -80,6 +80,12 @@ Deploy:
     # OCR server worker count, 0 means auto detect
     # [Default] 0
     OcrServerWorkerCount: 0
+    # OCR backend: ppocr_onnx (default) or onnxocr (optional)
+    OcrBackend: ppocr_onnx
+    # Only used by onnxocr. It falls back to CPU when CUDA is unavailable.
+    OcrUseGpu: false
+    OcrGpuId: 0
+    OcrCpuThreads: 10
 
   Image:
     # Run image recognition as a service. This service is mandatory and all image rules use it.

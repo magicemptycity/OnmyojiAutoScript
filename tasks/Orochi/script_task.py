@@ -6,7 +6,13 @@ from time import sleep
 from datetime import time, datetime, timedelta
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
 
-from tasks.Component.GeneralBattle.general_battle import BattleAction, GeneralBattle, ExitMatcher, BattleContext
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleAction,
+    BattleContext,
+    BattleSettlementProfile,
+    ExitMatcher,
+    GeneralBattle,
+)
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
@@ -26,17 +32,58 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
     def _orochi_battle_key(self) -> str:
         return f"orochi_{self.config.orochi.orochi_config.layer}"
 
+    def _settlement_click_profile(self) -> BattleSettlementProfile:
+        """返回八岐大蛇单人或组队专用的结算/奖励页点击范围。"""
+        reward_areas = (
+            self.C_REWARD_RANDOM_LEFT,
+            self.C_REWARD_RANDOM_TOP,
+            self.C_REWARD_RANDOM_RIGHT,
+            self.C_REWARD_RANDOM_DOWN,
+        )
+        if self.config.orochi.orochi_config.user_status == UserStatus.ALONE:
+            return BattleSettlementProfile(
+                name="orochi_alone",
+                result_win_areas=(
+                    self.C_ALONE_RESULT_WIN_RANDOM_TOP,
+                    self.C_ALONE_RESULT_WIN_RANDOM_BOTTOM,
+                    self.C_ALONE_RESULT_WIN_RANDOM_CENTER,
+                    self.C_ALONE_RESULT_WIN_RANDOM_LEFT,
+                    self.C_ALONE_RESULT_WIN_RANDOM_RIGHT,
+                ),
+                reward_areas=reward_areas,
+                reward_weights=(15, 15, 30, 40),
+            )
+        return BattleSettlementProfile(
+            name="orochi_team",
+            result_win_areas=(
+                self.C_TEAM_RESULT_WIN_RANDOM_TOP,
+                self.C_TEAM_RESULT_WIN_RANDOM_BOTTOM,
+                self.C_TEAM_RESULT_WIN_RANDOM_CENTER,
+                self.C_TEAM_RESULT_WIN_RANDOM_LEFT,
+                self.C_TEAM_RESULT_WIN_RANDOM_RIGHT,
+            ),
+            reward_areas=reward_areas,
+            reward_weights=(15, 15, 30, 40),
+        )
+
     def _register_custom_pages(self) -> None:
         reward_page = self.navigator.resolve_page(page_reward)
         if reward_page is None:
             return
-        reward_page.recognizer = any_of(self.I_GI_SURE, self.I_GREED_GHOST, self.I_PET_PRESENT,
-                                        reward_page.recognizer)
+        reward_page.recognizer = any_of(
+            self.I_GI_SURE,
+            self.I_GREED_GHOST,
+            self.I_PET_PRESENT,
+            self.I_UI_BACK_RED,
+            reward_page.recognizer,
+        )
 
     def _exit_matcher(self) -> ExitMatcher | None:
         return any_of(self.I_GI_EMOJI_1, self.I_GI_EMOJI_2, self.I_CHECK_EXPLORATION)
 
     def _handle_reward(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
+        if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
+            return BattleAction.CONTINUE
         # 无论胜利与否, 都会出现是否邀请一次队友, 区别在于, 失败的话不会出现那个勾选默认邀请的框
         if self.config.orochi.orochi_config.user_status == UserStatus.LEADER and \
             self.check_and_invite(self.config.orochi.invite_config.default_invite):
@@ -126,7 +173,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         logger.info('Create team')
         while 1:
             self.screenshot()
-            if self.appear(self.I_CHECK_TEAM):
+            if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
                 break
             if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                 continue
@@ -290,7 +337,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
             logger.info('Create team')
             while 1:
                 self.screenshot()
-                if self.appear(self.I_CHECK_TEAM):
+                if self.appear(self.I_CHECK_TEAM) or self.appear(self.I_CHECK_TEAM_NEW):
                     break
                 if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                     continue
@@ -346,7 +393,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     self.run_general_battle(
                         config=self.config.orochi.general_battle_config,
                         battle_key=self._orochi_battle_key(),
-                        exit_matcher=any_of(self.I_OROCHI_WILD_FIRE, self.I_CHECK_TEAM),
+                        exit_matcher=any_of(self.I_OROCHI_WILD_FIRE, self.I_CHECK_TEAM, self.I_CHECK_TEAM_NEW),
                     )
                     break
 

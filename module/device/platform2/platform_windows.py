@@ -565,7 +565,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         kill_regex = handler.stop_by_kill(instance)
         if kill_regex:
             self.kill_process_by_regex(kill_regex)
-            return True
+            return
 
         cmd = handler.build_stop_command(instance)
         if cmd is None:
@@ -587,8 +587,8 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             logger.error(f'Emulator function {func.__name__}() failed because no target instance was found')
             return False
         try:
-            result = func(instance)
-            return result is not False
+            func(instance)
+            return True
         except OSError as e:
             msg = str(e)
             # OSError: [WinError 740] 请求的操作需要提升。

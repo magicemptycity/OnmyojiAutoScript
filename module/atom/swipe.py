@@ -8,7 +8,7 @@ from math import dist
 
 from module.base.decorator import cached_property
 from module.atom.cBezier import BezierTrajectory
-from module.base.utils.utils import random_normal_distribution_int
+from module.base.utils import random_normal_distribution_int
 from module.logger import logger
 
 
@@ -110,7 +110,5 @@ class RuleSwipe:
 
         else:
             raise ValueError(f'Invalid mode: {self.mode}')
-
-
 
 

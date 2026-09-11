@@ -16,121 +16,189 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
 
     def get_svr_name(self):
         self.screenshot()
-        ocrRes = self.O_SA_LOGIN_FORM_SVR_NAME.ocr(self.device.image)
-        return ocrRes
-
-    def switch_svr(self, svrName: str):
-        """
-            需保证账号已登录 且处于登录界面
-        @param svrName:
-        @type svrName:
-        """
-        self.O_SA_LOGIN_FORM_SVR_NAME.keyword = svrName
         if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME):
-            return True
-        self.ui_click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN, self.I_SA_CHECK_SELECT_SVR_1, 1.5)
-        # 展开底部角色列表,显示角色所属服务器
-        self.screenshot()
-        if self.appear(self.I_SA_CHECK_SELECT_SVR_1) and (not self.appear(self.I_SA_CHECK_SELECT_SVR_2)):
-            self.click(self.O_SA_SELECT_SVR_CHARACTER_LIST)
+            ocrRes = self.O_SA_LOGIN_FORM_SVR_NAME.ocr(self.device.image)
+            return ocrRes
+        if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME_OLED):
+            ocrRes = self.O_SA_LOGIN_FORM_SVR_NAME_OLED.ocr(self.device.image)
+            return ocrRes
+        return None
 
-        self.O_SA_SELECT_SVR_SVR_LIST.keyword = svrName
-        found = False
-        lastSvrList: tuple = ()
-        while 1:
-            self.screenshot()
-            self.device.image = threshold_bgr_to_inverted_rgb(self.device.image, threshold=100)
-
-            ocrRes = self.O_SA_SELECT_SVR_SVR_LIST.detect_and_ocr(self.device.image)
-            # 受限于图像识别文字准确率,此处对识别结果与实际服务器名字 进行检查 字重合度大于阈值 就认为查找成功
-            thresh = 0.5
-            ocrSvrList = [res.ocr_text for res in ocrRes]
-            for index, ocrSvrName in enumerate(ocrSvrList):
-                if len(ocrSvrName) < 3:
-                    break
-                tmp = set(svrName).intersection(set(ocrSvrName))
-                if len(tmp) > max(len(svrName), len(ocrSvrName)) * thresh:
-                    logger.info("found svr %s which is similar with %s", ocrSvrName, svrName)
-                    found = True
-                    # 确定点击位置
-                    box = ocrRes[index].box
-                    self.O_SA_SELECT_SVR_SVR_LIST.area = [self.O_SA_SELECT_SVR_SVR_LIST.roi[0] + box[0][0],
-                                                          self.O_SA_SELECT_SVR_SVR_LIST.roi[1] + box[0][1],
-                                                          box[1][0] - box[0][0],
-                                                          box[2][1] - box[1][1]]
-                    # 跳出此层for循环
-                    break
-            # 两次OCR结果相等表示滑动到最右侧
-            if found or lastSvrList == ocrSvrList:
-                break
-            lastSvrList = ocrSvrList
-            self.swipe(self.S_SA_SVR_SWIPE_LEFT)
-            time.sleep(3.5)
-        if found:
-            self.click(self.O_SA_SELECT_SVR_SVR_LIST, interval=1.5)
-            return True
-        # 没找到 点击空白区域关闭选择服务器界面
-        self.click(self.C_SA_LOGIN_FORM_CANCEL_SVR_SELECT)
-        return False
-
-    def switch_character(self, characterName: str):
+    def select_target(self, characterName: str, svrName: str = None) -> bool:
         """
-              需保证账号已登录 且处于登录界面
-        @param characterName:
-        @return:
-        @rtype:
-        """
-        logger.info("start switch_character")
-        # 改成对比是否出现 已有角色 
-        self.ui_click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN, self.O_SA_CHECK_SELECT_SVR)
-        # 展开底部角色列表,显示角色所属服务器
-        self.screenshot()
-        while (not self.appear(self.I_SA_CHECK_SELECT_SVR_2)) and self.appear(self.I_SA_CHECK_SELECT_SVR_1):
-            logger.info("open svr icon")
-            self.click(self.C_SA_SELECT_SVR_CHARACTER_LIST, interval=1.5)
-            self.wait_until_appear(self.I_SA_CHECK_SELECT_SVR_2, False, 1)
-            # self.ui_click(self.C_SA_SELECT_SVR_CHARACTER_LIST, self.I_SA_CHECK_SELECT_SVR_2, 1.5)
-            self.screenshot()
+        统一的选择目标方法：优先匹配服务器名（若提供），其次匹配角色名。
+        服务器名匹配策略：完全匹配 → 删首匹配 → 删尾匹配 → 字符集交集模糊匹配(阈值0.5)
+        角色名匹配策略：完全匹配 → 删首匹配 → 删尾匹配
+        服务器名匹配时点击下方30px，角色名匹配时点击上方30px。
 
-        self.O_SA_SELECT_SVR_CHARACTER_LIST.keyword = characterName
-        lastCharacterNameList = []
+        注意：如果提供了服务器名，会先检查当前登录界面的服务器是否已是目标服务器。
+            若是则直接返回 True（不进行任何点击），这意味着调用者应认为角色已选中。
+            请确保在 login() 中调用时，此行为符合预期（例如，如果服务器已正确，
+            但角色尚未选中，则直接返回 True 可能导致角色未被实际点击选中）。
+
+        @param characterName: 目标角色名
+        @param svrName: 目标服务器名（可选）
+        @return: True 表示选中成功，False 表示失败
+        """
+        logger.info("start select_target: character=%s, svr=%s", characterName, svrName)
+
+        # ---------- 保留原 switch_svr 的当前服务器检查 ----------
+        if svrName:
+            self.O_SA_LOGIN_FORM_SVR_NAME.keyword = svrName
+            self.O_SA_LOGIN_FORM_SVR_NAME_OLED.keyword = svrName
+            self.screenshot()
+            if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME):
+                logger.info("current svr is %s, no need to switch", svrName)
+                return True
+            if self.ocr_appear(self.O_SA_LOGIN_FORM_SVR_NAME_OLED):
+                logger.info("current svr is %s, no need to switch", svrName)
+                return True
+        # ------------------------------------------------------
+        self.O_SA_LOGIN_FORM_SVR_NAME.keyword = ""
+        logger.info("Reset SVR name keyword: %s", self.O_SA_LOGIN_FORM_SVR_NAME.keyword)
+        self.O_SA_LOGIN_FORM_SVR_NAME_OLED.keyword = ""
+        logger.info("Reset SVR name keyword (OLED): %s", self.O_SA_LOGIN_FORM_SVR_NAME_OLED.keyword)
+
+
+        # 点击“切换服务器”按钮，进入选择区域界面
+        self.screenshot()
+        svr_text = self.O_SA_LOGIN_FORM_SVR_NAME.ocr(self.device.image)
+        if svr_text:
+            self.ui_click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN, self.I_SA_CHECK_SELECT_SVR_4, interval=3)
+        else:
+            self.ui_click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN_OLED, self.I_SA_CHECK_SELECT_SVR_4, interval=3)        
+
+        # ---------- 辅助匹配函数 ----------
+        def exact_match(target, candidates):
+            """完全匹配"""
+            for idx, cand in enumerate(candidates):
+                if cand == target:
+                    return idx
+            return None
+
+        def fuzzy_match(target, candidates, threshold=0.5):
+            """字符集交集相似度匹配（原switch_svr逻辑）"""
+            for idx, cand in enumerate(candidates):
+                if len(cand) < 3:
+                    continue
+                intersection = set(target).intersection(set(cand))
+                similarity = len(intersection) / max(len(target), len(cand))
+                if similarity > threshold:
+                    return idx
+            return None
+
+        def trim_first_match(target, candidates):
+            """删首字符匹配"""
+            if len(target) <= 1:
+                return None
+            target_trim = target[1:]
+            for idx, cand in enumerate(candidates):
+                if len(cand) > 1 and cand[1:] == target_trim:
+                    return idx
+            return None
+
+        def trim_last_match(target, candidates):
+            """删尾字符匹配"""
+            if len(target) <= 1:
+                return None
+            target_trim = target[:-1]
+            for idx, cand in enumerate(candidates):
+                if len(cand) > 1 and cand[:-1] == target_trim:
+                    return idx
+            return None
+
+        def match_server_name(target, candidates):
+            """服务器名匹配：完全匹配 → 删首 → 删尾 → 模糊匹配"""
+            # 1. 完全匹配
+            idx = exact_match(target, candidates)
+            if idx is not None:
+                return idx
+            # 2. 删首匹配
+            idx = trim_first_match(target, candidates)
+            if idx is not None:
+                return idx
+            # 3. 删尾匹配
+            idx = trim_last_match(target, candidates)
+            if idx is not None:
+                return idx
+            # 4. 字符集交集模糊匹配（阈值0.5）
+            idx = fuzzy_match(target, candidates, threshold=0.5)
+            return idx
+        
+        def match_character_name(target, candidates):
+            """角色名匹配：完全匹配 → 删首 → 删尾（无模糊匹配）"""
+            idx = exact_match(target, candidates)
+            if idx is not None:
+                return idx
+            idx = trim_first_match(target, candidates)
+            if idx is not None:
+                return idx
+            idx = trim_last_match(target, candidates)
+            return idx
+        # ---------------------------------
+
+        lastList = []
         while 1:
             self.screenshot()
             ocrRes = self.O_SA_SELECT_SVR_CHARACTER_LIST.detect_and_ocr(self.device.image)
-            # 去除角色等级数字
-            characterNameList = [ocrResItem.ocr_text.lstrip('1234567890 ([<>])【】（）《》') for ocrResItem in ocrRes]
-            logger.info(characterNameList)
-            ocrResBoxList = [ocrResItem.box for ocrResItem in ocrRes]
-            for index, item in enumerate(characterNameList):
-                if item != characterName:
-                    continue
-                tmp = self.O_SA_SELECT_SVR_CHARACTER_LIST
+            #raw_names = [item.ocr_text for item in ocrRes]
+            #logger.info(f"OCR raw names: {raw_names}")
+            # 去除等级数字和括号
+            processed_names = [item.ocr_text.lstrip('1234567890 ([<>])【】（）《》') for item in ocrRes]
+            #logger.info(f"Processed names: {processed_names}")
+            ocrBoxes = [item.box for item in ocrRes]
+
+            matched_idx = None
+            is_svr_match = False
+
+            # 第一步：尝试匹配服务器名（使用带模糊匹配的策略）
+            if svrName:
+                matched_idx = match_server_name(svrName, processed_names)
+                if matched_idx is not None:
+                    is_svr_match = True
+                    logger.info(f"Server name matched: {svrName} -> {processed_names[matched_idx]}")
+
+            # 第二步：如果服务器名未匹配，则尝试匹配角色名（使用精确策略）
+            if matched_idx is None:
+                matched_idx = match_character_name(characterName, processed_names)
+                if matched_idx is not None:
+                    logger.info(f"Character name matched: {characterName} -> {processed_names[matched_idx]}")
+
+            if matched_idx is not None:
+                # 构建临时点击规则
                 from copy import deepcopy
+                tmp = self.O_SA_SELECT_SVR_CHARACTER_LIST
                 tmpClick = RuleClick(
                     roi_back=deepcopy(tmp.roi),
                     roi_front=[
-                        tmp.roi[0] + ocrResBoxList[index][0][0],
-                        tmp.roi[1] + ocrResBoxList[index][0][1],
-                        ocrResBoxList[index][1][0] - ocrResBoxList[index][0][0],
-                        ocrResBoxList[index][2][1] - ocrResBoxList[index][1][1]],
+                        tmp.roi[0] + ocrBoxes[matched_idx][0][0],
+                        tmp.roi[1] + ocrBoxes[matched_idx][0][1],
+                        ocrBoxes[matched_idx][1][0] - ocrBoxes[matched_idx][0][0],
+                        ocrBoxes[matched_idx][2][1] - ocrBoxes[matched_idx][1][1]
+                    ],
                     name="tmpClick"
                 )
+                # 根据匹配类型调整点击偏移
+                if is_svr_match:
+                    tmpClick.roi_front[1] += 30   # 服务器名下方30px
+                    logger.info("Click below server name (offset +30)")
+                else:
+                    tmpClick.roi_front[1] -= 30   # 角色名上方30px
+                    logger.info("Click above character name (offset -30)")
 
-                # 此时 tmp 内存储的时角色名位置,而点击角色名没有反应
-                # 所以需要获取到对应的服务器图标位置
-                tmpClick.roi_front[1] -= 30
-                self.ui_click_until_disappear(tmpClick, stop=self.I_SA_CHECK_SELECT_SVR_2,
-                                              interval=3)
-                logger.info("character %s found,and clicked svr icon", characterName)
+                # 点击偏移后的点直到选择服务器区域消失（表示选中成功）
+                self.ui_click_until_disappear(tmpClick, stop=self.I_SA_CHECK_SELECT_SVR_3, interval=3)
+                logger.info("Target found and clicked svr icon")
                 return True
-            if lastCharacterNameList == characterNameList:
+
+            # 未匹配，滑动列表继续
+            if lastList == processed_names:
                 break
-            logger.info(f'{characterName} not found,start swipe')
-            lastCharacterNameList = characterNameList
-            self.swipe(self.S_SA_ACCOUNT_LIST_UP)
-            # 等待滑动动画完成
+            lastList = processed_names
+            self.swipe(self.S_SA_SVR_SWIPE_LEFT)
             time.sleep(1.5)
 
+        # 全部滑动完毕仍未找到
         self.click(self.C_SA_LOGIN_FORM_CANCEL_SVR_SELECT, 1.5)
         return False
 
@@ -150,48 +218,50 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                 continue
         return
 
+    def is_account_selected(self, accountInfo: AccountInfo) -> bool:
+        """确认当前网易账号选择框是否已选中目标账号。"""
+        self.O_SA_ACCOUNT_ACCOUNT_SELECTED.keyword = accountInfo.account
+        return self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED)
+
     def selectAccount(self, accountInfo: AccountInfo):
         logger.info("start selectAccount")
         self.O_SA_ACCOUNT_ACCOUNT_LIST.keyword = accountInfo.account
         self.O_SA_ACCOUNT_ACCOUNT_SELECTED.keyword = accountInfo.account
-        # 正常情况一次就行,但防不住OCR搞幺蛾子 保险起见 多来几次吧 反正挂机不差这点
-        for i in range(3):
-            while 1:
-                self.screenshot()
-                if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED):
-                    if self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED):
-                        return True
-                    self.ui_click_until_disappear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED,
-                                                  interval=1.5)
+        # 每次调用仅完整扫描一次账号列表；重新打开页面后的重试由 login() 负责。
+        while 1:
+            self.screenshot()
+            if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED):
+                if self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED):
+                    return True
+                self.ui_click_until_disappear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED,
+                                              interval=1.5)
+                continue
+
+            # 账号列表已打开状态
+            ocrRes = self.O_SA_ACCOUNT_ACCOUNT_LIST.detect_and_ocr(self.device.image)
+
+            # 找到该账号
+            for index, ocr_account in enumerate([ocrResItem.ocr_text for ocrResItem in ocrRes]):
+                if not accountInfo.is_account_alias(ocr_account):
                     continue
-
-                # 账号列表已打开状态
-                ocrRes = self.O_SA_ACCOUNT_ACCOUNT_LIST.detect_and_ocr(self.device.image)
-
-                # 找到该账号
-                for index, ocr_account in enumerate([ocrResItem.ocr_text for ocrResItem in ocrRes]):
-                    if not accountInfo.is_account_alias(ocr_account):
-                        continue
                     # if accountInfo.account in [ocrResItem.ocr_text for ocrResItem in ocrRes]:
                     #     index = [ocrResItem.ocr_text for ocrResItem in ocrRes].index(accountInfo.account)
-                    ocrResBoxList = [ocrResItem.box for ocrResItem in ocrRes]
-                    self.O_SA_ACCOUNT_ACCOUNT_LIST.area = [
-                        self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[0] + ocrResBoxList[index][0][
-                            0],
-                        self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[1] + ocrResBoxList[index][0][
-                            1],
-                        ocrResBoxList[index][1][0] - ocrResBoxList[index][0][0],
-                        ocrResBoxList[index][2][1] - ocrResBoxList[index][1][1]]
-                    time.sleep(1)
-                    self.click(self.O_SA_ACCOUNT_ACCOUNT_LIST)
-                    logger.info("account [ %s ] found", accountInfo.account)
-                    return True
+                ocrResBoxList = [ocrResItem.box for ocrResItem in ocrRes]
+                self.O_SA_ACCOUNT_ACCOUNT_LIST.area = [
+                    self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[0] + ocrResBoxList[index][0][0],
+                    self.O_SA_ACCOUNT_ACCOUNT_LIST.roi[1] + ocrResBoxList[index][0][1],
+                    ocrResBoxList[index][1][0] - ocrResBoxList[index][0][0],
+                    ocrResBoxList[index][2][1] - ocrResBoxList[index][1][1]]
+                time.sleep(1)
+                self.click(self.O_SA_ACCOUNT_ACCOUNT_LIST)
+                logger.info("account [ %s ] found", accountInfo.account)
+                return True
 
-                # 未找到该账号
-                if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_ADD_ACCOUNT):
-                    break
-                self.swipe(self.S_SA_ACCOUNT_LIST_UP, 1.5)
-                time.sleep(0.5)
+            # 未找到该账号
+            if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_ADD_ACCOUNT):
+                break
+            self.swipe(self.S_SA_ACCOUNT_LIST_UP, 1.5)
+            time.sleep(0.5)
         logger.info("account [ %s ] not found ", accountInfo.account)
         return False
 
@@ -240,32 +310,72 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
         while 1:
             self.screenshot()
             # 处于 选择服务器界面 直接点击空白区域退出该界面 进入切换账号流程
-            if self.appear(self.I_SA_CHECK_SELECT_SVR_1) or self.appear(self.I_SA_CHECK_SELECT_SVR_2):
+            if self.appear(self.I_SA_CHECK_SELECT_SVR_4) or self.appear(self.I_SA_CHECK_SELECT_SVR_3):
                 self.click(self.C_SA_LOGIN_FORM_CANCEL_SVR_SELECT)
+                time.sleep(1)  # 等待界面关闭
                 continue
 
             # 处于选择 苹果安卓界面
             if self.appear(self.I_SA_LOGIN_FORM_APPLE):
                 btn = self.I_SA_LOGIN_FORM_ANDROID if accountInfo.apple_or_android else self.I_SA_LOGIN_FORM_APPLE
                 self.ui_click_until_disappear(btn)
+                time.sleep(2)  # 等待平台选择生效
                 isAccountLogon = True
                 continue
+
             # 处于选择账号界面
             if self.appear(self.I_SA_NETEASE_GAME_LOGO) and not self.appear(self.I_SA_LOGIN_FORM_APPLE):
+                # 如果账号已登录，不再处理账号选择（避免重复执行 selectAccount）
+                if isAccountLogon:
+                    time.sleep(0.5)  # 稍作等待，让界面稳定
+                    continue
                 if not accountInfo.account:
                     logger.error("param account is None,cannot switch account")
                     return False
                 # 当前选择账号不是account
-                if not self.ocr_appear(self.O_SA_ACCOUNT_ACCOUNT_SELECTED):
+                if not self.is_account_selected(accountInfo):
                     # 没有找到account
-                    if not self.selectAccount(accountInfo):
-                        self.ui_click_until_disappear(self.C_SA_LOGIN_FORM_ACCOUNT_CLOSE_BTN,
-                                                      stop=self.I_SA_NETEASE_GAME_LOGO)
+                    MAX_RETRY = 3
+                    found = False
+
+                    for retry in range(MAX_RETRY):
+                        logger.info("selectAccount attempt %d/%d", retry + 1, MAX_RETRY)
+
+                        # 每一轮扫描账号列表都重置连续操作记录，避免上一轮的上滑次数使本轮无法滑到底部。
+                        self.device.click_record_clear()
+
+                        # 重置 OCR 区域为默认值，避免上次残留
+                        self.O_SA_ACCOUNT_ACCOUNT_LIST.area = self.O_SA_ACCOUNT_ACCOUNT_LIST.roi
+                        self.screenshot()
+
+                        if self.selectAccount(accountInfo):
+                            found = True
+                            break
+
+
+                        if retry < MAX_RETRY - 1:
+                            # 切号重试：关闭账号选择页后重新打开。
+                            logger.info("Account not found, retrying (close & reopen)")
+                            self.ui_click_until_disappear(
+                                self.C_SA_LOGIN_FORM_ACCOUNT_CLOSE_BTN,
+                                stop=self.I_SA_NETEASE_GAME_LOGO,
+                                interval=1.5,
+                            )
+                            time.sleep(1)
+                            #self.jump2SelectAccount()
+                            self.ui_click(self.C_SA_LOGIN_FORM_USER_CENTER,self.I_SA_NETEASE_GAME_LOGO,interval=1.5)
+                            time.sleep(1)
+
+                    if not found:
+                        logger.error("selectAccount failed after %d retries", MAX_RETRY)
                         return False
                     # selectAccount 后更新图片
                     self.screenshot()
+                    time.sleep(1)  # 等待账号选中状态稳定
                 self.ui_click(self.I_SA_ACCOUNT_LOGIN_BTN, stop=self.I_SA_LOGIN_FORM_APPLE, interval=1)
+                time.sleep(1.5)  # 等待登录弹窗出现
                 continue
+
             # 在用户中心界面
             if self.appear(self.I_SA_SWITCH_ACCOUNT_BTN):
                 # 如果当前已登录用户就是account
@@ -276,31 +386,31 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                     isAccountLogon = True
                     self.ui_click_until_disappear(self.C_SA_LOGIN_FORM_USER_CENTER_CLOSE_BTN, interval=1,
                                                   stop=self.I_SA_SWITCH_ACCOUNT_BTN)
+                    time.sleep(1)  # 等待用户中心关闭
                     continue
                 #
                 if self.ui_click(self.I_SA_SWITCH_ACCOUNT_BTN, self.I_SA_NETEASE_GAME_LOGO):
                     isAccountLogon = False
+                    time.sleep(1)  # 等待切换账号界面出现
                     continue
                 continue
+
             # 在游戏登录界面 不在用户中心 不在切换账号界面
             if not (self.appear(self.I_SA_NETEASE_GAME_LOGO) or self.appear(self.I_SA_SWITCH_ACCOUNT_BTN)):
                 # 判断是否已经账号登录
                 if not isAccountLogon:
                     self.click(self.C_SA_LOGIN_FORM_USER_CENTER)
+                    time.sleep(1)  # 等待用户中心弹出
                     continue
 
-                # 已登录 查找对应角色
-                if not isCharacterSelected and self.switch_character(accountInfo.character):
+                # 已登录 调用统一的选择方法，传入角色名和服务器名 查找对应角色和服务器区名
+                if not isCharacterSelected and self.select_target(accountInfo.character, accountInfo.svr):
                     isCharacterSelected = True
+                    time.sleep(1)  # 等待角色选中生效
                     continue
                 break
             continue
 
-        # 切换角色失败 /未找到该角色
-        # 尝试使用 选择服务器方式
-        if isAccountLogon and not isCharacterSelected and accountInfo.svr is not None and accountInfo.svr != "":
-            logger.info("try to find character with svrName %s", accountInfo.svr)
-            isCharacterSelected = self.switch_svr(accountInfo.svr)
         if isAccountLogon and isCharacterSelected:
             # 成功登录账号 找到角色
             # self.ui_click_until_disappear(self.C_SA_LOGIN_FORM_ENTER_GAME_BTN, stop=self.I_CHECK_LOGIN_FORM)

@@ -7,7 +7,7 @@ import cv2
 
 from module.ocr.base_ocr import BaseCor, OcrMode, OcrMethod, OcrMethodType
 from module.ocr.sub_ocr import Full, Single, Digit, DigitCounter, Duration, Quantity
-from module.base.utils.utils import random_normal_distribution_int
+from module.base.utils import random_normal_distribution_int
 from module.logger import logger
 
 

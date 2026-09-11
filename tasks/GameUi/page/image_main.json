@@ -9,6 +9,15 @@
     "description": "庭院标志"
   },
   {
+    "itemName": "back_brown",
+    "imageName": "page_back_brown.png",
+    "roiFront": "20,18,41,36",
+    "roiBack": "0,0,120,100",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "闲庭返回庭院标志"
+  },
+  {
     "itemName": "main_scroll_close",
     "imageName": "page_main_scroll_close.png",
     "roiFront": "1181,634,28,39",
@@ -97,6 +106,15 @@
     "method": "Template matching",
     "threshold": 0.7,
     "description": "庭院前往组队"
+  },
+  {
+    "itemName": "main_goto_nawu",
+    "imageName": "page_main_goto_nawu.png",
+    "roiFront": "323,617,36,53",
+    "roiBack": "323,617,36,53",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "庭院进入纳物库"
   },
   {
     "itemName": "main_goto_collection",
@@ -196,6 +214,24 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "组队页面标志"
+  },
+  {
+    "itemName": "check_team_new",
+    "imageName": "page_check_team_new.png",
+    "roiFront": "32,585,82,65",
+    "roiBack": "0,563,148,139",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "组队页面标志(新号) "
+  },
+  {
+    "itemName": "check_nawu",
+    "imageName": "page_check_nawu.png",
+    "roiFront": "94,21,95,37",
+    "roiBack": "94,21,95,37",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "纳物库页面标志"
   },
   {
     "itemName": "check_collection",

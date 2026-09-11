@@ -43,7 +43,7 @@ class Guild(Buy, GameUi, RichManAssets):
             if con.black_daruma_scrap and self.appear(self.I_GUILD_SCRAP, interval=1.5) and not scrap_ret:  # 黑碎
                 scrap_ret = self._guild_black_daruma_scrap()
             if con.skin_ticket and self.appear(self.I_GUILD_SKIN, interval=1.5) and not skin_ret:  # 皮肤券
-                skin_ret = self._guild_skin_ticket()
+                skin_ret = self._guild_skin_ticket(con.skin_ticket)
             self.swipe(self.S_GUILD_STORE, interval=1.5)
             time.sleep(2)
             logger.attr(max_swipe - swipe_cnt, 'remain swipe times')
@@ -108,7 +108,10 @@ class Guild(Buy, GameUi, RichManAssets):
             logger.warning('No skin ticket can buy')
             return False
         # 购买功勋商店皮肤券
-        self.buy_more(self.I_GUILD_SKIN, number)
+        if num > number:
+            self.buy_more(self.I_GUILD_SKIN, number)
+        else:
+            self.buy_more(self.I_GUILD_SKIN, num)
         time.sleep(0.5)
         return True
 

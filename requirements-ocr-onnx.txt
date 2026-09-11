@@ -1,0 +1,9 @@
+# Optional onnxocr OCR backend.
+# Install with the same Python environment used to run the project:
+#   toolkit/python.exe -m pip install -r requirements-ocr-onnx.txt
+# Then set OcrBackend: onnxocr in config/deploy.yaml.
+onnxocr==2025.5
+
+# GPU is optional. If CUDA is required, uninstall onnxruntime first and install
+# an onnxruntime-gpu version compatible with the graphics driver and CUDA runtime.
+# Do not declare onnxruntime and onnxruntime-gpu together in this file.
