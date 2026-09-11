@@ -100,7 +100,14 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             self.ui_click_until_disappear(self.I_UI_BACK_RED, interval=1)
             logger.info('领取奖励成功')
 
-        self.goto_page(page_same_heart_team, confirm_wait=2)
+        self.goto_page(page_team, confirm_wait=2)
+        
+        if not self.appear(self.I_I_SAME_HEART_TEAM_ENTER) and self.appear(self.I_CHECK_TEAM_NEW):
+            logger.warning('当前角色等级不足，没有解锁同心队，跳过一键预存')
+            return
+        if self.appear(self.I_I_SAME_HEART_TEAM_ENTER):
+            logger.info('当前角色有同心队，前往同心队页面')
+            self.goto_page(page_same_heart_team, confirm_wait=2)
 
         if not self.appear(self.I_I_PRE_DEPOSIT):
             logger.warning('当前角色没有同心队，跳过一键预存')

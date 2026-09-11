@@ -455,7 +455,8 @@ def _default_task_args(script_name: str, task_name: str, *, remove_scheduler: bo
     if not isinstance(task_config, BaseModel):
         raise HTTPException(status_code=400, detail="任务配置不存在")
     default_model = model.model_copy(deep=True)
-    setattr(default_model, task_key, task_config.__class__())
+    # ConfigModel.__setattr__ 自动落盘；这里只构造参数快照，不能触发保存。
+    BaseModel.__setattr__(default_model, task_key, task_config.__class__())
     task_args = copy.deepcopy(default_model.script_task(task_name))
     if remove_scheduler:
         task_args.pop("scheduler", None)
