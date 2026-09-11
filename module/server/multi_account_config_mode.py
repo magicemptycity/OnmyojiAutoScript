@@ -3,6 +3,17 @@
 from __future__ import annotations
 
 
+def parse_config_mode(value) -> str | None:
+    """兼容原生枚举组件可能提交的值、键名和中文显示文本。"""
+    normalized = str(getattr(value, "value", value) or "").strip().lower()
+    return {
+        "public": "public",
+        "private": "private",
+        "公共配置": "public",
+        "私有配置": "private",
+    }.get(normalized)
+
+
 def config_mode_value(entry) -> str:
     mode = getattr(entry, "config_mode", "private")
     return getattr(mode, "value", mode)

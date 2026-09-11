@@ -15,7 +15,7 @@ from module.config.utils import (
 )
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
-from module.server.multi_account_config_mode import is_config_mode_field, with_config_mode_group
+from module.server.multi_account_config_mode import is_config_mode_field, parse_config_mode, with_config_mode_group
 from tasks.MultiAccountRepeatTimed.config import (
     MultiAccountRepeatTimedAccount,
     MultiAccountRepeatTimedTask,
@@ -552,9 +552,10 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     normalized_group = convert_to_underscore(group)
     normalized_argument = convert_to_underscore(argument)
     if is_config_mode_field(normalized_group, normalized_argument):
-        if value not in {"public", "private"}:
+        mode = parse_config_mode(value)
+        if mode is None:
             raise HTTPException(status_code=400, detail="配置来源无效")
-        entry.config_mode = value
+        entry.config_mode = mode
         _save_timed_section(script_name, section)
         return True
     if getattr(entry.config_mode, "value", entry.config_mode) != "private":

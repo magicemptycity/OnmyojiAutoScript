@@ -12,7 +12,7 @@ from module.config.model_overrides import model_with_field_overrides, model_with
 from module.config.utils import convert_to_underscore, parse_next_server_weekday, parse_tomorrow_server
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
-from module.server.multi_account_config_mode import is_config_mode_field, with_config_mode_group
+from module.server.multi_account_config_mode import is_config_mode_field, parse_config_mode, with_config_mode_group
 from tasks.MultiAccountTaskOrchestration.config import (
     MultiAccountRepeatNewAccount,
     MultiAccountRepeatNewFixedTimeBatch,
@@ -1174,9 +1174,10 @@ async def set_fixed_time_batch_task_arg(
     normalized_group = convert_to_underscore(group)
     normalized_argument = convert_to_underscore(argument)
     if is_config_mode_field(normalized_group, normalized_argument):
-        if value not in {"public", "private"}:
+        mode = parse_config_mode(value)
+        if mode is None:
             raise HTTPException(status_code=400, detail="配置来源无效")
-        entry.config_mode = value
+        entry.config_mode = mode
         _save(script_name, multi_account_task_orchestration=section)
         return True
     if getattr(entry.config_mode, "value", entry.config_mode) != "private":
@@ -1266,9 +1267,10 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     entry = _ensure_disabled_single_task_entry(account, task_name)
     normalized_argument = convert_to_underscore(argument)
     if is_config_mode_field(group_name, normalized_argument):
-        if value not in {"public", "private"}:
+        mode = parse_config_mode(value)
+        if mode is None:
             raise HTTPException(status_code=400, detail="配置来源无效")
-        entry.config_mode = value
+        entry.config_mode = mode
         _save(script_name, multi_account_task_orchestration=section)
         return True
     if getattr(entry.config_mode, "value", entry.config_mode) != "private":
