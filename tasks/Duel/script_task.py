@@ -33,6 +33,17 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
     is_celeb: bool = False  # 是否是名仕
     conf: Duel = None
 
+    def _duel_settlement_click(self):
+        """使用斗技专用的结算点击区域，避免误触战斗结果按钮。"""
+        areas = (
+            self.C_RESULT_RANDOM_LEFT,
+            self.C_RESULT_RANDOM_TOP,
+            self.C_RESULT_RANDOM_ENTER,
+            self.C_RESULT_RANDOM_RIGHT,
+            self.C_RESULT_RANDOM_BOTTOM,
+        )
+        return random.choice(areas)
+
     def run(self):
         current_time = datetime.now().time()
         if not (time(12, 00) <= current_time < time(23, 00)):
@@ -171,7 +182,7 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
             if self.appear(self.I_CHECK_DUEL) and self.appear(self.I_D_HELP):  # 斗技主界面
                 break
             if self.appear(self.I_D_WIN_SHARE,interval= 1.2): #拔得头筹
-                self.click(random_click(ltrb=(True, True, False, True)), interval=1.2)
+                self.click(self._duel_settlement_click(), interval=1.2)
                 continue
             if self.appear_then_click(self.I_UI_BACK_RED, interval=1.2):  # 关闭段位上升页面
                 ret_timer.reset()
@@ -182,12 +193,12 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
             if self.is_battle_win():
                 ret = True
                 ret_timer.start()
-                self.click(random_click(ltrb=(True, True, False, True)), interval=1.2)
+                self.click(self._duel_settlement_click(), interval=1.2)
                 continue
             if self.is_battle_lose():
                 ret = False
                 ret_timer.start()
-                self.click(random_click(ltrb=(True, True, False, True)), interval=1.2)
+                self.click(self._duel_settlement_click(), interval=1.2)
                 continue
             if not ret_timer.started() and battle_timeout_cnt >= max_timeout_cnt:
                 logger.warning('Duel battle timeout[>15 minutes], exit')
@@ -296,7 +307,7 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
     def check_and_get_reward(self):
         """检查并收获奖励"""
         if self.appear(self.I_REWARD) or self.appear(self.I_UI_REWARD):
-            if self.click(random_click(ltrb=(True, True, False, True)), interval=0.6):
+            if self.click(self._duel_settlement_click(), interval=0.6):
                 logger.info('get reward')
 
     def is_in_battle_prepare(self, skip_screenshot=True) -> bool:

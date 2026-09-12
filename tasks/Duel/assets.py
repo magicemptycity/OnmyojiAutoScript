@@ -17,6 +17,20 @@ class DuelAssets:
 	C_DUEL_CLICK_5 = RuleClick(roi_front=(105,23,52,47), roi_back=(105,23,52,47), name="duel_click_5")
 
 
+	# 战斗结算上面随机区域
+	C_RESULT_RANDOM_TOP = RuleClick(roi_front=(100,50,1080,275), roi_back=(100,50,1080,275), name="result_random_top")
+	# 战斗结算下面随机区域
+	C_RESULT_RANDOM_BOTTOM = RuleClick(roi_front=(100,615,995,90), roi_back=(100,615,995,90), name="result_random_bottom")
+	# 战斗结算中间随机区域
+	C_RESULT_RANDOM_CENTER = RuleClick(roi_front=(100,50,1080,490), roi_back=(100,50,1080,490), name="result_random_center")
+	# 战斗结算左边随机区域
+	C_RESULT_RANDOM_LEFT = RuleClick(roi_front=(15,15,85,690), roi_back=(15,15,85,690), name="result_random_left")
+	# 战斗结算右边随机区域
+	C_RESULT_RANDOM_RIGHT = RuleClick(roi_front=(1180,50,85,490), roi_back=(1180,50,85,490), name="result_random_right")
+
+
+
+
 	# Image Rule Assets
 	# 点击阵容 
 	I_D_TEAM = RuleImage(roi_front=(813,288,34,74), roi_back=(785,259,115,119), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_d_team.png")

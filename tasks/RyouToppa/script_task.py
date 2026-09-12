@@ -368,6 +368,14 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
             return AreaAttackResult.AREA_FAILED
         return AreaAttackResult.ATTACKABLE
 
+    def _close_attack_popup(self) -> None:
+        """点击浮窗外的安全区域，关闭挑战失败后残留的进攻浮窗。"""
+        for _ in range(3):
+            self.screenshot()
+            if not self.appear(RealmRaidAssets.I_FIRE, threshold=0.8):
+                return
+            self.click(self.C_SAFE_AREA, interval=0.6)
+
     def flush_area_cache(self):
         time.sleep(2)
         duration = 0.352
@@ -434,9 +442,11 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
                 battle_wait_timer = None
                 if fire_click_count >= TOPPA_FIRE_CLICK_LIMIT:
                     logger.warning('挑战按钮点击次数过多，可能已被击破')
+                    self._close_attack_popup()
                     return AreaAttackResult.TEMPORARY_ERROR
                 if not self.appear(RealmRaidAssets.I_FIRE, threshold=0.8):
                     logger.warning('挑战按钮已消失但未识别到战斗，停止重复点击')
+                    self._close_attack_popup()
                     return AreaAttackResult.TEMPORARY_ERROR
 
             # 浮窗已出现时只处理挑战按钮
@@ -455,6 +465,7 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
 
                 if fire_click_count >= TOPPA_FIRE_CLICK_LIMIT:
                     logger.warning('挑战按钮点击次数过多，可能已被击破')
+                    self._close_attack_popup()
                     return AreaAttackResult.TEMPORARY_ERROR
 
                 if self.appear_then_click(RealmRaidAssets.I_FIRE, interval=2, threshold=0.8):
@@ -475,6 +486,7 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
 
             if popup_click_count >= TOPPA_POPUP_CLICK_LIMIT:
                 logger.warning('挑战浮窗打开失败，可能已被击破')
+                self._close_attack_popup()
                 return AreaAttackResult.TEMPORARY_ERROR
 
             if self.click(rcl, interval=5):

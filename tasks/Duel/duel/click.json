@@ -16,5 +16,35 @@
     "roiFront": "7,199,235,507",
     "roiBack": "988,120,271,575",
     "description": "小白点击范围"
+  },
+  {
+    "itemName": "result_random_top",
+    "roiFront": "100,50,1080,275",
+    "roiBack": "100,50,1080,275",
+    "description": "战斗结算上面随机区域"
+  },
+  {
+    "itemName": "result_random_bottom",
+    "roiFront": "100,615,995,90",
+    "roiBack": "100,615,995,90",
+    "description": "战斗结算下面随机区域"
+  },
+  {
+    "itemName": "result_random_center",
+    "roiFront": "100,50,1080,490",
+    "roiBack": "100,50,1080,490",
+    "description": "战斗结算中间随机区域"
+  },
+  {
+    "itemName": "result_random_left",
+    "roiFront": "15,15,85,690",
+    "roiBack": "15,15,85,690",
+    "description": "战斗结算左边随机区域"
+  },
+  {
+    "itemName": "result_random_right",
+    "roiFront": "1180,50,85,490",
+    "roiBack": "1180,50,85,490",
+    "description": "战斗结算右边随机区域"
   }
 ]
