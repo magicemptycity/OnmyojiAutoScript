@@ -449,11 +449,21 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
         # 根据调度器更新时间来判断是否有可运行的任务,保证逻辑一致性
         scheduler_update_dt = getattr(self, 'scheduler_update_dt', datetime.now())
         running = {}
-        if self.task is not None and self.task.next_run < scheduler_update_dt:
+        running_task_name = str(getattr(self.model, "running_task", "") or "")
+        if (
+            self.task is not None
+            and self.task.next_run < scheduler_update_dt
+            and running_task_name
+            and self.task.command == running_task_name
+        ):
             running = {"name": self.task.command, "next_run": str(self.task.next_run)}
 
         pending = []
-        pending_tasks = self.pending_task[1:] if running else self.pending_task
+        # 只有真正正在运行的任务恰好位于 pending 首位时才移除；不能因
+        # self.task 保留上一次 get_next() 的旧值而误删当前第一个待执行任务。
+        pending_tasks = self.pending_task
+        if running and pending_tasks and pending_tasks[0].command == self.task.command:
+            pending_tasks = pending_tasks[1:]
         for p in pending_tasks:
             item = {"name": p.command, "next_run": str(p.next_run)}
             pending.append(item)

@@ -223,6 +223,9 @@ class MultiAccountRepeatNewFixedTimeBatch(ConfigBase, extra="allow"):
             entries.append({
                 "task_name": task_key,
                 "enable": item.get("enable", True) is not False,
+                # 规范化任务列表时必须保留显式配置来源，否则每次重新校验
+                # 都会回退到模型默认值 private，造成“公共配置保存后失效”。
+                "config_mode": item.get("config_mode", MultiAccountTaskConfigMode.PRIVATE),
                 "private_config": private if isinstance(private, dict) else {},
                 "runtime_record": item.get("runtime_record", {}) if isinstance(item.get("runtime_record", {}), dict) else {},
             })

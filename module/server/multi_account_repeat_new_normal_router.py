@@ -40,6 +40,15 @@ def _save(script_name: str, **fields) -> None:
     mm.config_cache(script_name).save_selected_fields(fields)
 
 
+async def _broadcast_schedule(script_name: str) -> None:
+    process = mm.script_process.get(script_name)
+    if process is None:
+        return
+    config = mm.config_cache(script_name)
+    config.get_next()
+    await process.broadcast_state({"schedule": config.get_schedule_data()})
+
+
 
 def _has_task_script(task_name: str) -> bool:
     """仅允许添加存在可执行 script_task.py 的普通任务。"""
@@ -514,6 +523,7 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"公共参数无效：{exc}") from exc
     _save(script_name, multi_account_repeat_new_normal=candidate)
+    await _broadcast_schedule(script_name)
     return True
 
 

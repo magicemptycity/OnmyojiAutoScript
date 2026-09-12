@@ -62,6 +62,9 @@ async def _broadcast_overview(script_name: str) -> None:
         await process.broadcast_state({
             "multi_account_overview": {"kind": "utilize"},
         })
+        config = mm.config_cache(script_name)
+        config.get_next()
+        await process.broadcast_state({"schedule": config.get_schedule_data()})
 
 
 def _public_account(library, identifier: str) -> SharedPublicAccount:
@@ -276,6 +279,7 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"任务参数无效：{exc}") from exc
     _save(script_name, candidate)
+    await _broadcast_overview(script_name)
     return True
 
 

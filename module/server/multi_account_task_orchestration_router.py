@@ -69,6 +69,9 @@ async def _broadcast_multi_account_overview(script_name: str) -> None:
         await process.broadcast_state({
             "multi_account_overview": {"kind": "orchestration"},
         })
+        config = mm.config_cache(script_name)
+        config.get_next()
+        await process.broadcast_state({"schedule": config.get_schedule_data()})
 
 
 
@@ -1167,12 +1170,10 @@ async def set_fixed_time_batch_task_arg(
     batch = _batch(account, batch_id)
     if convert_to_underscore(group) == "scheduler":
         raise HTTPException(status_code=400, detail="不能在任务组私有配置中修改调度参数")
-    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(task_name), None)
-    if not isinstance(task_config, BaseModel):
-        raise HTTPException(status_code=400, detail="任务配置不存在")
     entry = _ensure_disabled_batch_task_entry(batch, task_name)
     normalized_group = convert_to_underscore(group)
     normalized_argument = convert_to_underscore(argument)
+    # 配置来源字段不依赖任务模型，必须在任务配置校验前处理。
     if is_config_mode_field(normalized_group, normalized_argument):
         mode = parse_config_mode(value)
         if mode is None:
@@ -1180,6 +1181,9 @@ async def set_fixed_time_batch_task_arg(
         entry.config_mode = mode
         _save(script_name, multi_account_task_orchestration=section)
         return True
+    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(task_name), None)
+    if not isinstance(task_config, BaseModel):
+        raise HTTPException(status_code=400, detail="任务配置不存在")
     if getattr(entry.config_mode, "value", entry.config_mode) != "private":
         raise HTTPException(status_code=400, detail="当前使用公共配置，请先切换为私有配置")
 
@@ -1232,6 +1236,7 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"公共参数无效：{exc}") from exc
     _save(script_name, multi_account_task_orchestration=candidate)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -1261,9 +1266,6 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     section = _section(script_name)
     account = _task_account(section, account_index)
     group_name = convert_to_underscore(group)
-    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(task_name), None)
-    if not isinstance(task_config, BaseModel):
-        raise HTTPException(status_code=400, detail="任务配置不存在")
     entry = _ensure_disabled_single_task_entry(account, task_name)
     normalized_argument = convert_to_underscore(argument)
     if is_config_mode_field(group_name, normalized_argument):
@@ -1273,6 +1275,9 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
         entry.config_mode = mode
         _save(script_name, multi_account_task_orchestration=section)
         return True
+    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(task_name), None)
+    if not isinstance(task_config, BaseModel):
+        raise HTTPException(status_code=400, detail="任务配置不存在")
     if getattr(entry.config_mode, "value", entry.config_mode) != "private":
         raise HTTPException(status_code=400, detail="当前使用公共配置，请先切换为私有配置")
     private = copy.deepcopy(entry.private_config)
