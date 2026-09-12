@@ -38,7 +38,7 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
         areas = (
             self.C_RESULT_RANDOM_LEFT,
             self.C_RESULT_RANDOM_TOP,
-            self.C_RESULT_RANDOM_ENTER,
+            self.C_RESULT_RANDOM_CENTER,
             self.C_RESULT_RANDOM_RIGHT,
             self.C_RESULT_RANDOM_BOTTOM,
         )

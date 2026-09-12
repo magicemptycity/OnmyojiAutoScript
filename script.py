@@ -511,9 +511,17 @@ class Script:
             self.device.click_record_clear()
             logger.hr(task, level=0)
             self.config.model.running_task = task
+            # 任务真正开始后立即刷新总览，否则界面会继续把它显示为 pending。
+            self.config.update_scheduler()
+            if self.state_queue:
+                self.state_queue.put({"schedule": self.config.get_schedule_data()})
             _task_start = datetime.now()
             success = self.run(inflection.camelize(task))
             self.config.model.running_task = ''
+            # 任务结束后立即移除 running 状态，重新显示 pending/waiting 队列。
+            self.config.update_scheduler()
+            if self.state_queue:
+                self.state_queue.put({"schedule": self.config.get_schedule_data()})
             logger.info(f'Scheduler: End task `{task}`')
             self.is_first_task = False
             self.anti_ban_guard.record_active((datetime.now() - _task_start).total_seconds())

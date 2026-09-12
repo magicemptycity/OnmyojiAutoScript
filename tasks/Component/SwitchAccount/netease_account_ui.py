@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import re
 import time
 from dataclasses import dataclass
@@ -24,6 +25,12 @@ class NeteaseAccountUi:
 
     ACCOUNT_ITEM_ID = "netease_mpay__login_user_item"
     ACCOUNT_LIST_ID = "netease_mpay__user_list"
+    # “添加新账号”只会出现在账号列表底部，可作为可靠的到底标志。
+    ADD_ACCOUNT_ID = "netease_mpay__add_user"
+    # 账号行约 110px：每次随机滑动 2～2.5 个账号，避免固定轨迹。
+    SCROLL_DISTANCE_RANGE = (220, 275)
+    SCROLL_DURATION_RANGE = (0.50, 0.70)
+    SCROLL_SETTLE_RANGE = (0.50, 0.70)
     ACCOUNT_TEXT_IDS = (
         "netease_mpay__login_username_with_tag",
         "netease_mpay__login_username",
@@ -179,27 +186,40 @@ class NeteaseAccountUi:
         time.sleep(self.settle_seconds)
         return True
 
+    def _at_list_bottom(self, root) -> bool:
+        """“添加新账号”出现时，说明账号列表已经滑到底部。"""
+        return bool(self._nodes(root, self.ADD_ACCOUNT_ID))
+
     def _scroll(self, root, *, toward_start: bool) -> bool:
         list_nodes = self._nodes(root, self.ACCOUNT_LIST_ID)
         if not list_nodes:
             return False
+        # 向下搜索时在底部标志出现后立即停止，避免继续无效滑动。
+        if not toward_start and self._at_list_bottom(root):
+            return False
         left, top, right, bottom = self._bounds(list_nodes[0])
         x = (left + right) // 2
         height = bottom - top
+        # 一屏最多约三个账号。每次随机移动 2～2.5 个账号：既避免跨过
+        # 太多账号，也确保下一次控件树能看到足够明显的页面变化。
+        distance = random.randint(*self.SCROLL_DISTANCE_RANGE)
+        center_y = (top + bottom) // 2
         if toward_start:
             start, end, name = (
-                (x, top + height // 3),
-                (x, bottom - height // 5),
+                (x, center_y - distance // 2),
+                (x, center_y + distance // 2),
                 "网易账号列表向上滑动",
             )
         else:
             start, end, name = (
-                (x, bottom - height // 5),
-                (x, top + height // 3),
+                (x, center_y + distance // 2),
+                (x, center_y - distance // 2),
                 "网易账号列表向下滑动",
             )
-        self.device.swipe(start, end, duration=0.35, control_name=name)
-        time.sleep(self.settle_seconds)
+        duration = random.uniform(*self.SCROLL_DURATION_RANGE)
+        self.device.swipe(start, end, duration=duration, control_name=name)
+        settle_seconds = max(self.settle_seconds, random.uniform(*self.SCROLL_SETTLE_RANGE))
+        time.sleep(settle_seconds)
         return True
 
     def _select_visible(self, root, target: str, matcher) -> bool:
@@ -227,18 +247,33 @@ class NeteaseAccountUi:
         if self._select_visible(root, target, matcher):
             return True
 
-        # 先回到列表顶端，再向底部逐页搜索；重复页面意味着到达边界。
-        for toward_start in (True, False):
-            previous: tuple[str, ...] | None = None
+        # 混合搜索：先从当前位置向下；未找到则回到顶部；最后从顶部
+        # 向下完整扫描。既减少常见情况下的滑动，又保留完整遍历兜底。
+        for toward_start in (False, True, False):
+            previous = None
+            unchanged_count = 0
             for _ in range(self.max_scrolls):
                 root = self.dump()
                 entries = self._account_entries(root)
-                signature = tuple(self.normalize_account(entry.account) for entry in entries)
-                if signature == previous or not entries:
+                if not entries:
                     break
+                # 小幅滑动后可见账号名称可能相同，因此同时比较纵坐标，
+                # 并要求连续两次完全没有变化才认为到达边界。
+                signature = tuple(
+                    (self.normalize_account(entry.account), entry.bounds[1], entry.bounds[3])
+                    for entry in entries
+                )
+                if signature == previous:
+                    unchanged_count += 1
+                    if unchanged_count >= 2:
+                        break
+                else:
+                    unchanged_count = 0
                 previous = signature
                 if self._select_visible(root, target, matcher):
                     return True
+                if not toward_start and self._at_list_bottom(root):
+                    break
                 if not self._scroll(root, toward_start=toward_start):
                     break
         return False
