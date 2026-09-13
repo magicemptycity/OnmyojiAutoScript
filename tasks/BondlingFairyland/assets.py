@@ -115,6 +115,17 @@ class BondlingFairylandAssets:
 	I_CAP_AGAIN = RuleImage(roi_front=(730,598,113,53), roi_back=(693,572,176,99), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/capture/capture_cap_again.png")
 
 
+	# Click Rule Assets
+	# 通用奖励上面随机点 
+	C_REWARD_RANDOM_TOP = RuleClick(roi_front=(15,15,820,140), roi_back=(15,15,820,140), name="reward_random_top")
+	# 通用奖励下面随机点 
+	C_REWARD_RANDOM_DOWN = RuleClick(roi_front=(235,450,825,255), roi_back=(15,155,220,550), name="reward_random_down")
+	# 通用奖励左边随机点 
+	C_REWARD_RANDOM_LEFT = RuleClick(roi_front=(15,155,220,550), roi_back=(15,15,820,140), name="reward_random_left")
+	# 通用奖励右边随机点 
+	C_REWARD_RANDOM_RIGHT = RuleClick(roi_front=(1060,185,205,520), roi_back=(235,450,825,255), name="reward_random_right")
+
+
 	# Image Rule Assets
 	# 启用自动结契 
 	I_C_AUTO_TRUE = RuleImage(roi_front=(765,200,50,24), roi_back=(749,187,79,51), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/capture/capture_c_auto_true.png")
@@ -178,4 +189,5 @@ class BondlingFairylandAssets:
 	I_BUY_SUB = RuleImage(roi_front=(468,540,43,40), roi_back=(468,540,43,40), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/stone/buy_sub.png")
 	# 关闭购买契灵页面 
 	I_STONE_CLOSE = RuleImage(roi_front=(911,56,42,38), roi_back=(888,49,100,100), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/stone/stone_stone_close.png")
+
 

@@ -1,0 +1,26 @@
+[
+  {
+    "itemName": "reward_random_top",
+    "roiFront": "15,15,820,140",
+    "roiBack": "15,15,820,140",
+    "description": "通用奖励上面随机点"
+  },
+  {
+    "itemName": "reward_random_down",
+    "roiFront": "235,450,825,255",
+    "roiBack": "15,155,220,550",
+    "description": "通用奖励下面随机点"
+  },
+  {
+    "itemName": "reward_random_left",
+    "roiFront": "15,155,220,550",
+    "roiBack": "15,15,820,140",
+    "description": "通用奖励左边随机点"
+  },
+  {
+    "itemName": "reward_random_right",
+    "roiFront": "1060,185,205,520",
+    "roiBack": "235,450,825,255",
+    "description": "通用奖励右边随机点"
+  }
+]

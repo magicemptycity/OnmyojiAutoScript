@@ -14,7 +14,13 @@ from module.logger import logger
 from tasks.BondlingFairyland.assets import BondlingFairylandAssets
 from tasks.BondlingFairyland.config import BondlingMode, BondlingClass, BondlingSwitchSoul, BondlingConfig, UserStatus
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
-from tasks.Component.GeneralBattle.general_battle import BattleAction, BattleContext, ExitMatcher, GeneralBattle
+from tasks.Component.GeneralBattle.general_battle import (
+    BattleAction,
+    BattleContext,
+    BattleSettlementProfile,
+    ExitMatcher,
+    GeneralBattle,
+)
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul, switch_parser
@@ -34,6 +40,19 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
 
     last_plate_count: int = None  # 上一次识别到的契灵盘子数量
     plate_interval: int = None  # 契灵盘子数量间隔(一般为1)
+
+    def _settlement_click_profile(self) -> BattleSettlementProfile:
+        """返回契灵专用的奖励页安全点击范围。"""
+        return BattleSettlementProfile(
+            name="bondling_fairyland",
+            reward_areas=(
+                self.C_REWARD_RANDOM_LEFT,
+                self.C_REWARD_RANDOM_TOP,
+                self.C_REWARD_RANDOM_RIGHT,
+                self.C_REWARD_RANDOM_DOWN,
+            ),
+            reward_weights=(20, 20, 30, 30),
+        )
 
     def _exit_matcher(self) -> ExitMatcher | None:
         return any_of(self.I_BALL_FIRE, self.I_CHECK_BONDLING_FAIRYLAND, self.I_GI_EMOJI_1, self.I_GI_EMOJI_2)

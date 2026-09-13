@@ -13,6 +13,7 @@ from module.config.utils import convert_to_underscore, parse_next_server_weekday
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
 from module.server.multi_account_config_mode import is_config_mode_field, parse_config_mode, with_config_mode_group
+from module.server.multi_account_feature_registry import MULTI_ACCOUNT_FEATURES
 from tasks.MultiAccountTaskOrchestration.config import (
     MultiAccountRepeatNewAccount,
     MultiAccountRepeatNewFixedTimeBatch,
@@ -37,13 +38,7 @@ def _section(script_name: str):
 def _all_shared_account_sections(script_name: str) -> dict[str, object]:
     """公共账号库变更时，同步所有仍在使用通用账号库的多账号功能。"""
     model = mm.config_cache(script_name).model
-    names = (
-        "multi_account_task_orchestration",
-        "multi_account_repeat_new_normal",
-        "multi_account_repeat_new_fixed",
-        "multi_account_kekkai_utilize_new",
-        "multi_account_repeat_timed",
-    )
+    names = tuple(feature.key for feature in MULTI_ACCOUNT_FEATURES)
     return {
         name: section
         for name in names
