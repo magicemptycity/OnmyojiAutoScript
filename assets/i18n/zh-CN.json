@@ -366,5 +366,7 @@
   "config_mode": "配置来源",
   "config_mode_help": "公共配置读取当前 OAS 实例配置；私有配置使用该账号任务独立保存的配置。",
   "public": "公共配置",
-  "private": "私有配置"
+  "private": "私有配置",
+  "MultiAccountKekkaiActivationNew": "多账号多任务挂卡新",
+  "多账号多任务挂卡新": "多账号多任务挂卡新"
 }

@@ -12,20 +12,20 @@ from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
 from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
 from module.config.utils import parse_next_server_weekday, parse_tomorrow_server
-from tasks.KekkaiUtilize.config import UtilizeConfig, UtilizeScheduler
-from tasks.MultiAccountKekkaiUtilizeNew.config import (
-    MultiAccountKekkaiUtilizeNewAccount,
-    MultiAccountKekkaiUtilizeNewForbidPeriod,
+from tasks.KekkaiActivation.config import ActivationConfig, ActivationScheduler
+from tasks.MultiAccountKekkaiActivationNew.config import (
+    MultiAccountKekkaiActivationNewAccount,
+    MultiAccountKekkaiActivationNewForbidPeriod,
 )
 
 
-multi_account_kekkai_utilize_new_app = APIRouter(route_class=ApiLoggingRoute)
+multi_account_kekkai_activation_new_app = APIRouter(route_class=ApiLoggingRoute)
 
 
 def _section(script_name: str):
-    section = getattr(mm.config_cache(script_name).model, "multi_account_kekkai_utilize_new", None)
+    section = getattr(mm.config_cache(script_name).model, "multi_account_kekkai_activation_new", None)
     if section is None:
-        raise HTTPException(status_code=404, detail="当前配置没有多账号多任务蹭卡新")
+        raise HTTPException(status_code=404, detail="当前配置没有多账号多任务挂卡新")
     return section
 
 
@@ -37,7 +37,7 @@ def _library(script_name: str):
 
 
 def _refresh_outer_scheduler(section) -> None:
-    """外层 OAS 任务只负责唤醒最近到期的账号虚拟蹭卡任务。"""
+    """外层 OAS 任务只负责唤醒最近到期的账号虚拟挂卡任务。"""
     next_runs = [
         account.scheduler.next_run
         for account in _accounts(section)
@@ -52,7 +52,7 @@ def _refresh_outer_scheduler(section) -> None:
 
 def _save(script_name: str, section) -> None:
     _refresh_outer_scheduler(section)
-    mm.config_cache(script_name).save_selected_fields({"multi_account_kekkai_utilize_new": section})
+    mm.config_cache(script_name).save_selected_fields({"multi_account_kekkai_activation_new": section})
 
 
 async def _broadcast_overview(script_name: str) -> None:
@@ -60,7 +60,7 @@ async def _broadcast_overview(script_name: str) -> None:
     process = mm.script_process.get(script_name)
     if process is not None:
         await process.broadcast_state({
-            "multi_account_overview": {"kind": "utilize"},
+            "multi_account_overview": {"kind": "activation"},
         })
         config = mm.config_cache(script_name)
         config.get_next()
@@ -74,11 +74,11 @@ def _public_account(library, identifier: str) -> SharedPublicAccount:
     return account
 
 
-def _accounts(section) -> list[MultiAccountKekkaiUtilizeNewAccount]:
+def _accounts(section) -> list[MultiAccountKekkaiActivationNewAccount]:
     return [item for item in section.account_list if item.public_account_identifier.strip()]
 
 
-def _account(section, index: int) -> MultiAccountKekkaiUtilizeNewAccount:
+def _account(section, index: int) -> MultiAccountKekkaiActivationNewAccount:
     accounts = _accounts(section)
     if index < 1 or index > len(accounts):
         raise HTTPException(status_code=404, detail="运行账号不存在")
@@ -130,12 +130,12 @@ def _convert_argument(types: str, value):
     return value
 
 
-def _default_utilize_config() -> dict:
-    return {"utilize_config": UtilizeConfig().model_dump()}
+def _default_activation_config() -> dict:
+    return {"activation_config": ActivationConfig().model_dump()}
 
 
-def _account_utilize_config(account: MultiAccountKekkaiUtilizeNewAccount) -> UtilizeConfig:
-    return UtilizeConfig.model_validate(account.private_config.get("utilize_config", {}))
+def _account_activation_config(account: MultiAccountKekkaiActivationNewAccount) -> ActivationConfig:
+    return ActivationConfig.model_validate(account.private_config.get("activation_config", {}))
 
 
 def _validated_model_value(model: BaseModel, argument: str, value):
@@ -143,11 +143,11 @@ def _validated_model_value(model: BaseModel, argument: str, value):
     return model_with_field_overrides(model, {argument: value})
 
 
-def _account_scheduler(account: MultiAccountKekkaiUtilizeNewAccount) -> UtilizeScheduler:
+def _account_scheduler(account: MultiAccountKekkaiActivationNewAccount) -> ActivationScheduler:
     return account.scheduler
 
 
-def _scheduler_next_run(scheduler: UtilizeScheduler, *, run_now: bool) -> datetime:
+def _scheduler_next_run(scheduler: ActivationScheduler, *, run_now: bool) -> datetime:
     """与 OAS quick run / quick wait 一致地安排虚拟账号任务。"""
     now = datetime.now().replace(microsecond=0)
     if run_now:
@@ -179,7 +179,7 @@ def _parse_target_indexes(raw: str) -> set[int]:
     return result
 
 
-@multi_account_kekkai_utilize_new_app.get('/{script_name}/multi_account_kekkai_utilize_new/public-accounts')
+@multi_account_kekkai_activation_new_app.get('/{script_name}/multi_account_kekkai_activation_new/public-accounts')
 async def list_public_accounts(script_name: str):
     library = _library(script_name)
     return {
@@ -197,7 +197,7 @@ async def list_public_accounts(script_name: str):
     }
 
 
-@multi_account_kekkai_utilize_new_app.get('/{script_name}/multi_account_kekkai_utilize_new/accounts')
+@multi_account_kekkai_activation_new_app.get('/{script_name}/multi_account_kekkai_activation_new/accounts')
 async def list_accounts(script_name: str):
     section = _section(script_name)
     now = datetime.now()
@@ -213,7 +213,7 @@ async def list_accounts(script_name: str):
             "enabled": scheduler.enable,
             "account_enabled": account.enabled,
             "next_run": next_run.isoformat(sep=" ", timespec="seconds"),
-            "next_utilize_time": next_run.isoformat(sep=" ", timespec="seconds"),
+            "next_activation_time": next_run.isoformat(sep=" ", timespec="seconds"),
             "priority": scheduler.priority,
             "schedule_status": "pending" if scheduler.enable and next_run <= now else "waiting",
             "forbid_period_count": len(account.forbid_periods),
@@ -226,24 +226,24 @@ async def list_accounts(script_name: str):
     return {"accounts": rows}
 
 
-@multi_account_kekkai_utilize_new_app.post('/{script_name}/multi_account_kekkai_utilize_new/accounts')
+@multi_account_kekkai_activation_new_app.post('/{script_name}/multi_account_kekkai_activation_new/accounts')
 async def add_account(script_name: str, public_account_identifier: str):
     section = _section(script_name)
     source = _public_account(_library(script_name), public_account_identifier)
     if any(item.public_account_identifier == source.identifier for item in section.account_list):
         return True
-    account = MultiAccountKekkaiUtilizeNewAccount()
+    account = MultiAccountKekkaiActivationNewAccount()
     account.sync_public_account(source)
     account.scheduler.enable = True
-    account.next_utilize_time = account.scheduler.next_run
-    account.private_config = _default_utilize_config()
+    account.next_activation_time = account.scheduler.next_run
+    account.private_config = _default_activation_config()
     section.account_list.append(account)
     _save(script_name, section)
     await _broadcast_overview(script_name)
     return True
 
 
-@multi_account_kekkai_utilize_new_app.delete('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}')
+@multi_account_kekkai_activation_new_app.delete('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}')
 async def delete_account(script_name: str, account_index: int):
     section = _section(script_name)
     section.account_list.remove(_account(section, account_index))
@@ -252,23 +252,23 @@ async def delete_account(script_name: str, account_index: int):
     return True
 
 
-@multi_account_kekkai_utilize_new_app.get('/{script_name}/multi_account_kekkai_utilize_new/public-args')
+@multi_account_kekkai_activation_new_app.get('/{script_name}/multi_account_kekkai_activation_new/public-args')
 async def get_public_args(script_name: str):
     section = _section(script_name)
     return {
         # 保留外层 OAS 调度器：控制该功能本身的启用与总优先级；
-        # 账号行各自的 Scheduler 决定具体蹭卡时间。
+        # 账号行各自的 Scheduler 决定具体挂卡时间。
         "scheduler": _serialize_group(section.scheduler),
-        "multi_account_kekkai_utilize_new_config": _serialize_group(
-            section.multi_account_kekkai_utilize_new_config
+        "multi_account_kekkai_activation_new_config": _serialize_group(
+            section.multi_account_kekkai_activation_new_config
         ),
     }
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/public-args/{group}/{argument}/value')
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/public-args/{group}/{argument}/value')
 async def set_public_arg(script_name: str, group: str, argument: str, types: str, value):
     section = _section(script_name)
-    allowed = {"scheduler", "multi_account_kekkai_utilize_new_config"}
+    allowed = {"scheduler", "multi_account_kekkai_activation_new_config"}
     if convert_to_underscore(group) not in allowed:
         raise HTTPException(status_code=400, detail="不支持修改该任务配置")
     candidate = copy.deepcopy(section)
@@ -283,12 +283,12 @@ async def set_public_arg(script_name: str, group: str, argument: str, types: str
     return True
 
 
-@multi_account_kekkai_utilize_new_app.get('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/scheduler-args')
+@multi_account_kekkai_activation_new_app.get('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/scheduler-args')
 async def get_account_scheduler_args(script_name: str, account_index: int):
     return {"scheduler": _serialize_group(_account_scheduler(_account(_section(script_name), account_index)))}
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/scheduler-args/{argument}/value')
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/scheduler-args/{argument}/value')
 async def set_account_scheduler_arg(script_name: str, account_index: int, argument: str, types: str, value):
     section = _section(script_name)
     account = _account(section, account_index)
@@ -299,17 +299,17 @@ async def set_account_scheduler_arg(script_name: str, account_index: int, argume
             {argument: _convert_argument(types, value)},
         )
     except (ValidationError, ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"账号蹭卡调度器无效：{exc}") from exc
+        raise HTTPException(status_code=400, detail=f"账号挂卡调度器无效：{exc}") from exc
     account.scheduler = candidate
-    account.next_utilize_time = candidate.next_run
+    account.next_activation_time = candidate.next_run
     _save(script_name, section)
     await _broadcast_overview(script_name)
     return True
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/account-enable')
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/account-enable')
 async def set_account_local_enabled(script_name: str, account_index: int, enable: bool):
-    """切换蹭卡新内的账号开关，不修改该账号 Scheduler 和禁卡配置。"""
+    """切换挂卡新内的账号开关，不修改该账号 Scheduler 和禁止挂卡配置。"""
     section = _section(script_name)
     account = _account(section, account_index)
     account.enabled = enable
@@ -318,7 +318,7 @@ async def set_account_local_enabled(script_name: str, account_index: int, enable
     return True
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/enable')
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/enable')
 async def set_account_enable(script_name: str, account_index: int, value: str):
     section = _section(script_name)
     account = _account(section, account_index)
@@ -328,25 +328,25 @@ async def set_account_enable(script_name: str, account_index: int, value: str):
     return True
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/quick-schedule')
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/quick-schedule')
 async def quick_schedule_account(script_name: str, account_index: int, run_now: bool = True):
     section = _section(script_name)
     account = _account(section, account_index)
     account.scheduler.next_run = _scheduler_next_run(account.scheduler, run_now=run_now)
-    account.next_utilize_time = account.scheduler.next_run
+    account.next_activation_time = account.scheduler.next_run
     _save(script_name, section)
     await _broadcast_overview(script_name)
     return True
 
 
-@multi_account_kekkai_utilize_new_app.get('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/utilize-args')
-async def get_account_utilize_args(script_name: str, account_index: int):
+@multi_account_kekkai_activation_new_app.get('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/activation-args')
+async def get_account_activation_args(script_name: str, account_index: int):
     account = _account(_section(script_name), account_index)
     use_private = getattr(account.config_mode, "value", account.config_mode) == "private"
     active = (
-        _account_utilize_config(account)
+        _account_activation_config(account)
         if use_private
-        else mm.config_cache(script_name).model.kekkai_utilize.utilize_config
+        else mm.config_cache(script_name).model.kekkai_activation.activation_config
     )
     arguments = _serialize_group(active)
     arguments.insert(0, {
@@ -358,11 +358,11 @@ async def get_account_utilize_args(script_name: str, account_index: int):
         "type": "enum",
         "enumEnum": ["public", "private"],
     })
-    return {"utilize_config": arguments}
+    return {"activation_config": arguments}
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/utilize-args/{argument}/value')
-async def set_account_utilize_arg(script_name: str, account_index: int, argument: str, types: str, value):
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/activation-args/{argument}/value')
+async def set_account_activation_arg(script_name: str, account_index: int, argument: str, types: str, value):
     section = _section(script_name)
     account = _account(section, account_index)
     if convert_to_underscore(argument) == "config_mode":
@@ -373,7 +373,7 @@ async def set_account_utilize_arg(script_name: str, account_index: int, argument
         return True
     if getattr(account.config_mode, "value", account.config_mode) != "private":
         raise HTTPException(status_code=400, detail="当前使用公共配置，请先切换为私有配置")
-    candidate = _account_utilize_config(account)
+    candidate = _account_activation_config(account)
     try:
         candidate = _validated_model_value(
             candidate,
@@ -381,22 +381,22 @@ async def set_account_utilize_arg(script_name: str, account_index: int, argument
             _convert_argument(types, value),
         )
     except (ValidationError, ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"账号蹭卡配置无效：{exc}") from exc
-    account.private_config = {"utilize_config": candidate.model_dump()}
+        raise HTTPException(status_code=400, detail=f"账号挂卡配置无效：{exc}") from exc
+    account.private_config = {"activation_config": candidate.model_dump()}
     _save(script_name, section)
     return True
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/utilize-args/default')
-async def reset_account_utilize_args(script_name: str, account_index: int):
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/activation-args/default')
+async def reset_account_activation_args(script_name: str, account_index: int):
     section = _section(script_name)
-    _account(section, account_index).private_config = _default_utilize_config()
+    _account(section, account_index).private_config = _default_activation_config()
     _save(script_name, section)
     return True
 
 
-@multi_account_kekkai_utilize_new_app.post('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/utilize-args/copy')
-async def copy_account_utilize_args(script_name: str, account_index: int, target_account_indexes: str):
+@multi_account_kekkai_activation_new_app.post('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/activation-args/copy')
+async def copy_account_activation_args(script_name: str, account_index: int, target_account_indexes: str):
     section = _section(script_name)
     source = _account(section, account_index)
     targets = _parse_target_indexes(target_account_indexes)
@@ -414,7 +414,7 @@ async def copy_account_utilize_args(script_name: str, account_index: int, target
     return True
 
 
-@multi_account_kekkai_utilize_new_app.get('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/forbid-periods')
+@multi_account_kekkai_activation_new_app.get('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/forbid-periods')
 async def get_forbid_periods(script_name: str, account_index: int):
     account = _account(_section(script_name), account_index)
     return {
@@ -425,22 +425,22 @@ async def get_forbid_periods(script_name: str, account_index: int):
     }
 
 
-@multi_account_kekkai_utilize_new_app.post('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/forbid-periods')
+@multi_account_kekkai_activation_new_app.post('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/forbid-periods')
 async def add_forbid_period(script_name: str, account_index: int):
     section = _section(script_name)
-    _account(section, account_index).forbid_periods.append(MultiAccountKekkaiUtilizeNewForbidPeriod())
+    _account(section, account_index).forbid_periods.append(MultiAccountKekkaiActivationNewForbidPeriod())
     _save(script_name, section)
     return True
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/forbid-periods/{period_index}')
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/forbid-periods/{period_index}')
 async def update_forbid_period(script_name: str, account_index: int, period_index: int, start: str, end: str):
     section = _section(script_name)
     account = _account(section, account_index)
     if period_index < 1 or period_index > len(account.forbid_periods):
         raise HTTPException(status_code=404, detail="禁止时段不存在")
     try:
-        account.forbid_periods[period_index - 1] = MultiAccountKekkaiUtilizeNewForbidPeriod(
+        account.forbid_periods[period_index - 1] = MultiAccountKekkaiActivationNewForbidPeriod(
             start=start, end=end
         )
     except (ValidationError, ValueError, TypeError) as exc:
@@ -449,7 +449,7 @@ async def update_forbid_period(script_name: str, account_index: int, period_inde
     return True
 
 
-@multi_account_kekkai_utilize_new_app.delete('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/forbid-periods/{period_index}')
+@multi_account_kekkai_activation_new_app.delete('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/forbid-periods/{period_index}')
 async def delete_forbid_period(script_name: str, account_index: int, period_index: int):
     section = _section(script_name)
     account = _account(section, account_index)
@@ -460,7 +460,7 @@ async def delete_forbid_period(script_name: str, account_index: int, period_inde
     return True
 
 
-@multi_account_kekkai_utilize_new_app.put('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/forbid-periods/default')
+@multi_account_kekkai_activation_new_app.put('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/forbid-periods/default')
 async def reset_forbid_periods(script_name: str, account_index: int):
     section = _section(script_name)
     _account(section, account_index).forbid_periods = []
@@ -468,7 +468,7 @@ async def reset_forbid_periods(script_name: str, account_index: int):
     return True
 
 
-@multi_account_kekkai_utilize_new_app.post('/{script_name}/multi_account_kekkai_utilize_new/accounts/{account_index}/forbid-periods/copy')
+@multi_account_kekkai_activation_new_app.post('/{script_name}/multi_account_kekkai_activation_new/accounts/{account_index}/forbid-periods/copy')
 async def copy_forbid_periods(script_name: str, account_index: int, target_account_indexes: str):
     section = _section(script_name)
     source = _account(section, account_index)

@@ -19,6 +19,7 @@ from module.server.multi_account_repeat_new_normal_router import multi_account_r
 from module.server.multi_account_repeat_new_fixed_router import multi_account_repeat_new_fixed_app
 from module.server.multi_account_repeat_timed_router import multi_account_repeat_timed_app
 from module.server.multi_account_kekkai_utilize_new_router import multi_account_kekkai_utilize_new_app
+from module.server.multi_account_kekkai_activation_new_router import multi_account_kekkai_activation_new_app
 from module.server.multi_account_feature_router import multi_account_feature_app
 from module.server.stats_router import stats_app
 from module.server.tool_router import tool_app
@@ -58,6 +59,7 @@ app.include_router(multi_account_repeat_new_normal_app)
 app.include_router(multi_account_repeat_new_fixed_app)
 app.include_router(multi_account_repeat_timed_app)
 app.include_router(multi_account_kekkai_utilize_new_app)
+app.include_router(multi_account_kekkai_activation_new_app)
 app.include_router(script_app)
 app.include_router(stats_app)
 app.include_router(log_app)

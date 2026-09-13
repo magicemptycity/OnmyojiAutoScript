@@ -93,6 +93,7 @@ from tasks.Chess.config import Chess
 from tasks.Component.MultiAccount.account_library import MultiAccountAccounts
 from tasks.MultiAccountKekkaiUtilize.config import MultiAccountKekkaiUtilize
 from tasks.MultiAccountKekkaiUtilizeNew.config import MultiAccountKekkaiUtilizeNew
+from tasks.MultiAccountKekkaiActivationNew.config import MultiAccountKekkaiActivationNew
 from tasks.MultiAccountKekkaiActivation.config import MultiAccountKekkaiActivation
 from tasks.MultiAccountDelegation.config import MultiAccountDelegation
 from tasks.MultiAccountAreaBoss.config import MultiAccountAreaBoss
@@ -184,6 +185,7 @@ class ConfigModel(ConfigBase):
     multi_account_accounts: MultiAccountAccounts = Field(default_factory=MultiAccountAccounts)
     multi_account_kekkai_utilize: MultiAccountKekkaiUtilize = Field(default_factory=MultiAccountKekkaiUtilize)
     multi_account_kekkai_utilize_new: MultiAccountKekkaiUtilizeNew = Field(default_factory=MultiAccountKekkaiUtilizeNew)
+    multi_account_kekkai_activation_new: MultiAccountKekkaiActivationNew = Field(default_factory=MultiAccountKekkaiActivationNew)
     multi_account_kekkai_activation: MultiAccountKekkaiActivation = Field(default_factory=MultiAccountKekkaiActivation)
     multi_account_delegation: MultiAccountDelegation = Field(default_factory=MultiAccountDelegation)
     multi_account_area_boss: MultiAccountAreaBoss = Field(default_factory=MultiAccountAreaBoss)

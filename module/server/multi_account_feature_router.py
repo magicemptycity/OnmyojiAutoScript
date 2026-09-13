@@ -17,9 +17,18 @@ async def list_multi_account_features(script_name: str):
         "features": [
             {
                 "key": feature.key,
+                "task_name": feature.task_name,
                 "name": feature.display_name,
                 "mode": feature.mode,
                 "api_prefix": feature.api_prefix,
+                "settings_path": feature.settings_path,
+                "settings_group": feature.settings_group,
+                "next_run_field": feature.next_run_field,
+                "forbid_periods": feature.forbid_periods,
+                "task_list": feature.task_list,
+                "fixed_batches": feature.fixed_batches,
+                "orchestration": feature.orchestration,
+                "overview_kind": feature.overview_kind,
                 "available": getattr(model, feature.key, None) is not None,
             }
             for feature in MULTI_ACCOUNT_FEATURES
@@ -37,15 +46,24 @@ async def get_multi_account_feature_manifest(script_name: str, feature_key: str)
         raise HTTPException(status_code=404, detail="当前实例没有该功能配置")
     return {
         "key": feature.key,
+        "task_name": feature.task_name,
         "name": feature.display_name,
         "mode": feature.mode,
         "api_prefix": feature.api_prefix,
+        "settings_path": feature.settings_path,
+        "settings_group": feature.settings_group,
+        "next_run_field": feature.next_run_field,
+        "task_list": feature.task_list,
+        "fixed_batches": feature.fixed_batches,
+        "orchestration": feature.orchestration,
+        "overview_kind": feature.overview_kind,
         "capabilities": {
             "accounts": hasattr(section, "account_list"),
-            "tasks": any(hasattr(account, "task_list") for account in getattr(section, "account_list", [])),
+            "tasks": feature.task_list or any(hasattr(account, "task_list") for account in getattr(section, "account_list", [])),
             "account_scheduler": feature.mode == "account_scheduler",
             "task_scheduler": feature.mode in {"timed", "fixed_group", "orchestration"},
             "config_source": True,
+            "forbid_periods": feature.forbid_periods,
         },
     }
 

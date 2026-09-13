@@ -43,6 +43,7 @@ class ConfigMenu:
             'MultiAccountAccounts',
             'MultiAccountKekkaiUtilize',
             'MultiAccountKekkaiUtilizeNew',
+            'MultiAccountKekkaiActivationNew',
             'MultiAccountKekkaiActivation',
             'MultiAccountDelegation',
             'MultiAccountAreaBoss',
