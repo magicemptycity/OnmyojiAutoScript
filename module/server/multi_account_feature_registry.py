@@ -17,6 +17,32 @@ class MultiAccountFeature:
     fixed_batches: bool = False
     orchestration: bool = False
     overview_kind: str | None = None
+    protocol_version: int = 1
+
+    def __post_init__(self) -> None:
+        """按页面模式补齐能力，并在服务启动时拒绝无效注册。"""
+        if not self.key or not self.task_name or not self.api_prefix:
+            raise ValueError("多账号功能必须声明 key、task_name 和 api_prefix")
+        valid_modes = {
+            "account_scheduler",
+            "normal",
+            "task_list",
+            "timed",
+            "fixed_group",
+            "fixed_batches",
+            "orchestration",
+        }
+        if self.mode not in valid_modes:
+            raise ValueError(f"不支持的多账号页面模式：{self.mode}")
+        inferred_task_list = self.mode in {
+            "normal", "task_list", "timed", "fixed_group", "fixed_batches", "orchestration",
+        }
+        inferred_fixed = self.mode in {"fixed_group", "fixed_batches", "orchestration"}
+        object.__setattr__(self, "task_list", self.task_list or inferred_task_list)
+        object.__setattr__(self, "fixed_batches", self.fixed_batches or inferred_fixed)
+        object.__setattr__(self, "orchestration", self.orchestration or self.mode == "orchestration")
+        if self.mode == "account_scheduler" and not (self.settings_path and self.settings_group and self.next_run_field):
+            raise ValueError(f"账号调度功能 {self.key} 缺少配置路径、配置组或下次运行字段")
 
 
 # OASX 根据该清单选择通用页面；旧专属 API 继续保留兼容。
@@ -26,7 +52,6 @@ MULTI_ACCOUNT_FEATURES = (
         task_name="MultiAccountRepeatNewNormal",
         display_name="多账号多任务新普通",
         mode="normal",
-        task_list=True,
         api_prefix="multi_account_repeat_new_normal",
     ),
     MultiAccountFeature(
@@ -34,7 +59,6 @@ MULTI_ACCOUNT_FEATURES = (
         task_name="MultiAccountRepeatTimed",
         display_name="多账号多任务定时",
         mode="timed",
-        task_list=True,
         api_prefix="multi_account_repeat_timed",
     ),
     MultiAccountFeature(
@@ -42,8 +66,6 @@ MULTI_ACCOUNT_FEATURES = (
         task_name="MultiAccountRepeatNewFixed",
         display_name="多账号多任务新固定时间",
         mode="fixed_group",
-        task_list=True,
-        fixed_batches=True,
         api_prefix="multi_account_repeat_new_fixed",
     ),
     MultiAccountFeature(
@@ -51,9 +73,6 @@ MULTI_ACCOUNT_FEATURES = (
         task_name="MultiAccountTaskOrchestration",
         display_name="多账号任务编排",
         mode="orchestration",
-        task_list=True,
-        fixed_batches=True,
-        orchestration=True,
         api_prefix="multi_account_task_orchestration",
     ),
     MultiAccountFeature(
@@ -82,5 +101,18 @@ MULTI_ACCOUNT_FEATURES = (
     ),
 )
 
-FEATURE_BY_KEY = {item.key: item for item in MULTI_ACCOUNT_FEATURES}
-FEATURE_BY_TASK_NAME = {item.task_name: item for item in MULTI_ACCOUNT_FEATURES}
+def _index_features(attribute: str) -> dict[str, MultiAccountFeature]:
+    result: dict[str, MultiAccountFeature] = {}
+    for feature in MULTI_ACCOUNT_FEATURES:
+        value = str(getattr(feature, attribute))
+        if value in result:
+            raise ValueError(f"多账号功能的 {attribute} 重复：{value}")
+        result[value] = feature
+    return result
+
+
+FEATURE_BY_KEY = _index_features("key")
+FEATURE_BY_TASK_NAME = _index_features("task_name")
+
+MULTI_ACCOUNT_KEKKAI_UTILIZE_NEW = FEATURE_BY_KEY["multi_account_kekkai_utilize_new"]
+MULTI_ACCOUNT_KEKKAI_ACTIVATION_NEW = FEATURE_BY_KEY["multi_account_kekkai_activation_new"]

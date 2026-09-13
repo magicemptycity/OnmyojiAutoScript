@@ -16,6 +16,7 @@ async def list_multi_account_features(script_name: str):
     return {
         "features": [
             {
+                "protocol_version": feature.protocol_version,
                 "key": feature.key,
                 "task_name": feature.task_name,
                 "name": feature.display_name,
@@ -45,6 +46,7 @@ async def get_multi_account_feature_manifest(script_name: str, feature_key: str)
     if section is None:
         raise HTTPException(status_code=404, detail="当前实例没有该功能配置")
     return {
+        "protocol_version": feature.protocol_version,
         "key": feature.key,
         "task_name": feature.task_name,
         "name": feature.display_name,
@@ -78,9 +80,12 @@ async def list_multi_account_feature_accounts(script_name: str, feature_key: str
     if section is None:
         raise HTTPException(status_code=404, detail="当前实例没有该功能配置")
     accounts = []
-    for index, account in enumerate(getattr(section, "account_list", []), start=1):
-        if not str(getattr(account, "public_account_identifier", "") or "").strip():
-            continue
+    configured_accounts = [
+        account
+        for account in getattr(section, "account_list", [])
+        if str(getattr(account, "public_account_identifier", "") or "").strip()
+    ]
+    for index, account in enumerate(configured_accounts, start=1):
         scheduler = getattr(account, "scheduler", None)
         tasks = getattr(account, "task_list", [])
         accounts.append({

@@ -2,7 +2,6 @@ import copy
 import random
 import re
 from datetime import datetime, time, timedelta
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
@@ -15,12 +14,24 @@ from module.config.utils import (
 )
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
+from module.server.multi_account_router_support import is_multi_account_task, runnable_account
+from module.server.multi_account_task_config_service import (
+    apply_private_args as _apply_private_args,
+    convert_argument as _convert_argument,
+    default_private_config as _build_default_private_config,
+    default_task_args as _default_task_args,
+    find_group as _find_group,
+    has_task_script as _has_task_script,
+    public_account as _public_account,
+    serialize_group as _serialize_group,
+    sync_task_account as _sync_task_account,
+    task_account as _task_account,
+)
 from module.server.multi_account_config_mode import is_config_mode_field, parse_config_mode, with_config_mode_group
 from tasks.MultiAccountRepeatTimed.config import (
     MultiAccountRepeatTimedAccount,
     MultiAccountRepeatTimedTask,
 )
-from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
 from tasks.Component.config_base import TimeDelta
 from tasks.MultiAccountRepeatTimed.task_name_resolver import TASK_NAME_ALIASES, TaskNameResolver
 
@@ -117,11 +128,15 @@ def _refresh_outer_scheduler(script_name: str, section) -> None:
     next_runs = [
         entry.next_run
         for account in section.account_list
+        if runnable_account(script_name, account)
         for entry in account.task_list
         if _entry_scheduler_enabled(script_name, entry) and entry.task_name and entry.next_run
     ]
-    if next_runs:
-        section.scheduler.next_run = min(next_runs).replace(microsecond=0)
+    section.scheduler.next_run = (
+        min(next_runs).replace(microsecond=0)
+        if next_runs
+        else datetime.max.replace(microsecond=0)
+    )
 
 
 def _save_timed_section(script_name: str, section) -> None:
@@ -130,16 +145,6 @@ def _save_timed_section(script_name: str, section) -> None:
     _save(script_name, multi_account_repeat_timed=section)
 
 
-def _has_task_script(task_name: str) -> bool:
-    """仅允许添加存在可执行 script_task.py 的普通任务。"""
-    task_key = convert_to_underscore(task_name)
-    tasks_root = Path.cwd() / "tasks"
-    return any(
-        directory.is_dir()
-        and convert_to_underscore(directory.name) == task_key
-        and (directory / "script_task.py").is_file()
-        for directory in tasks_root.iterdir()
-    )
 
 def _task_display_name(task_name: str) -> str:
     """返回任务在多账号页面使用的中文显示名称，内部任务标识仍保持不变。"""
@@ -148,18 +153,8 @@ def _task_display_name(task_name: str) -> str:
     return aliases[0] if aliases else canonical_name
 
 
-def _public_account(library, identifier: str) -> SharedPublicAccount:
-    account = library.find(identifier)
-    if account is None:
-        raise HTTPException(status_code=404, detail="公共账号不存在")
-    return account
 
 
-def _task_account(section, account_index: int) -> MultiAccountRepeatTimedAccount:
-    accounts = [item for item in section.account_list if item.public_account_identifier.strip()]
-    if account_index < 1 or account_index > len(accounts):
-        raise HTTPException(status_code=404, detail="运行账号不存在")
-    return accounts[account_index - 1]
 
 
 def _find_task_entry(account: MultiAccountRepeatTimedAccount, task_name: str) -> MultiAccountRepeatTimedTask | None:
@@ -192,116 +187,14 @@ def _ensure_disabled_task_entry(
     return entry
 
 
-def _serialize_group(group: BaseModel) -> list[dict]:
-    """将单个公共配置组转换成 OASX 参数表单格式。"""
-    schema = group.__class__.model_json_schema()
-    values = group.model_dump()
-    definitions = schema.get("$defs", {})
-    result = []
-    for name, definition in schema.get("properties", {}).items():
-        if "default" not in definition:
-            continue
-        item = {
-            "name": name,
-            "title": definition.get("title", name),
-            "description": definition.get("description", ""),
-            "default": definition["default"],
-            "value": values.get(name, definition["default"]),
-            "type": definition.get("type", "enum"),
-        }
-        ref = definition.get("$ref")
-        if ref:
-            enum_name = ref.rsplit("/", 1)[-1]
-            if "enum" in definitions.get(enum_name, {}):
-                item["enumEnum"] = definitions[enum_name]["enum"]
-        result.append(item)
-    return result
 
 
-def _find_group(model: BaseModel, group_name: str):
-    normalized = convert_to_underscore(group_name)
-    group = getattr(model, normalized, None)
-    if group is not None:
-        return group
-    matches = re.findall(r"\d+", normalized)
-    index = int(matches[-1]) - 1 if matches else -1
-    if index < 0:
-        return None
-    for field_name, value in model.__dict__.items():
-        if field_name in normalized and isinstance(value, list) and index < len(value):
-            return value[index]
-    return None
 
 
-def _convert_argument(types: str, value):
-    """转换 OASX 表单值，确保私有 Pydantic 配置可被序列化和校验。"""
-    if types == "integer":
-        return int(value)
-    if types == "number":
-        return float(value)
-    if types == "boolean":
-        return value.lower() in {"true", "1"} if isinstance(value, str) else bool(value)
-    if types == "date_time":
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-    if types == "time":
-        return datetime.strptime(value, "%H:%M:%S").time()
-    if types == "time_delta":
-        day, clock = value.strip().split(maxsplit=1)
-        parsed = datetime.strptime(clock, "%H:%M:%S")
-        return TimeDelta(
-            days=int(day),
-            hours=parsed.hour,
-            minutes=parsed.minute,
-            seconds=parsed.second,
-        )
-    if types == "weekday_multi":
-        days = sorted({int(item.strip()) for item in str(value).split(",") if item.strip()})
-        if any(day < 1 or day > 7 for day in days):
-            raise ValueError("weekday must be between 1 and 7")
-        return days
-    return value
 
 
-def _default_private_config(script_name: str, task_name: str) -> dict:
-    """Build a complete private override from the task model defaults only."""
-    model = mm.config_cache(script_name).model
-    task_config = getattr(model, convert_to_underscore(task_name), None)
-    if not isinstance(task_config, BaseModel):
-        raise HTTPException(status_code=400, detail="任务配置不存在")
-    default_config = task_config.__class__()
-    current_args = model.script_task(task_name)
-    private: dict = {}
-    for group_name, arguments in current_args.items():
-        normalized_group = convert_to_underscore(group_name)
-        if not isinstance(arguments, list):
-            continue
-        default_group = _find_group(default_config, group_name)
-        if not isinstance(default_group, BaseModel):
-            continue
-        values = {
-            convert_to_underscore(item["name"]): item["value"]
-            for item in _serialize_group(default_group)
-            if item.get("name")
-        }
-        if values:
-            private[normalized_group] = values
-    return private
 
 
-def _default_task_args(script_name: str, task_name: str, *, remove_scheduler: bool = False) -> dict:
-    """使用任务模型默认值生成设置页参数，避免继承已修改的公共配置。"""
-    model = mm.config_cache(script_name).model
-    task_key = convert_to_underscore(task_name)
-    task_config = getattr(model, task_key, None)
-    if not isinstance(task_config, BaseModel):
-        raise HTTPException(status_code=400, detail="任务配置不存在")
-    default_model = model.model_copy(deep=True)
-    # ConfigModel.__setattr__ 自动落盘；这里只构造参数快照，不能触发保存。
-    BaseModel.__setattr__(default_model, task_key, task_config.__class__())
-    task_args = copy.deepcopy(default_model.script_task(task_name))
-    if remove_scheduler:
-        task_args.pop("scheduler", None)
-    return task_args
 
 
 def _timed_task_overview_sort_key(
@@ -315,15 +208,20 @@ def _timed_task_overview_sort_key(
     return (1, next_run, index)
 
 
-def _sync_task_account(account: MultiAccountRepeatTimedAccount, source: SharedPublicAccount) -> None:
-    account.sync_public_account(source)
 
+
+
+def _default_private_config(script_name: str, task_name: str) -> dict:
+    return _build_default_private_config(
+        script_name, task_name, include_scheduler=True
+    )
 
 @multi_account_repeat_timed_app.get('/{script_name}/multi_account_repeat_timed/accounts')
 async def list_task_accounts(script_name: str):
     section = _section(script_name)
     accounts = []
     for index, item in enumerate([entry for entry in section.account_list if entry.public_account_identifier.strip()], start=1):
+        account_runnable = runnable_account(script_name, item)
         completed = set(item.completed_task_names)
         failed = set(item.failed_task_names)
         unfinished = set(item.unfinished_task_names)
@@ -335,7 +233,9 @@ async def list_task_accounts(script_name: str):
             scheduler = _entry_scheduler(script_name, task)
             enabled = _entry_scheduler_enabled(script_name, task)
             next_run = task.next_run
-            schedule_status = "pending" if enabled and next_run <= now else "waiting"
+            schedule_status = (
+                "pending" if account_runnable and enabled and next_run <= now else "waiting"
+            )
             try:
                 priority = int(getattr(scheduler, "priority", 5))
             except (TypeError, ValueError):
@@ -419,7 +319,7 @@ async def add_task(script_name: str, account_index: int, task_name: str):
     key = convert_to_underscore(task_name.strip())
     if not key or getattr(mm.config_cache(script_name).model, key, None) is None:
         raise HTTPException(status_code=400, detail="任务不存在")
-    if key.startswith("multi_account_repeat"):
+    if is_multi_account_task(key):
         raise HTTPException(status_code=400, detail="不能嵌套多账号多任务")
     if not _has_task_script(key):
         raise HTTPException(status_code=400, detail="该功能没有可执行任务，不能添加到多账号任务")

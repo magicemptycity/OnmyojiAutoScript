@@ -9,10 +9,9 @@ from tasks.Component.MultiAccount.multi_account_config import (
     load_indexed_models,
     serialize_indexed_models,
 )
-from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
+from tasks.Component.MultiAccount.scheduled_account_config import ScheduledAccountBase
 from tasks.Component.config_base import ConfigBase, Time
 from tasks.KekkaiUtilize.config import UtilizeConfig, UtilizeScheduler
-from tasks.MultiAccountTaskOrchestration.config import MultiAccountTaskConfigMode
 
 
 class MultiAccountKekkaiUtilizeNewConfig(ConfigBase, extra="allow"):
@@ -32,21 +31,9 @@ class MultiAccountKekkaiUtilizeNewForbidPeriod(ConfigBase):
     end: Time = Field(default=time.fromisoformat("00:00:00"), title="结束时间")
 
 
-class MultiAccountKekkaiUtilizeNewAccount(ConfigBase, extra="allow"):
+class MultiAccountKekkaiUtilizeNewAccount(ScheduledAccountBase, extra="allow"):
     """一个公共账号及其独立蹭卡配置、禁止时段和运行时间。"""
 
-    public_account_identifier: str = Field(default="", title="公共账号标识")
-    character: str = Field(default="")
-    svr: str = Field(default="")
-    account: str = Field(default="")
-    account_alias: str = Field(default="")
-    apple_or_android: bool = Field(default=True)
-    # 仅控制“多账号多任务蹭卡新”内的该账号，和下方 Scheduler.Enable 分离。
-    enabled: bool = Field(
-        default=True,
-        title="启用该功能账号",
-        description="停用后仅蹭卡新跳过该账号，保留 Scheduler、禁卡时段和私有配置。",
-    )
     # 每个账号都是一个独立的“虚拟 OAS 蹭卡任务”，拥有完整 Scheduler。
     scheduler: UtilizeScheduler = Field(default_factory=UtilizeScheduler)
     # 兼容旧配置与旧客户端；运行时与 scheduler.next_run 始终同步。
@@ -54,26 +41,12 @@ class MultiAccountKekkaiUtilizeNewAccount(ConfigBase, extra="allow"):
         default=datetime(2023, 1, 1),
         title="下一次蹭卡时间",
     )
-    last_complete_time: datetime = Field(default=datetime(2023, 1, 1))
-    config_mode: MultiAccountTaskConfigMode = Field(default=MultiAccountTaskConfigMode.PRIVATE, title="配置来源")
-    # 私有模式使用账号自己的配置；公共模式读取当前 OAS 实例蹭卡配置。
     private_config: dict[str, Any] = Field(
         default_factory=lambda: {"utilize_config": UtilizeConfig().model_dump()},
         json_schema_extra={"default": {}},
     )
     # 默认没有禁止蹭卡时段，可在页面中按需添加多条。
     forbid_periods: list[MultiAccountKekkaiUtilizeNewForbidPeriod] = Field(default_factory=list)
-
-    def is_valid(self) -> bool:
-        return bool(self.public_account_identifier.strip() and self.character.strip() and self.svr.strip())
-
-    def sync_public_account(self, source: SharedPublicAccount) -> None:
-        self.public_account_identifier = source.identifier.strip()
-        self.character = source.character
-        self.svr = source.svr
-        self.account = source.account
-        self.account_alias = source.account_alias
-        self.apple_or_android = source.apple_or_android
 
     @model_validator(mode="before")
     @classmethod

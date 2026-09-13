@@ -170,16 +170,14 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
         self.model = ConfigModel(config_name=self.config_name)
 
     def save_selected_fields(self, values: dict[str, Any] | None = None, *fields: str) -> None:
-        """只合并保存指定顶层配置，避免运行中的任务覆盖页面刚保存的其他配置。"""
+        """以跨进程事务方式合并指定顶层配置，避免页面与任务互相覆盖。"""
         values = values or {}
         selected_fields = set(fields) | set(values)
         if not selected_fields:
             return
 
-        latest_data = ConfigModel.read_json(self.config_name)
-        # 配置文件本身也会保存 config_name，构造模型时避免重复传参。
-        latest_data.pop("config_name", None)
         current_data = self.model.model_dump()
+        selected_data: dict[str, Any] = {}
         for field in selected_fields:
             if field in values:
                 value = values[field]
@@ -189,11 +187,22 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
             if field not in current_data:
                 logger.warning("保存配置时未找到字段：%s", field)
                 continue
-            latest_data[field] = current_data[field]
+            selected_data[field] = current_data[field]
 
-        # 写回前重新构造模型，保留页面在其他顶层配置中的最新修改。
-        self.model = ConfigModel(config_name=self.config_name, **latest_data)
-        self.model.save()
+        filepath = Path.cwd() / "config" / f"{self.config_name}.json"
+
+        merged_model: dict[str, ConfigModel] = {}
+
+        def merge(latest_data: dict[str, Any]) -> dict[str, Any]:
+            latest_data = dict(latest_data or {})
+            latest_data.pop("config_name", None)
+            latest_data.update(selected_data)
+            model = ConfigModel(config_name=self.config_name, **latest_data)
+            merged_model["value"] = model
+            return model.model_dump()
+
+        update_json_file(filepath, merge)
+        self.model = merged_model["value"]
 
     def save(self) -> None:
         """

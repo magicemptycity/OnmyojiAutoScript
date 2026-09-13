@@ -12,6 +12,19 @@ from module.config.model_overrides import model_with_field_overrides, model_with
 from module.config.utils import convert_to_underscore, parse_next_server_weekday, parse_tomorrow_server
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
+from module.server.multi_account_router_support import is_multi_account_task, runnable_account
+from module.server.multi_account_task_config_service import (
+    apply_private_args as _apply_private_args,
+    convert_argument as _convert_argument,
+    default_private_config as _build_default_private_config,
+    default_task_args as _default_task_args,
+    find_group as _find_group,
+    has_task_script as _has_task_script,
+    public_account as _public_account,
+    serialize_group as _serialize_group,
+    sync_task_account as _sync_task_account,
+    task_account as _task_account,
+)
 from module.server.multi_account_config_mode import is_config_mode_field, parse_config_mode, with_config_mode_group
 from module.server.multi_account_feature_registry import MULTI_ACCOUNT_FEATURES
 from tasks.MultiAccountTaskOrchestration.config import (
@@ -26,6 +39,7 @@ from tasks.MultiAccountTaskOrchestration.task_name_resolver import TASK_NAME_ALI
 
 
 multi_account_task_orchestration_app = APIRouter(route_class=ApiLoggingRoute)
+multi_account_shared_account_app = APIRouter(route_class=ApiLoggingRoute)
 
 
 def _section(script_name: str):
@@ -57,6 +71,43 @@ def _save(script_name: str, **fields) -> None:
     mm.config_cache(script_name).save_selected_fields(fields)
 
 
+def _refresh_all_outer_schedulers(script_name: str, sections: dict[str, object]) -> None:
+    """公共账号总开关变化后，立即重算所有新版多账号外层时间。"""
+    timed = sections.get("multi_account_repeat_timed")
+    if timed is not None:
+        from module.server.multi_account_repeat_timed_router import _refresh_outer_scheduler
+
+        _refresh_outer_scheduler(script_name, timed)
+
+    fixed = sections.get("multi_account_repeat_new_fixed")
+    if fixed is not None:
+        from module.server.multi_account_repeat_new_fixed_router import _refresh_fixed_batch_scheduler
+
+        _refresh_fixed_batch_scheduler(script_name, fixed)
+
+    orchestration = sections.get("multi_account_task_orchestration")
+    if orchestration is not None:
+        _refresh_fixed_batch_scheduler(orchestration, script_name)
+
+    for key in (
+        "multi_account_kekkai_utilize_new",
+        "multi_account_kekkai_activation_new",
+    ):
+        section = sections.get(key)
+        if section is None:
+            continue
+        next_runs = [
+            account.scheduler.next_run
+            for account in section.account_list
+            if runnable_account(script_name, account) and account.scheduler.enable
+        ]
+        section.scheduler.next_run = (
+            min(next_runs).replace(microsecond=0)
+            if next_runs
+            else datetime.max.replace(microsecond=0)
+        )
+
+
 async def _broadcast_multi_account_overview(script_name: str) -> None:
     """通过当前 OAS WebSocket 立即通知虚拟调度总览重排。"""
     process = mm.script_process.get(script_name)
@@ -70,16 +121,6 @@ async def _broadcast_multi_account_overview(script_name: str) -> None:
 
 
 
-def _has_task_script(task_name: str) -> bool:
-    """仅允许添加存在可执行 script_task.py 的普通任务。"""
-    task_key = convert_to_underscore(task_name)
-    tasks_root = Path.cwd() / "tasks"
-    return any(
-        directory.is_dir()
-        and convert_to_underscore(directory.name) == task_key
-        and (directory / "script_task.py").is_file()
-        for directory in tasks_root.iterdir()
-    )
 
 def _normalize_batch_task_names(script_name: str, task_names: str) -> list[str]:
     """校验顺序任务组中的任务；任务组只保存内部任务标识。"""
@@ -89,7 +130,7 @@ def _normalize_batch_task_names(script_name: str, task_names: str) -> list[str]:
         task_key = convert_to_underscore(raw_name.strip())
         if not task_key:
             continue
-        if task_key.startswith("multi_account_repeat") or task_key == "multi_account_task_orchestration":
+        if is_multi_account_task(task_key):
             raise HTTPException(status_code=400, detail="不能在顺序任务组中嵌套多账号任务")
         if getattr(model, task_key, None) is None or not _has_task_script(task_key):
             raise HTTPException(status_code=400, detail=f"任务不可执行：{raw_name.strip()}")
@@ -138,15 +179,6 @@ def _ensure_disabled_batch_task_entry(
     return entry
 
 
-def _apply_private_args(task_args: dict, private: dict) -> dict:
-    """将私有覆盖值套到 OASX 参数表单数据中。"""
-    for group_name, arguments in private.items():
-        if not isinstance(arguments, dict) or group_name not in task_args:
-            continue
-        for argument in task_args[group_name]:
-            if argument.get("name") in arguments:
-                argument["value"] = arguments[argument["name"]]
-    return task_args
 
 
 def _scheduler_next_run(scheduler: Scheduler, *, run_now: bool) -> datetime:
@@ -164,22 +196,23 @@ def _scheduler_next_run(scheduler: Scheduler, *, run_now: bool) -> datetime:
     return parse_tomorrow_server(scheduler.server_update, scheduler.delay_date, random_float)
 
 
-def _fixed_batch_target(section, script_name: str | None = None) -> datetime | None:
+def _fixed_batch_target(script_name: str, section) -> datetime | None:
     targets = [
         batch.scheduler.next_run
         for account in section.account_list
+        if runnable_account(script_name, account)
         for batch in account.fixed_time_batch_list
         if batch.scheduler.enable and batch.task_names
     ]
-    if script_name is not None:
-        targets.extend(
-            scheduler.next_run
-            for account in section.account_list
-            for entry in account.task_list
-            if entry.task_name
-            and (scheduler := _single_task_scheduler(script_name, entry)) is not None
-            and scheduler.enable
-        )
+    targets.extend(
+        scheduler.next_run
+        for account in section.account_list
+        if runnable_account(script_name, account)
+        for entry in account.task_list
+        if entry.task_name
+        and (scheduler := _single_task_scheduler(script_name, entry)) is not None
+        and scheduler.enable
+    )
     return min(targets) if targets else None
 
 
@@ -191,8 +224,8 @@ def _refresh_fixed_batch_next_run(batch: MultiAccountRepeatNewFixedTimeBatch, *,
         batch.scheduler.next_run = (now or datetime.now()).replace(microsecond=0)
 
 
-def _refresh_fixed_batch_scheduler(section, script_name: str | None = None) -> None:
-    target = _fixed_batch_target(section, script_name)
+def _refresh_fixed_batch_scheduler(section, script_name: str) -> None:
+    target = _fixed_batch_target(script_name, section)
     section.scheduler.next_run = (target or (datetime.now() + timedelta(days=1))).replace(microsecond=0)
 
 
@@ -320,18 +353,8 @@ def _task_display_name(task_name: str) -> str:
     return aliases[0] if aliases else canonical_name
 
 
-def _public_account(library, identifier: str) -> SharedPublicAccount:
-    account = library.find(identifier)
-    if account is None:
-        raise HTTPException(status_code=404, detail="公共账号不存在")
-    return account
 
 
-def _task_account(section, account_index: int) -> MultiAccountRepeatNewAccount:
-    accounts = [item for item in section.account_list if item.public_account_identifier.strip()]
-    if account_index < 1 or account_index > len(accounts):
-        raise HTTPException(status_code=404, detail="运行账号不存在")
-    return accounts[account_index - 1]
 
 
 def _find_task_entry(account: MultiAccountRepeatNewAccount, task_name: str) -> MultiAccountRepeatNewTask | None:
@@ -364,109 +387,25 @@ def _ensure_disabled_single_task_entry(
     return entry
 
 
-def _serialize_group(group: BaseModel) -> list[dict]:
-    """将单个公共配置组转换成 OASX 参数表单格式。"""
-    schema = group.__class__.model_json_schema()
-    values = group.model_dump()
-    definitions = schema.get("$defs", {})
-    result = []
-    for name, definition in schema.get("properties", {}).items():
-        if "default" not in definition:
-            continue
-        item = {
-            "name": name,
-            "title": definition.get("title", name),
-            "description": definition.get("description", ""),
-            "default": definition["default"],
-            "value": values.get(name, definition["default"]),
-            "type": definition.get("type", "enum"),
-        }
-        ref = definition.get("$ref")
-        if ref:
-            enum_name = ref.rsplit("/", 1)[-1]
-            if "enum" in definitions.get(enum_name, {}):
-                item["enumEnum"] = definitions[enum_name]["enum"]
-        result.append(item)
-    return result
 
 
-def _find_group(model: BaseModel, group_name: str):
-    normalized = convert_to_underscore(group_name)
-    group = getattr(model, normalized, None)
-    if group is not None:
-        return group
-    matches = re.findall(r"\d+", normalized)
-    index = int(matches[-1]) - 1 if matches else -1
-    if index < 0:
-        return None
-    for field_name, value in model.__dict__.items():
-        if field_name in normalized and isinstance(value, list) and index < len(value):
-            return value[index]
-    return None
 
 
-def _convert_argument(types: str, value):
-    if types == "integer":
-        return int(value)
-    if types == "number":
-        return float(value)
-    if types == "boolean":
-        return value.lower() in {"true", "1"} if isinstance(value, str) else bool(value)
-    if types == "weekday_multi":
-        days = sorted({int(item.strip()) for item in str(value).split(",") if item.strip()})
-        if any(day < 1 or day > 7 for day in days):
-            raise ValueError("weekday must be between 1 and 7")
-        return days
-    return value
+
+
+
+
+
+
+
 
 
 def _default_private_config(script_name: str, task_name: str) -> dict:
-    """Build a complete private override from the task model defaults only."""
-    model = mm.config_cache(script_name).model
-    task_config = getattr(model, convert_to_underscore(task_name), None)
-    if not isinstance(task_config, BaseModel):
-        raise HTTPException(status_code=400, detail="任务配置不存在")
-    default_config = task_config.__class__()
-    current_args = model.script_task(task_name)
-    private: dict = {}
-    for group_name, arguments in current_args.items():
-        normalized_group = convert_to_underscore(group_name)
-        if normalized_group == "scheduler" or not isinstance(arguments, list):
-            continue
-        default_group = _find_group(default_config, group_name)
-        if not isinstance(default_group, BaseModel):
-            continue
-        values = {
-            convert_to_underscore(item["name"]): item["value"]
-            for item in _serialize_group(default_group)
-            if item.get("name")
-        }
-        if values:
-            private[normalized_group] = values
-    return private
+    return _build_default_private_config(
+        script_name, task_name, include_scheduler=False
+    )
 
-
-def _default_task_args(script_name: str, task_name: str, *, remove_scheduler: bool = False) -> dict:
-    """使用任务模型默认值生成设置页参数，避免继承已修改的公共配置。"""
-    model = mm.config_cache(script_name).model
-    task_key = convert_to_underscore(task_name)
-    task_config = getattr(model, task_key, None)
-    if not isinstance(task_config, BaseModel):
-        raise HTTPException(status_code=400, detail="任务配置不存在")
-    default_model = model.model_copy(deep=True)
-    # ConfigModel.__setattr__ 自动落盘；这里只构造参数快照，不能触发保存。
-    BaseModel.__setattr__(default_model, task_key, task_config.__class__())
-    task_args = copy.deepcopy(default_model.script_task(task_name))
-    if remove_scheduler:
-        task_args.pop("scheduler", None)
-    return task_args
-
-
-def _sync_task_account(account: MultiAccountRepeatNewAccount, source: SharedPublicAccount) -> None:
-    account.sync_public_account(source)
-
-
-@multi_account_task_orchestration_app.get('/{script_name}/shared-accounts')
+@multi_account_shared_account_app.get('/{script_name}/shared-accounts')
 async def list_public_accounts(script_name: str):
     library = _library(script_name)
     accounts = []
@@ -485,7 +424,7 @@ async def list_public_accounts(script_name: str):
     return {"accounts": accounts}
 
 
-@multi_account_task_orchestration_app.post('/{script_name}/shared-accounts')
+@multi_account_shared_account_app.post('/{script_name}/shared-accounts')
 async def add_public_account(script_name: str, identifier: str):
     library = _library(script_name)
     normalized = identifier.strip()
@@ -500,7 +439,7 @@ async def add_public_account(script_name: str, identifier: str):
     return True
 
 
-@multi_account_task_orchestration_app.put('/{script_name}/shared-accounts/{identifier}/{field}/value')
+@multi_account_shared_account_app.put('/{script_name}/shared-accounts/{identifier}/{field}/value')
 async def set_public_account_value(script_name: str, identifier: str, field: str, types: str, value):
     library = _library(script_name)
     account = _public_account(library, identifier)
@@ -545,7 +484,7 @@ async def set_public_account_value(script_name: str, identifier: str, field: str
     return True
 
 
-@multi_account_task_orchestration_app.post('/{script_name}/shared-accounts/copy')
+@multi_account_shared_account_app.post('/{script_name}/shared-accounts/copy')
 async def copy_public_accounts_to_scripts(
         script_name: str,
         identifiers: str,
@@ -612,18 +551,24 @@ async def copy_public_accounts_to_scripts(
     return {"target_count": len(target_names), "account_count": len(source_accounts)}
 
 
-@multi_account_task_orchestration_app.put('/{script_name}/shared-accounts/{identifier}/enable')
+@multi_account_shared_account_app.put('/{script_name}/shared-accounts/{identifier}/enable')
 async def set_public_account_enabled(script_name: str, identifier: str, enable: bool):
     """切换当前 OAS 实例内的账号总开关，不触碰任一功能的私有任务配置。"""
     library = _library(script_name)
     account = _public_account(library, identifier)
     account.enabled = enable
-    _save(script_name, multi_account_shared_accounts=library)
+    sections = _all_shared_account_sections(script_name)
+    _refresh_all_outer_schedulers(script_name, sections)
+    _save(
+        script_name,
+        multi_account_shared_accounts=library,
+        **sections,
+    )
     await _broadcast_multi_account_overview(script_name)
     return True
 
 
-@multi_account_task_orchestration_app.delete('/{script_name}/shared-accounts/{identifier}')
+@multi_account_shared_account_app.delete('/{script_name}/shared-accounts/{identifier}')
 async def delete_public_account(script_name: str, identifier: str):
     library = _library(script_name)
     _public_account(library, identifier)
@@ -632,6 +577,7 @@ async def delete_public_account(script_name: str, identifier: str):
     library.account_count = max(1, len(library.account_list))
     for section in sections.values():
         section.account_list = [item for item in section.account_list if item.public_account_identifier != identifier]
+    _refresh_all_outer_schedulers(script_name, sections)
     _save(script_name, multi_account_shared_accounts=library, **sections)
     return True
 
@@ -693,6 +639,7 @@ async def set_task_account_enabled(script_name: str, account_index: int, enable:
     section = _section(script_name)
     account = _task_account(section, account_index)
     account.enabled = enable
+    _refresh_fixed_batch_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -714,7 +661,7 @@ async def add_task(script_name: str, account_index: int, task_name: str):
     key = convert_to_underscore(task_name.strip())
     if not key or getattr(mm.config_cache(script_name).model, key, None) is None:
         raise HTTPException(status_code=400, detail="任务不存在")
-    if key.startswith("multi_account_repeat"):
+    if is_multi_account_task(key):
         raise HTTPException(status_code=400, detail="不能嵌套多账号多任务")
     if not _has_task_script(key):
         raise HTTPException(status_code=400, detail="该功能没有可执行任务，不能添加到多账号任务")
@@ -777,7 +724,7 @@ async def list_fixed_time_tasks(script_name: str):
         task_key = convert_to_underscore(directory.name)
         if (
             not directory.is_dir()
-            or task_key.startswith("multi_account_repeat")
+            or is_multi_account_task(task_key)
             or task_key == "multi_account_task_orchestration"
             or not (directory / "script_task.py").is_file()
             or getattr(model, task_key, None) is None

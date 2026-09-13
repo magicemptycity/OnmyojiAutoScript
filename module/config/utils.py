@@ -101,6 +101,33 @@ def write_file(file: str, data):
             logger.warning(f'Unsupported config file extension: {ext}')
 
 
+def update_json_file(file: str, updater):
+    """在同一跨进程文件锁内完成 JSON 的读取、合并和原子写入。"""
+    file = os.fspath(file)
+    folder = os.path.dirname(file)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder, exist_ok=True)
+    lock = FileLock(f"{file}.lock")
+    with lock:
+        if os.path.exists(file):
+            with open(file, mode="r", encoding="utf-8") as stream:
+                source = json.loads(stream.read())
+        else:
+            source = {}
+        updated = updater(source)
+        with atomic_write(file, overwrite=True, encoding="utf-8", newline="") as stream:
+            stream.write(
+                json.dumps(
+                    updated,
+                    indent=2,
+                    ensure_ascii=False,
+                    sort_keys=False,
+                    default=str,
+                )
+            )
+        return updated
+
+
 def deep_iter(data, depth=0, current_depth=1):
     """
     Iter a dictionary safely.
