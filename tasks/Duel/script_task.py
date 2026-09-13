@@ -126,6 +126,10 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
         logger.hr('duel battle matching')
         while not self.is_in_battle_prepare():
             self.screenshot()
+            # 对方在进入准备页前退出，直接出现胜利结算。
+            if self.is_battle_end():
+                logger.info("Duel ended before battle preparation")
+                return
             # 战斗按钮
             self.ui_click_until_disappear(self.I_D_BATTLE, interval=1.2)
             self.ui_click_until_disappear(self.I_D_BATTLE2, interval=1.2)
