@@ -142,5 +142,101 @@
     "roiFront": "42,94,1207,543",
     "roiBack": "42,94,1207,543",
     "description": "整体随机点击"
+  },
+  {
+    "itemName": "random_1",
+    "roiFront": "1166,562,100,151",
+    "roiBack": "1166,562,100,151",
+    "description": ""
+  },
+  {
+    "itemName": "random_2",
+    "roiFront": "1179,378,100,151",
+    "roiBack": "1179,378,100,151",
+    "description": ""
+  },
+  {
+    "itemName": "random_3",
+    "roiFront": "1177,275,100,151",
+    "roiBack": "1177,275,100,151",
+    "description": ""
+  },
+  {
+    "itemName": "random_4",
+    "roiFront": "1043,628,134,87",
+    "roiBack": "1043,628,134,87",
+    "description": ""
+  },
+  {
+    "itemName": "random_5",
+    "roiFront": "874,626,134,87",
+    "roiBack": "874,626,134,87",
+    "description": ""
+  },
+  {
+    "itemName": "random_6",
+    "roiFront": "1176,70,100,151",
+    "roiBack": "1176,70,100,151",
+    "description": ""
+  },
+  {
+    "itemName": "random_7",
+    "roiFront": "1083,44,140,103",
+    "roiBack": "1083,44,140,103",
+    "description": ""
+  },
+  {
+    "itemName": "random_8",
+    "roiFront": "912,46,140,103",
+    "roiBack": "912,46,140,103",
+    "description": ""
+  },
+  {
+    "itemName": "random_9",
+    "roiFront": "566,655,188,59",
+    "roiBack": "566,655,188,59",
+    "description": ""
+  },
+  {
+    "itemName": "random_10",
+    "roiFront": "6,117,91,132",
+    "roiBack": "6,117,91,132",
+    "description": ""
+  },
+  {
+    "itemName": "random_11",
+    "roiFront": "0,295,55,192",
+    "roiBack": "0,295,55,192",
+    "description": ""
+  },
+  {
+    "itemName": "random_12",
+    "roiFront": "0,439,100,151",
+    "roiBack": "0,439,100,151",
+    "description": ""
+  },
+  {
+    "itemName": "random_13",
+    "roiFront": "238,685,182,34",
+    "roiBack": "238,685,182,34",
+    "description": ""
+  },
+  {
+    "itemName": "random_14",
+    "roiFront": "668,50,141,102",
+    "roiBack": "668,50,141,102",
+    "description": ""
+  },
+  {
+    "itemName": "random_15",
+    "roiFront": "13,619,99,94",
+    "roiBack": "13,619,99,94",
+    "description": ""
+  },
+  {
+    "itemName": "random_16",
+    "roiFront": "89,684,123,35",
+    "roiBack": "89,684,123,35",
+    "description": ""
   }
 ]

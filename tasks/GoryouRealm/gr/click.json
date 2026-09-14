@@ -22,5 +22,11 @@
     "roiFront": "1026,82,206,334",
     "roiBack": "1026,82,206,334",
     "description": "description"
+  },
+  {
+    "itemName": "gr_level_3",
+    "roiFront": "93,356,124,55",
+    "roiBack": "93,356,124,55",
+    "description": ""
   }
 ]

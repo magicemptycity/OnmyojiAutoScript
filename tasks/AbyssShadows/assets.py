@@ -1,5 +1,6 @@
 from module.atom.image import RuleImage
 from module.atom.click import RuleClick
+from module.atom.scatter import RuleScatter
 from module.atom.long_click import RuleLongClick
 from module.atom.swipe import RuleSwipe
 from module.atom.ocr import RuleOcr
@@ -118,6 +119,10 @@ class AbyssShadowsAssets:
 	I_CHECK_ABYSS = RuleImage(roi_front=(1082,14,52,50), roi_back=(992,0,247,80), threshold=0.8, method="Template matching", file="./tasks/AbyssShadows/res/res_check_abyss.png")
 	# 极难度 
 	I_DIFFICULTY_EXTREME = RuleImage(roi_front=(644,593,40,39), roi_back=(620,383,89,263), threshold=0.8, method="Template matching", file="./tasks/AbyssShadows/res/res_difficulty_extreme.png")
+	#  
+	I_OPEN_QUICK_LOADOUT = RuleImage(roi_front=(897,625,45,46), roi_back=(892,620,55,56), threshold=0.8, method="Template matching", file="./tasks/AbyssShadows/res/res_open_quick_loadout.png")
+	#  
+	I_ABYSS_QUICK_LOADOUT_FIGHT = RuleImage(roi_front=(811,540,119,42), roi_back=(806,535,129,52), threshold=0.8, method="Template matching", file="./tasks/AbyssShadows/res/res_abyss_quick_loadout_fight.png")
 
 
 	# List Rule Assets

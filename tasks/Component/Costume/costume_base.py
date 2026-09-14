@@ -26,8 +26,15 @@ main_costume_model = {
         'I_HARVEST_MAIL': f'I_HARVEST_MAIL_{i}',
         'I_HARVEST_SOUL': f'I_HARVEST_SOUL_{i}',
         'I_HARVEST_GUILD_REWARD': f'I_HARVEST_GUILD_REWARD_{i}'
-    } for i in range(1, 17)
+    } for i in range(1, 18)
 }
+
+MAIN_COSTUME_ASSET_KEYS = {
+    key
+    for model in main_costume_model.values()
+    for key in model
+}
+_default_main_assets: dict[str, RuleImage] = {}
 
 # 战斗主题（使用循环处理常规情况 + 特例处理）
 battle_theme_model = {}
@@ -66,7 +73,7 @@ shikigami_costume_model = {
         'I_ST_SOULS': f'I_ST_SOULS_{i}',
         'I_ST_REPLACE': f'I_ST_REPLACE_{i}',
     }
-    for i in range(1, 11)  # 目前支持 COSTUME_SHIKIGAMI_1 到 COSTUME_SHIKIGAMI_10
+    for i in range(1, 13)  # 目前支持 COSTUME_SHIKIGAMI_1 到 COSTUME_SHIKIGAMI_10
 }
 
 # 庭院事务皮肤
@@ -97,22 +104,143 @@ class CostumeBase:
             return
         # setattr(self, asset_before, asset_after)
         asset_before_object: RuleImage = getattr(self, asset_before)
-        asset_before_object.roi_front = asset_after.roi_front
+        asset_before_object.roi_front = list(asset_after.roi_front)
         if rp_roi_back:
-            asset_before_object.roi_back = asset_after.roi_back
+            asset_before_object.roi_back = tuple(asset_after.roi_back)
         asset_before_object.threshold = asset_after.threshold
+        asset_before_object.method = asset_after.method
         asset_before_object.file = asset_after.file
+        asset_before_object.scale_range = asset_after.scale_range
+        asset_before_object.scale_step = asset_after.scale_step
+        asset_before_object._image = None
+        asset_before_object._kp = None
+        asset_before_object._des = None
+        asset_before_object._match_init = False
+        asset_before_object.__dict__.pop('name', None)
 
-    def check_costume_main(self, main_type: MainType):
-        if main_type == MainType.COSTUME_MAIN:
-            return
-        logger.info(f'Switch main costume to {main_type}')
-        costume_assets = CostumeAssets()
-        for key, value in main_costume_model[main_type].items():
-            assert_value: RuleImage = getattr(costume_assets, value, None)
-            if assert_value is None:
+    @staticmethod
+    def _clone_rule_image(rule: RuleImage) -> RuleImage:
+        clone = RuleImage(
+            roi_front=tuple(rule.roi_front),
+            roi_back=tuple(rule.roi_back),
+            threshold=rule.threshold,
+            method=rule.method,
+            file=rule.file,
+        )
+        clone.scale_range = rule.scale_range
+        clone.scale_step = rule.scale_step
+        return clone
+
+    def _snapshot_default_main_assets(self) -> None:
+        """在首次替换前保存当前任务可见的原始庭院素材。"""
+        for key in MAIN_COSTUME_ASSET_KEYS:
+            if key in _default_main_assets or not hasattr(self, key):
                 continue
-            self.replace_img(key, assert_value)
+            rule = getattr(self, key)
+            if isinstance(rule, RuleImage):
+                _default_main_assets[key] = self._clone_rule_image(rule)
+
+    def _main_check_rule(self, main_type: MainType) -> RuleImage | None:
+        if main_type == MainType.COSTUME_MAIN:
+            return _default_main_assets.get('I_CHECK_MAIN')
+        asset_name = main_costume_model[main_type]['I_CHECK_MAIN']
+        return getattr(self._costume_main_assets, asset_name, None)
+
+    def _infer_active_main_type(self) -> MainType | None:
+        if not hasattr(self, 'I_CHECK_MAIN'):
+            return None
+        active_file = str(self.I_CHECK_MAIN.file).replace('\\', '/').lower()
+        for main_type in MainType:
+            rule = self._main_check_rule(main_type)
+            if rule is None:
+                continue
+            if str(rule.file).replace('\\', '/').lower() == active_file:
+                return main_type
+        return None
+
+    def _activate_main_costume(self, main_type: MainType) -> None:
+        """恢复默认素材后覆盖目标庭院，避免可选素材沿用上一套。"""
+        for key, default_rule in _default_main_assets.items():
+            self.replace_img(key, default_rule)
+
+        if main_type != MainType.COSTUME_MAIN:
+            for key, value in main_costume_model[main_type].items():
+                target_rule = getattr(self._costume_main_assets, value, None)
+                if target_rule is not None:
+                    self.replace_img(key, target_rule)
+
+        self.current_main_type = main_type
+        device = getattr(self, 'device', None)
+        invalidate = getattr(device, 'invalidate_image_batch_cache', None)
+        if callable(invalidate):
+            invalidate()
+        logger.info(f'Active main costume: {main_type.value}')
+
+    def check_costume_main(self, main_types: MainType | list[MainType]):
+        self._snapshot_default_main_assets()
+        self._costume_main_assets = CostumeAssets()
+        if isinstance(main_types, (str, MainType)):
+            main_types = [MainType(main_types)]
+        else:
+            main_types = [MainType(item) for item in main_types]
+        self._main_costume_candidates = tuple(dict.fromkeys(main_types))
+
+        if len(self._main_costume_candidates) == 1:
+            self._activate_main_costume(self._main_costume_candidates[0])
+            return
+
+        self.current_main_type = self._infer_active_main_type()
+        logger.info(
+            'Enable random main costume detection: '
+            + ', '.join(item.value for item in self._main_costume_candidates)
+        )
+
+    def detect_random_main_costume(self, threshold: float = None) -> bool:
+        """当前庭院模板失配时批量识别候选皮肤并切换整套素材。"""
+        candidates = getattr(self, '_main_costume_candidates', ())
+        if len(candidates) <= 1 or not hasattr(self, 'device'):
+            return False
+
+        rules = []
+        rule_types = []
+        for main_type in candidates:
+            if main_type == getattr(self, 'current_main_type', None):
+                continue
+            rule = self._main_check_rule(main_type)
+            if rule is not None:
+                rules.append(rule)
+                rule_types.append(main_type)
+        if not rules:
+            return False
+
+        if threshold is None and hasattr(self, 'prepare_appear_cache'):
+            self.prepare_appear_cache(rules)
+
+        for main_type, rule in zip(rule_types, rules):
+            if threshold is None:
+                cached = self.device.get_image_batch_cache(
+                    rule, frame_id=self.device.image_frame_id
+                )
+                matched = (
+                    rule._apply_match_result(cached)
+                    if cached is not None
+                    else rule.match(
+                        self.device.image,
+                        frame_id=self.device.image_frame_id,
+                    )
+                )
+            else:
+                matched = rule.match(
+                    self.device.image,
+                    threshold=threshold,
+                    frame_id=self.device.image_frame_id,
+                )
+            if not matched:
+                continue
+            logger.info(f'Detected random main costume: {main_type.value}')
+            self._activate_main_costume(main_type)
+            return True
+        return False
 
     def check_costume_battle(self, battle_type: BattleType):
         if battle_type == BattleType.COSTUME_BATTLE_DEFAULT:

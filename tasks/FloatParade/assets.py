@@ -15,7 +15,7 @@ class FloatParadeAssets:
 	I_FP_ACCESS = RuleImage(roi_front=(564,470,43,34), roi_back=(171,241,963,356), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_access.png")
 	# description 
 	I_FP_GETALL0 = RuleImage(roi_front=(1153,287,65,56), roi_back=(1134,261,100,100), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_getall0.png")
-	# 下方领取 
+	# 下方领取
 	I_FP_GETALL1 = RuleImage(roi_front=(1196,590,42,42), roi_back=(1163,506,113,164), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_getall1.png")
 	# description 
 	I_FP_BATCH_TRUE = RuleImage(roi_front=(938,518,35,37), roi_back=(924,506,64,62), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_batch_true.png")
@@ -33,13 +33,12 @@ class FloatParadeAssets:
 	I_FP_GIFT_FLAG1 = RuleImage(roi_front=(559,295,55,44), roi_back=(559,295,55,44), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_gift_flag1.png")
 	# 礼包类型2 
 	I_FP_GIFT_FLAG2 = RuleImage(roi_front=(557,293,58,47), roi_back=(557,293,58,47), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_gift_flag2.png")
-	# 放置奖励入口 
+	# 放置奖励入口
 	I_FP_PLACEMENT_REWARD_ENTER = RuleImage(roi_front=(36,89,49,44), roi_back=(8,73,104,88), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_placement_reward_enter.png")
-	# 放置奖励可领取 
+	# 放置奖励可领取
 	I_FP_PR_CAN_GET = RuleImage(roi_front=(795,514,135,44), roi_back=(769,494,192,92), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_pr_can_get.png")
-	# 放置奖励不可领取 
+	# 放置奖励不可领取
 	I_FP_PR_CANNOT_GET = RuleImage(roi_front=(795,514,135,44), roi_back=(769,494,192,92), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_pr_cannot_get.png")
-	# 花车放置界面标志 
+	# 花车放置界面标志
 	I_FP_PR_CHECK = RuleImage(roi_front=(194,91,167,46), roi_back=(161,65,229,102), threshold=0.8, method="Template matching", file="./tasks/FloatParade/fp/fp_fp_pr_check.png")
-
 
