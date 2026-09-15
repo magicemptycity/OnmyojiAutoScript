@@ -164,7 +164,7 @@ def _refresh_fixed_batch_next_run(batch: MultiAccountRepeatNewFixedTimeBatch, *,
         batch.scheduler.next_run = (now or datetime.now()).replace(microsecond=0)
 
 
-def _refresh_fixed_batch_scheduler(script_name: str, section) -> None:
+def refresh_fixed_time_scheduler(script_name: str, section) -> None:
     target = _fixed_batch_target(script_name, section)
     section.scheduler.next_run = (
         target.replace(microsecond=0)
@@ -327,7 +327,7 @@ async def set_task_account_enabled(script_name: str, account_index: int, enable:
     section = _section(script_name)
     account = _task_account(section, account_index)
     account.enabled = enable
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -421,7 +421,7 @@ async def add_fixed_time_batch(
         scheduler=scheduler,
     )
     account.fixed_time_batch_list.append(batch)
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return _serialize_fixed_batch(account, batch)
 
@@ -432,7 +432,7 @@ async def delete_fixed_time_batch(script_name: str, account_index: int, batch_id
     account = _task_account(section, account_index)
     batch = _batch(account, batch_id)
     account.fixed_time_batch_list.remove(batch)
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 
@@ -480,7 +480,7 @@ async def copy_fixed_time_batch_to_accounts(
         copied_count += 1
     if not copied_count:
         raise HTTPException(status_code=400, detail="没有可复制的目标账号")
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 @multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/enable')
@@ -488,7 +488,7 @@ async def set_fixed_time_batch_enable(script_name: str, account_index: int, batc
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
     batch.scheduler.enable = _convert_argument("boolean", value)
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 
@@ -502,7 +502,7 @@ async def set_fixed_time_batch_run_time(script_name: str, account_index: int, ba
         batch.scheduler.next_run = _scheduler_next_run(batch.scheduler, run_now=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="运行时间格式错误，应为 HH:MM") from exc
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 
@@ -548,7 +548,7 @@ async def set_fixed_time_batch_schedule(
     scheduler.delay_date = interval_days
     scheduler.weekdays = parsed_weekdays or list(range(1, 8))
     scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 
@@ -591,7 +591,7 @@ async def set_fixed_time_batch_scheduler_arg(
         _apply_fixed_batch_scheduler(batch, scheduler)
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"特殊任务调度器参数无效：{exc}") from exc
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -602,7 +602,7 @@ async def quick_schedule_fixed_time_batch(script_name: str, account_index: int, 
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
     batch.scheduler.next_run = _scheduler_next_run(batch.scheduler, run_now=run_now)
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -694,7 +694,7 @@ async def add_fixed_time_batch_task(script_name: str, account_index: int, batch_
         # 重新添加只恢复启用状态，保留之前停用时留下的私有配置和运行记录。
         entry.enable = True
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 
@@ -714,7 +714,7 @@ async def set_fixed_time_batch_task_enable(
     entry = _batch_task_entry(batch, task_name)
     entry.enable = _convert_argument("boolean", value)
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 
@@ -728,7 +728,7 @@ async def delete_fixed_time_batch_task(script_name: str, account_index: int, bat
     # OAS 左滑停用语义：不删除任务私有配置，仅取消当前时间段的启用状态。
     entry.enable = False
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(script_name, section)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 

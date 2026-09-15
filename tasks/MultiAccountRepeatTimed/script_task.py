@@ -107,10 +107,11 @@ class ScriptTask(MultiAccountRepeatNewBase):
             )
             if not self._run_timed_task(account, entry):
                 overall_failed = True
-            self._publish_multi_account_overview("timed", None)
             # 每个账号任务结束后立即落盘，避免等待该账号其他任务结束，
-            # 也避免外层调度器继续使用旧的 next_run 反复循环。
+            # 也避免外层调度器继续使用旧的 next_run 反复循环。状态保存
+            # 完成后再通知页面重新读取，避免读取到任务结束前的旧数据。
             self._refresh_outer_next_run(success=not overall_failed)
+            self._publish_multi_account_overview("timed", None)
 
         self._refresh_outer_next_run(success=not overall_failed)
         raise TaskEnd(self.task_name)

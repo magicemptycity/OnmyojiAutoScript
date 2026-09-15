@@ -9,6 +9,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
 
     task_name: ClassVar[str] = "MultiAccountRepeatNewNormal"
     multi_account_config_attr: ClassVar[str] = "multi_account_repeat_new_normal"
+    overview_kind: ClassVar[str] = "normal"
     fade_conf: MultiAccountRepeatNewNormal = None
     task_display_names: ClassVar[dict[str, str]] = {
         "MultiAccountRepeatNewNormal": "多账号多任务新普通",

@@ -7,6 +7,7 @@ TASK_NAME_ALIASES = {
     'MultiAccountTaskOrchestration': ['多账号任务编排'],
     'MultiAccountRepeatNew': ['多账号多任务新'],
     'MultiAccountRepeatNewNormal': ['多账号多任务新普通'],
+    'MultiAccountCooperation': ['多账号协战'],
     'MultiAccountRepeatNewFixed': ['多账号多任务新固定时间'],
     'Restart': ['重启'],
     'Orochi': ['八岐大蛇'],

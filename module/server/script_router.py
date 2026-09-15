@@ -4,13 +4,14 @@
 import asyncio
 import json
 from urllib.parse import quote
+from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from fastapi.responses import Response, StreamingResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime, timedelta
-from module.config.utils import convert_to_underscore
+from module.config.utils import convert_to_underscore, update_json_file
 from module.config.config_model import ConfigModel
 from module.config.weekly_schedule import WeeklySchedule
 
@@ -32,6 +33,36 @@ from tasks.Component.config_base import TimeDelta
 
 
 script_app = APIRouter(route_class=ApiLoggingRoute)
+
+
+class ScriptArgumentUpdate(BaseModel):
+    group: str
+    argument: str
+    types: str
+    value: object = None
+
+
+def _convert_script_argument(types: str, value):
+    if types == "integer":
+        return int(value)
+    if types == "number":
+        return float(value)
+    if types == "boolean":
+        return str(value).lower() in {"true", "1"} if isinstance(value, str) else bool(value)
+    if types in {"date_time", "next_run"}:
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+    if types == "time_delta":
+        days, clock = str(value).split(" ", 1)
+        parsed = datetime.strptime(clock, "%H:%M:%S")
+        return TimeDelta(days=int(days), hours=parsed.hour, minutes=parsed.minute, seconds=parsed.second)
+    if types == "time":
+        return datetime.strptime(str(value), "%H:%M:%S").time()
+    if types == "weekday_multi":
+        days = sorted({int(item.strip()) for item in str(value).split(",") if item.strip()})
+        if any(day < 1 or day > 7 for day in days):
+            raise ValueError("weekday must be between 1 and 7")
+        return days
+    return value
 
 
 class WeeklyScheduleEntryRequest(BaseModel):
@@ -585,46 +616,42 @@ async def apply_weekly_schedule(
 async def script_task(script_name: str, task: str):
     return mm.config_cache(script_name).model.script_task(task)
 
+@script_app.put('/{script_name}/{task}/arguments')
+async def update_script_arguments(script_name: str, task: str, updates: list[ScriptArgumentUpdate]):
+    """在一个锁事务中保存整张表单，避免动态账号在字段请求之间被清理。"""
+    task_key = convert_to_underscore(task)
+    try:
+        converted = [
+            (convert_to_underscore(item.group), convert_to_underscore(item.argument),
+             _convert_script_argument(item.types, item.value))
+            for item in updates
+        ]
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Argument type error: {exc}") from exc
+
+    filepath = Path.cwd() / "config" / f"{script_name}.json"
+    def apply(source):
+        source = dict(source or {})
+        task_data = source.get(task_key)
+        if not isinstance(task_data, dict):
+            raise HTTPException(status_code=404, detail="Task not found")
+        for group, argument, value in converted:
+            group_data = task_data.get(group)
+            if not isinstance(group_data, dict) or argument not in group_data:
+                raise HTTPException(status_code=404, detail=f"Argument not found: {group}.{argument}")
+            group_data[argument] = value
+        source.pop("config_name", None)
+        return ConfigModel(config_name=script_name, **source).model_dump()
+    update_json_file(filepath, apply)
+    return True
+
+
 @script_app.put('/{script_name}/{task}/{group}/{argument}/value')
 async def script_task(script_name: str, task: str, group: str, argument: str, types: str, value):
-    try:
-        match types:
-            case 'integer':
-                value = int(value)
-            case 'number':
-                value = float(value)
-            case 'boolean':
-                if isinstance(value, str):
-                    logger.warning(f'[{script_name}] script argument {argument} value is string, try to convert to bool')
-                    if value.lower() in ['true', '1']:
-                        value = True
-                    elif value.lower() in ['false', '0']:
-                        value = False
-                value = bool(value)
-            case 'string':
-                pass
-            case 'date_time':
-                value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
-            case 'time_delta':
-                # strptime 是个好东西，但是不能解析00的天数
-                day = int(value[1])
-                date_time = datetime.strptime(value[3:], '%H:%M:%S')
-                value = TimeDelta(days=day, hours=date_time.hour, minutes=date_time.minute, seconds=date_time.second)
-            case 'time':
-                value = datetime.strptime(value, '%H:%M:%S').time()
-            case 'weekday_multi':
-                value = sorted({
-                    int(item.strip())
-                    for item in str(value).split(',')
-                    if item.strip()
-                })
-                if any(day < 1 or day > 7 for day in value):
-                    raise ValueError('weekday must be between 1 and 7')
-            case _: pass
-    except Exception as e:
-        # 类型不正确
-        raise HTTPException(status_code=400, detail=f'Argument type error: {e}')
-    return mm.config_cache(script_name).model.script_set_arg(task, group, argument, value)
+    return await update_script_arguments(
+        script_name, task,
+        [ScriptArgumentUpdate(group=group, argument=argument, types=types, value=value)],
+    )
 
 
 @script_app.put('/{script_name}/{task}/sync_next_run')

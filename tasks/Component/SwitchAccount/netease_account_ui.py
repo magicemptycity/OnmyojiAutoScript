@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import random
 import re
 import time
 from dataclasses import dataclass
 
 from lxml import etree
+
+from module.logger import logger
 
 
 class AccountUiUnavailable(RuntimeError):
@@ -27,10 +28,6 @@ class NeteaseAccountUi:
     ACCOUNT_LIST_ID = "netease_mpay__user_list"
     # “添加新账号”只会出现在账号列表底部，可作为可靠的到底标志。
     ADD_ACCOUNT_ID = "netease_mpay__add_user"
-    # 账号行约 110px：每次随机滑动 2～2.5 个账号，避免固定轨迹。
-    SCROLL_DISTANCE_RANGE = (220, 275)
-    SCROLL_DURATION_RANGE = (0.50, 0.70)
-    SCROLL_SETTLE_RANGE = (0.50, 0.70)
     ACCOUNT_TEXT_IDS = (
         "netease_mpay__login_username_with_tag",
         "netease_mpay__login_username",
@@ -194,32 +191,24 @@ class NeteaseAccountUi:
         list_nodes = self._nodes(root, self.ACCOUNT_LIST_ID)
         if not list_nodes:
             return False
-        # 向下搜索时在底部标志出现后立即停止，避免继续无效滑动。
-        if not toward_start and self._at_list_bottom(root):
-            return False
         left, top, right, bottom = self._bounds(list_nodes[0])
         x = (left + right) // 2
         height = bottom - top
-        # 一屏最多约三个账号。每次随机移动 2～2.5 个账号：既避免跨过
-        # 太多账号，也确保下一次控件树能看到足够明显的页面变化。
-        distance = random.randint(*self.SCROLL_DISTANCE_RANGE)
-        center_y = (top + bottom) // 2
         if toward_start:
-            start, end, name = (
-                (x, center_y - distance // 2),
-                (x, center_y + distance // 2),
-                "网易账号列表向上滑动",
-            )
+            start = (x, top + height // 3)
+            end = (x, bottom - height // 5)
+            name = "netease_account_list_to_start"
         else:
-            start, end, name = (
-                (x, center_y + distance // 2),
-                (x, center_y - distance // 2),
-                "网易账号列表向下滑动",
-            )
-        duration = random.uniform(*self.SCROLL_DURATION_RANGE)
-        self.device.swipe(start, end, duration=duration, control_name=name)
-        settle_seconds = max(self.settle_seconds, random.uniform(*self.SCROLL_SETTLE_RANGE))
-        time.sleep(settle_seconds)
+            start = (x, bottom - height // 5)
+            end = (x, top + height // 3)
+            name = "netease_account_list_to_end"
+        self.device.swipe(start, end, duration=0.35, control_name=name)
+        # 完整遍历账号列表可能需要反复双向滑动。这是预期行为，不应
+        # 被全局“两个按钮各点击六次”的防卡死规则误判。
+        remove_record = getattr(self.device, "click_record_remove", None)
+        if callable(remove_record):
+            remove_record(name)
+        time.sleep(self.settle_seconds)
         return True
 
     def _select_visible(self, root, target: str, matcher) -> bool:
@@ -234,8 +223,55 @@ class NeteaseAccountUi:
             return False
         return False
 
+    def _scan_to_edge(self, target: str, matcher, *, toward_start: bool) -> bool:
+        """沿一个方向扫描到边界，账号序列不再变化时结束。"""
+        previous: tuple[str, ...] | None = None
+        for _ in range(self.max_scrolls):
+            root = self.dump()
+            entries = self._account_entries(root)
+            signature = tuple(self.normalize_account(entry.account) for entry in entries)
+            if signature == previous or not entries:
+                return False
+            previous = signature
+            if self._select_visible(root, target, matcher):
+                return True
+            if not self._scroll(root, toward_start=toward_start):
+                return False
+        return False
+
+    def _reopen_list(self) -> bool:
+        """收起并重新展开账号列表，使 PopupWindow 和控件树重新创建。"""
+        root = self.dump()
+        list_nodes = self._nodes(root, self.ACCOUNT_LIST_ID)
+        if list_nodes:
+            candidates = []
+            for node in self._nodes(root, self.ACCOUNT_ITEM_ID):
+                if node.attrib.get("clickable") != "true":
+                    continue
+                inside_list = any(
+                    ancestor.attrib.get("resource-id", "").endswith(self.ACCOUNT_LIST_ID)
+                    for ancestor in node.iterancestors()
+                )
+                if not inside_list:
+                    candidates.append(node)
+            if len(candidates) != 1:
+                logger.warning("无法定位账号列表标题，不能重新展开账号列表")
+                return False
+            self._click_bounds(self._bounds(candidates[0]), "网易账号列表收起")
+            time.sleep(max(1.0, self.settle_seconds))
+
+        root = self.dump()
+        if self._nodes(root, self.ACCOUNT_LIST_ID):
+            logger.warning("网易账号列表收起后仍然可见")
+            return False
+        if not self._open_list(root):
+            logger.warning("网易账号列表重新展开失败")
+            return False
+        time.sleep(max(1.0, self.settle_seconds))
+        return True
+
     def select_account(self, target: str, matcher=None) -> bool:
-        """从控件树账号列表中选中目标账号，并确认选择结果。"""
+        """参考项目搜索顺序，并在失败时进行双向复查和刷新重试。"""
         matcher = matcher or (lambda actual: self.account_matches(actual, target))
         root = self.dump()
         if matcher(self.current_account(root)):
@@ -247,33 +283,26 @@ class NeteaseAccountUi:
         if self._select_visible(root, target, matcher):
             return True
 
-        # 混合搜索：先从当前位置向下；未找到则回到顶部；最后从顶部
-        # 向下完整扫描。既减少常见情况下的滑动，又保留完整遍历兜底。
-        for toward_start in (False, True, False):
-            previous = None
-            unchanged_count = 0
-            for _ in range(self.max_scrolls):
-                root = self.dump()
-                entries = self._account_entries(root)
-                if not entries:
-                    break
-                # 小幅滑动后可见账号名称可能相同，因此同时比较纵坐标，
-                # 并要求连续两次完全没有变化才认为到达边界。
-                signature = tuple(
-                    (self.normalize_account(entry.account), entry.bounds[1], entry.bounds[3])
-                    for entry in entries
-                )
-                if signature == previous:
-                    unchanged_count += 1
-                    if unchanged_count >= 2:
-                        break
-                else:
-                    unchanged_count = 0
-                previous = signature
-                if self._select_visible(root, target, matcher):
-                    return True
-                if not toward_start and self._at_list_bottom(root):
-                    break
-                if not self._scroll(root, toward_start=toward_start):
-                    break
+        # 参考项目核心：先归位顶部，再从顶部完整扫描到底部。
+        if self._scan_to_edge(target, matcher, toward_start=True):
+            return True
+        if self._scan_to_edge(target, matcher, toward_start=False):
+            return True
+
+        # 第一轮未找到：从底部反向完整扫描回顶部。
+        logger.info("网易账号首次扫描未找到目标，从底部向顶部复查")
+        if self._scan_to_edge(target, matcher, toward_start=True):
+            return True
+
+        # 双向均未找到时重新创建列表 PopupWindow，等待控件树刷新，
+        # 然后再执行一次“顶部到达底部”的最终完整扫描。
+        logger.info("网易账号双向扫描未找到目标，重新展开列表后最终重试")
+        if not self._reopen_list():
+            return False
+        if self._scan_to_edge(target, matcher, toward_start=True):
+            return True
+        if self._scan_to_edge(target, matcher, toward_start=False):
+            return True
+
+        logger.warning("网易账号三轮完整扫描后仍未找到目标")
         return False

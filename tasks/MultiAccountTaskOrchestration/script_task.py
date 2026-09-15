@@ -64,10 +64,13 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             return self._run_orchestration_items()
         overall_failed = False
 
-        for account_info in self.fade_conf.account_list:
+        for account_index, account_info in enumerate(self.fade_conf.account_list):
             self._yield_to_higher_priority_task()
             if not self._prepare_runnable_account(account_info, log_skip=True):
                 continue
+            self._publish_multi_account_overview(
+                self.overview_kind, {"account_index": account_index + 1}
+            )
             logger.hr(f"处理账号 {account_info.character}-{account_info.svr}", 2)
             logger.info("开始处理账号 %s-%s", account_info.character, account_info.svr)
 
@@ -182,6 +185,9 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
                 [],
                 [],
             )
+
+        # 账号状态已逐项保存，清除活动账号并通知页面重新读取最终状态。
+        self._publish_multi_account_overview(self.overview_kind, None)
 
         incomplete_accounts = self._get_incomplete_accounts_today()
         if (

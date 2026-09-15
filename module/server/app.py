@@ -19,6 +19,7 @@ from module.server.multi_account_task_orchestration_router import (
     multi_account_task_orchestration_app,
 )
 from module.server.multi_account_repeat_new_normal_router import multi_account_repeat_new_normal_app
+from module.server.multi_account_cooperation_router import multi_account_cooperation_app
 from module.server.multi_account_repeat_new_fixed_router import multi_account_repeat_new_fixed_app
 from module.server.multi_account_repeat_timed_router import multi_account_repeat_timed_app
 from module.server.multi_account_kekkai_utilize_new_router import multi_account_kekkai_utilize_new_app
@@ -60,6 +61,7 @@ app.include_router(multi_account_shared_account_app)
 # 必须注册在通用脚本参数路由之前，避免公共账号保存被 /{script_name}/{task}/{group}/{argument}/value 截获。
 app.include_router(multi_account_task_orchestration_app)
 app.include_router(multi_account_repeat_new_normal_app)
+app.include_router(multi_account_cooperation_app)
 app.include_router(multi_account_repeat_new_fixed_app)
 app.include_router(multi_account_repeat_timed_app)
 app.include_router(multi_account_kekkai_utilize_new_app)

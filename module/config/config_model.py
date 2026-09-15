@@ -101,6 +101,7 @@ from tasks.MultiAccountHunt.config import MultiAccountHunt
 from tasks.MultiAccountRepeat.config import MultiAccountRepeat
 from tasks.MultiAccountTaskOrchestration.config import MultiAccountTaskOrchestration
 from tasks.MultiAccountRepeatNewNormal.config import MultiAccountRepeatNewNormal
+from tasks.MultiAccountCooperation.config import MultiAccountCooperation
 from tasks.MultiAccountRepeatNewFixed.config import MultiAccountRepeatNewFixed
 from tasks.MultiAccountRepeatTimed.config import MultiAccountRepeatTimed
 from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccounts
@@ -194,6 +195,7 @@ class ConfigModel(ConfigBase):
     multi_account_shared_accounts: SharedPublicAccounts = Field(default_factory=SharedPublicAccounts)
     multi_account_task_orchestration: MultiAccountTaskOrchestration = Field(default_factory=MultiAccountTaskOrchestration)
     multi_account_repeat_new_normal: MultiAccountRepeatNewNormal = Field(default_factory=MultiAccountRepeatNewNormal)
+    multi_account_cooperation: MultiAccountCooperation = Field(default_factory=MultiAccountCooperation)
     multi_account_repeat_new_fixed: MultiAccountRepeatNewFixed = Field(default_factory=MultiAccountRepeatNewFixed)
     multi_account_repeat_timed: MultiAccountRepeatTimed = Field(default_factory=MultiAccountRepeatTimed)
     multi_account_repeat_morning: MultiAccountRepeatMorning = Field(default_factory=MultiAccountRepeatMorning)
@@ -456,11 +458,13 @@ class ConfigModel(ConfigBase):
         if group_object is None:  # deal list
             matchs = re.findall(r'\d+', group)
             index = int(matchs[-1]) - 1 if matchs else None
-            task_object_list = list(dict(task_object))
-            for k, v in dict(task_object).items():
-                if k not in group:
-                    continue
-                group_object = v[index] if group_object is None else None
+            # 序列化器会把内部 account_list 展开成 account_list_1 等表单组。
+            # dict(task_object) 得到的是序列化副本，修改它不会回写真实模型；必须
+            # 通过真实列表字段定位元素。
+            list_name = re.sub(r'_\d+$', '', group)
+            model_list = getattr(task_object, list_name, None)
+            if isinstance(model_list, list) and index is not None and 0 <= index < len(model_list):
+                group_object = model_list[index]
         argument_object = getattr(group_object, argument, None)
 
         if argument_object is None:

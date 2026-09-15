@@ -6,6 +6,7 @@ import datetime
 import operator
 import threading
 import random
+from pathlib import Path
 from typing import Any
 
 from datetime import datetime, timedelta
@@ -198,6 +199,29 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
             latest_data.pop("config_name", None)
             latest_data.update(selected_data)
             model = ConfigModel(config_name=self.config_name, **latest_data)
+            merged_model["value"] = model
+            return model.model_dump()
+
+        update_json_file(filepath, merge)
+        self.model = merged_model["value"]
+
+    def update_selected_field(self, field: str, updater) -> None:
+        """在同一文件锁事务中读取并更新一个顶层配置字段。"""
+        filepath = Path.cwd() / "config" / f"{self.config_name}.json"
+        merged_model: dict[str, ConfigModel] = {}
+
+        def merge(latest_data: dict[str, Any]) -> dict[str, Any]:
+            source = dict(latest_data or {})
+            source.pop("config_name", None)
+            latest_model = ConfigModel(config_name=self.config_name, **source)
+            current = getattr(latest_model, field, None)
+            if current is None:
+                raise AttributeError(f"配置字段不存在：{field}")
+            updated = updater(current)
+            source[field] = (
+                updated.model_dump() if hasattr(updated, "model_dump") else updated
+            )
+            model = ConfigModel(config_name=self.config_name, **source)
             merged_model["value"] = model
             return model.model_dump()
 

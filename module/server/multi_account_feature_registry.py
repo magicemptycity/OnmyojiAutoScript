@@ -53,6 +53,15 @@ MULTI_ACCOUNT_FEATURES = (
         display_name="多账号多任务新普通",
         mode="normal",
         api_prefix="multi_account_repeat_new_normal",
+        overview_kind="normal",
+    ),
+    MultiAccountFeature(
+        key="multi_account_cooperation",
+        task_name="MultiAccountCooperation",
+        display_name="多账号协战",
+        mode="normal",
+        api_prefix="multi_account_cooperation",
+        overview_kind="cooperation",
     ),
     MultiAccountFeature(
         key="multi_account_repeat_timed",

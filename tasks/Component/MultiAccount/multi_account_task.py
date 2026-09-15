@@ -1,5 +1,6 @@
 """多账号任务共用的外层轮询执行器。"""
 
+import copy
 import importlib.util
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -313,11 +314,47 @@ class MultiAccountTaskBase(MultiAccountPriorityMixin, GameUi, SwitchAccountAsset
             if self._is_account_in_scope(account)
         ]
 
+    @classmethod
+    def _merge_runtime_state(cls, latest: Any, runtime: Any, path: tuple[str, ...] = ()) -> Any:
+        """只合并任务运行产生的状态，保留 OASX 刚保存的业务配置。"""
+        runtime_fields = {
+            "last_complete_time", "task_progress_time", "completed_task_list",
+            "failed_task_list", "unfinished_task_list", "runtime_record", "status",
+        }
+        if isinstance(latest, dict) and isinstance(runtime, dict):
+            merged = dict(latest)
+            for key, value in runtime.items():
+                child_path = path + (str(key),)
+                is_runtime = (
+                    key in runtime_fields
+                    or str(key).startswith("next_")
+                    or child_path[-2:] == ("scheduler", "next_run")
+                )
+                if is_runtime:
+                    merged[key] = copy.deepcopy(value)
+                elif key in merged:
+                    merged[key] = cls._merge_runtime_state(merged[key], value, child_path)
+            return merged
+        if isinstance(latest, list) and isinstance(runtime, list):
+            merged = copy.deepcopy(latest)
+            for index in range(min(len(merged), len(runtime))):
+                merged[index] = cls._merge_runtime_state(
+                    merged[index], runtime[index], path + (str(index),)
+                )
+            return merged
+        return latest
+
     def save_multi_account_config(self) -> None:
-        """只保存当前多账号任务状态，避免覆盖页面刚修改的其他配置。"""
-        self.config.save_selected_fields({
-            self.multi_account_config_attr: self.fade_conf,
-        })
+        """保存运行状态，但不覆盖另一个进程刚修改的账号与业务配置。"""
+        # OASX API 与任务运行器属于不同进程。任务对象持有的是启动时快照，
+        # 直接保存整个 section 会把页面刚修改的账号名、服务器和开关覆盖回旧值。
+        runtime_data = self.fade_conf.model_dump()
+
+        def merge(latest):
+            merged_data = self._merge_runtime_state(latest.model_dump(), runtime_data)
+            return latest.__class__.model_validate(merged_data)
+
+        self.config.update_selected_field(self.multi_account_config_attr, merge)
 
     def create_task_object(
         self,

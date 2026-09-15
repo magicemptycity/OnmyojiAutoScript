@@ -81,13 +81,13 @@ def _refresh_all_outer_schedulers(script_name: str, sections: dict[str, object])
 
     fixed = sections.get("multi_account_repeat_new_fixed")
     if fixed is not None:
-        from module.server.multi_account_repeat_new_fixed_router import _refresh_fixed_batch_scheduler
+        from module.server.multi_account_repeat_new_fixed_router import refresh_fixed_time_scheduler
 
-        _refresh_fixed_batch_scheduler(script_name, fixed)
+        refresh_fixed_time_scheduler(script_name, fixed)
 
     orchestration = sections.get("multi_account_task_orchestration")
     if orchestration is not None:
-        _refresh_fixed_batch_scheduler(orchestration, script_name)
+        _refresh_orchestration_scheduler(orchestration, script_name)
 
     for key in (
         "multi_account_kekkai_utilize_new",
@@ -224,7 +224,7 @@ def _refresh_fixed_batch_next_run(batch: MultiAccountRepeatNewFixedTimeBatch, *,
         batch.scheduler.next_run = (now or datetime.now()).replace(microsecond=0)
 
 
-def _refresh_fixed_batch_scheduler(section, script_name: str) -> None:
+def _refresh_orchestration_scheduler(section, script_name: str) -> None:
     target = _fixed_batch_target(script_name, section)
     section.scheduler.next_run = (target or (datetime.now() + timedelta(days=1))).replace(microsecond=0)
 
@@ -639,7 +639,7 @@ async def set_task_account_enabled(script_name: str, account_index: int, enable:
     section = _section(script_name)
     account = _task_account(section, account_index)
     account.enabled = enable
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -699,7 +699,7 @@ async def add_single_task(script_name: str, account_index: int, task_name: str):
         entry.private_config.setdefault("scheduler", {}).update(
             scheduler.model_dump(mode="json")
         )
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return _serialize_single_task(script_name, entry)
 
@@ -760,7 +760,7 @@ async def add_fixed_time_batch(script_name: str, account_index: int, name: str |
         scheduler=scheduler,
     )
     account.fixed_time_batch_list.append(batch)
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return _serialize_fixed_batch(account, batch)
 
@@ -771,7 +771,7 @@ async def delete_fixed_time_batch(script_name: str, account_index: int, batch_id
     account = _task_account(section, account_index)
     batch = _batch(account, batch_id)
     account.fixed_time_batch_list.remove(batch)
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
 
@@ -819,7 +819,7 @@ async def copy_fixed_time_batch_to_accounts(
         copied_count += 1
     if not copied_count:
         raise HTTPException(status_code=400, detail="没有可复制的目标账号")
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
 @multi_account_task_orchestration_app.put('/{script_name}/multi_account_task_orchestration/accounts/{account_index}/fixed-time-batches/{batch_id}/enable')
@@ -827,7 +827,7 @@ async def set_fixed_time_batch_enable(script_name: str, account_index: int, batc
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
     batch.scheduler.enable = _convert_argument("boolean", value)
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
 
@@ -841,7 +841,7 @@ async def set_fixed_time_batch_run_time(script_name: str, account_index: int, ba
         batch.scheduler.next_run = _scheduler_next_run(batch.scheduler, run_now=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="运行时间格式错误，应为 HH:MM") from exc
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
 
@@ -887,7 +887,7 @@ async def set_fixed_time_batch_schedule(
     scheduler.delay_date = interval_days
     scheduler.weekdays = parsed_weekdays or list(range(1, 8))
     scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
 
@@ -938,7 +938,7 @@ async def set_fixed_time_batch_scheduler_arg(
         _apply_fixed_batch_scheduler(batch, scheduler)
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"顺序任务组调度器参数无效：{exc}") from exc
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -949,7 +949,7 @@ async def quick_schedule_fixed_time_batch(script_name: str, account_index: int, 
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
     batch.scheduler.next_run = _scheduler_next_run(batch.scheduler, run_now=run_now)
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -1041,7 +1041,7 @@ async def add_fixed_time_batch_task(script_name: str, account_index: int, batch_
         # 重新添加只恢复启用状态，保留之前停用时留下的私有配置和运行记录。
         entry.enable = True
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
 
@@ -1061,7 +1061,7 @@ async def set_fixed_time_batch_task_enable(
     entry = _batch_task_entry(batch, task_name)
     entry.enable = _convert_argument("boolean", value)
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
 
@@ -1075,7 +1075,7 @@ async def delete_fixed_time_batch_task(script_name: str, account_index: int, bat
     # OAS 左滑停用语义：不删除任务私有配置，仅取消当前任务组的启用状态。
     entry.enable = False
     _refresh_fixed_batch_next_run(batch, force=True)
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
 
@@ -1237,7 +1237,7 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
             entry.private_config.setdefault("scheduler", {}).update(
                 scheduler.model_dump(mode="json")
             )
-        _refresh_fixed_batch_scheduler(section, script_name)
+        _refresh_orchestration_scheduler(section, script_name)
         await _broadcast_multi_account_overview(script_name)
     _save(script_name, multi_account_task_orchestration=section)
     return True
@@ -1252,7 +1252,7 @@ async def quick_schedule_single_task(script_name: str, account_index: int, task_
         raise HTTPException(status_code=400, detail="任务调度器不存在")
     scheduler.next_run = _scheduler_next_run(scheduler, run_now=run_now)
     entry.private_config.setdefault("scheduler", {}).update(scheduler.model_dump(mode="json"))
-    _refresh_fixed_batch_scheduler(section, script_name)
+    _refresh_orchestration_scheduler(section, script_name)
     _save(script_name, multi_account_task_orchestration=section)
     await _broadcast_multi_account_overview(script_name)
     return True
