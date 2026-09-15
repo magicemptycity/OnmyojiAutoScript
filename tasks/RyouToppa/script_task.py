@@ -87,12 +87,25 @@ class AreaAttackResult(str, Enum):
     TEMPORARY_ERROR = "temporary_error"
 
 
-def random_delay(min_value: float = 2.0, max_value: float = 10.0, decimal: int = 1):
-    """
-    生成一个指定范围内的随机等待秒数
-    """
-    random_float_in_range = random.uniform(min_value, max_value)
-    return round(random_float_in_range, decimal)
+def parse_delay_range(value, *, legacy_default: tuple[float, float]) -> tuple[float, float]:
+    """解析“最小值,最大值”延迟；0/0,0 表示关闭，错误值回退默认值。"""
+    if isinstance(value, bool):
+        return legacy_default if value else (0.0, 0.0)
+    raw = str(value or "").strip()
+    if not raw or raw == "0":
+        return 0.0, 0.0
+    try:
+        parts = [float(item.strip()) for item in raw.split(",")]
+        if len(parts) != 2 or any(item < 0 for item in parts):
+            raise ValueError
+        return min(parts), max(parts)
+    except (TypeError, ValueError):
+        logger.warning("寮突破随机延迟配置无效：%r，回退默认范围 %s", value, legacy_default)
+        return legacy_default
+
+
+def random_delay(min_value: float, max_value: float, decimal: int = 1):
+    return round(random.uniform(min_value, max_value), decimal)
 
 
 class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
@@ -405,9 +418,12 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
         if area_status is not AreaAttackResult.ATTACKABLE:
             return area_status
 
-        # 选择目标前可按配置随机等待 2s - 10s
-        if self.config.ryou_toppa.raid_config.random_delay:
-            delay = random_delay()
+        target_delay_range = parse_delay_range(
+            self.config.ryou_toppa.raid_config.random_delay,
+            legacy_default=(2.0, 10.0),
+        )
+        if target_delay_range != (0.0, 0.0):
+            delay = random_delay(*target_delay_range)
             logger.info(f'寮突破选择目标前随机等待: delay={delay:.1f}s')
             time.sleep(delay)
 
@@ -454,7 +470,14 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
                 popup_wait_timer = None
                 if not fire_delay_ready:
                     if fire_delay_timer is None:
-                        delay = random_delay(*TOPPA_FIRE_DELAY_RANGE)
+                        fire_delay_range = parse_delay_range(
+                            self.config.ryou_toppa.raid_config.fire_delay,
+                            legacy_default=TOPPA_FIRE_DELAY_RANGE,
+                        )
+                        if fire_delay_range == (0.0, 0.0):
+                            fire_delay_ready = True
+                            continue
+                        delay = random_delay(*fire_delay_range)
                         logger.info(f'寮突破点击进攻前随机等待: delay={delay:.1f}s')
                         fire_delay_timer = Timer(delay).start()
                         continue

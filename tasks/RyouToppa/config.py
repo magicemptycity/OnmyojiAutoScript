@@ -18,8 +18,11 @@ class RaidConfig(BaseModel):
     skip_difficult: bool = Field(default=True, description='skip_difficult_help')
     # 寮管理开启寮突破
     ryou_access: bool = Field(default=False, description='ryou_access_help')
-    # 选择下一个目标前随机等待 2s - 10s；选中目标后点击进攻另有默认 2s - 5s 随机等待。
-    random_delay: bool = Field(default=False, description='random_delay_help')
+    # 选择下一个目标前随机等待范围；填写 0 或 0,0 表示关闭。
+    # 保留 bool 类型兼容旧配置，旧的 false/true 由执行器兼容处理。
+    random_delay: str | bool = Field(default="0", description='random_delay_help')
+    # 点击进攻按钮前随机等待范围；填写 0 表示关闭。
+    fire_delay: str = Field(default="2,5", description='fire_delay_help')
 
     # 打完没票了 0/6 => 失败
     # 突破压根没开  +> 失败
