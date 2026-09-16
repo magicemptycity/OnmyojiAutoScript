@@ -29,6 +29,9 @@ class RaidConfig(BaseModel):
         default=False,
         description='realm_raid_attack_delay_help',
     )
+    realm_raid_attack_delay_range: str = Field(default='1,3', description='realm_raid_attack_delay_range_help')
+    quick_exit_delay_range: str = Field(default='1,2', description='quick_exit_delay_range_help')
+    quick_exit_retry_delay_range: str = Field(default='1,2', description='quick_exit_retry_delay_range_help')
 
 class RealmRaid(ConfigBase):
     scheduler: Scheduler = Field(default_factory=Scheduler)

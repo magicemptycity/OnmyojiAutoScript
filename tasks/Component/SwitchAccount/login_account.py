@@ -36,26 +36,26 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
         @return: True 表示选中成功，False 表示失败
         """
 
-        # 服务器名称和“切换服务器”按钮可能延迟出现。持续检查横屏、OLED
-        # 两套 OCR 区域，只点击本轮实际识别到文字的对应按钮，直到进入
-        # 服务器选择页面；不能因首次截图未识别到横屏文字就直接误点 OLED。
-        while True:
+        # 服务器名称和“切换服务器”按钮可能延迟出现。先通过两套 OCR
+        # 区域确定当前登录页布局；确定后固定使用对应按钮，并由 ui_click
+        # 持续点击直到服务器选择页出现。不能在点击后重新判断另一套 OCR，
+        # 因为弹出的服务器列表可能落入 OLED 识别区并造成二次误点。
+        switch_svr_btn = None
+        while switch_svr_btn is None:
             self.screenshot()
             if self.appear(self.I_SA_CHECK_SELECT_SVR_4):
                 break
 
-            svr_text = self.O_SA_LOGIN_FORM_SVR_NAME.ocr(self.device.image)
-            if svr_text:
-                self.click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN, interval=3)
-                continue
+            if self.O_SA_LOGIN_FORM_SVR_NAME.ocr(self.device.image):
+                switch_svr_btn = self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN
+            elif self.O_SA_LOGIN_FORM_SVR_NAME_OLED.ocr(self.device.image):
+                switch_svr_btn = self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN_OLED
+            else:
+                # 两个区域都还没有文字时等待页面继续加载，避免空转刷截图。
+                time.sleep(1)
 
-            svr_text_oled = self.O_SA_LOGIN_FORM_SVR_NAME_OLED.ocr(self.device.image)
-            if svr_text_oled:
-                self.click(self.C_SA_LOGIN_FORM_SWITCH_SVR_BTN_OLED, interval=3)
-                continue
-
-            # 两个区域都还没有文字时等待页面继续加载，避免空转刷截图。
-            time.sleep(1)
+        if switch_svr_btn is not None:
+            self.ui_click(switch_svr_btn, self.I_SA_CHECK_SELECT_SVR_4, interval=3)
 
         # ---------- 辅助匹配函数 ----------
         def exact_match(target, candidates):

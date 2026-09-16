@@ -214,7 +214,10 @@
       "order_attack": "5 > 4 > 3 > 2 > 1 > 0",
       "three_refresh": false,
       "when_attack_fail": "Refresh",
-      "realm_raid_attack_delay": false
+      "realm_raid_attack_delay": false,
+      "realm_raid_attack_delay_range": "1,3",
+      "quick_exit_delay_range": "1,2",
+      "quick_exit_retry_delay_range": "1,2"
     },
     "general_battle_config": {
       "lock_team_enable": false,

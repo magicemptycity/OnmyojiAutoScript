@@ -37,11 +37,22 @@ REALM_RAID_QUICK_EXIT_DELAY_RANGE = (1.0, 2.0)
 REALM_RAID_QUICK_EXIT_RETRY_DELAY_RANGE = (1.0, 2.0)
 
 
-def random_attack_delay(
-    min_value: float = REALM_RAID_FIRE_DELAY_RANGE[0],
-    max_value: float = REALM_RAID_FIRE_DELAY_RANGE[1],
-    decimal: int = 1,
-) -> float:
+def parse_delay_range(value, default):
+    """解析随机延迟范围；0/0,0 表示关闭，非法值回退默认范围。"""
+    raw = str(value or '').strip()
+    try:
+        parts = [float(x.strip()) for x in raw.split(',')]
+        if len(parts) == 1 and parts[0] == 0:
+            return (0.0, 0.0)
+        if len(parts) != 2 or any(x < 0 for x in parts):
+            raise ValueError
+        return min(parts), max(parts)
+    except (TypeError, ValueError):
+        logger.warning('个人突破随机延迟配置无效：%r，回退默认范围 %s', value, default)
+        return default
+
+
+def random_attack_delay(min_value, max_value, decimal: int = 1) -> float:
     return round(random.uniform(min_value, max_value), decimal)
 
 
@@ -500,7 +511,14 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
             if self.appear(self.I_FIRE, threshold=0.8):
                 if not fire_delay_complete:
                     if fire_delay_timer is None:
-                        delay = random_attack_delay()
+                        delay_range = parse_delay_range(
+                            self.config.realm_raid.raid_config.realm_raid_attack_delay_range,
+                            REALM_RAID_FIRE_DELAY_RANGE,
+                        )
+                        if delay_range == (0.0, 0.0):
+                            fire_delay_complete = True
+                            continue
+                        delay = random_attack_delay(*delay_range)
                         logger.info(
                             f'个人突破点击进攻前随机等待: delay={delay:.1f}s'
                         )
@@ -527,14 +545,23 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
         :return: 是否再战成功
         """
         self.wait_until_appear(self.I_FIRE_AGAIN)
-        delay = random_attack_delay(*REALM_RAID_QUICK_EXIT_RETRY_DELAY_RANGE)
-        logger.info(
-            '个人突破退四次进入下一轮前随机等待: '
-            f'delay={delay:.1f}s'
+        delay_range = parse_delay_range(
+            self.config.realm_raid.raid_config.quick_exit_retry_delay_range,
+            REALM_RAID_QUICK_EXIT_RETRY_DELAY_RANGE,
         )
-        time.sleep(delay)
+        retry_delay_timer = None
+        if delay_range != (0.0, 0.0):
+            delay = random_attack_delay(*delay_range)
+            logger.info(
+                '个人突破退四次进入下一轮前随机等待: '
+                f'delay={delay:.1f}s'
+            )
+            retry_delay_timer = Timer(delay).start()
         while True:
             self.screenshot()
+            # 非阻塞等待：等待期间继续刷新页面，但不提前点击任何按钮。
+            if retry_delay_timer is not None and not retry_delay_timer.reached():
+                continue
             if self.appear(self.I_EXIT):
                 logger.info(f'Click fire again success')
                 return True
@@ -562,9 +589,14 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
                     None,
                 )
                 if delay_timer is None:
-                    delay = random_attack_delay(
-                        *REALM_RAID_QUICK_EXIT_DELAY_RANGE
+                    delay_range = parse_delay_range(
+                        self.config.realm_raid.raid_config.quick_exit_delay_range,
+                        REALM_RAID_QUICK_EXIT_DELAY_RANGE,
                     )
+                    if delay_range == (0.0, 0.0):
+                        context.realm_raid_quick_exit_delay_complete = True
+                        return super().exit_battle(skip_first=skip_first)
+                    delay = random_attack_delay(*delay_range)
                     logger.info(
                         '个人突破退四次退出前随机等待: '
                         f'delay={delay:.1f}s'
