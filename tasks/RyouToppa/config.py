@@ -18,9 +18,10 @@ class RaidConfig(BaseModel):
     skip_difficult: bool = Field(default=True, description='skip_difficult_help')
     # 寮管理开启寮突破
     ryou_access: bool = Field(default=False, description='ryou_access_help')
-    # 选择下一个目标前随机等待范围；填写 0 或 0,0 表示关闭。
-    # 保留 bool 类型兼容旧配置，旧的 false/true 由执行器兼容处理。
-    random_delay: str | bool = Field(default="0", description='random_delay_help')
+    # 是否启用选择目标前随机等待。
+    random_delay: bool = Field(default=False, description='random_delay_help')
+    # 选择目标前随机等待范围；仅在 random_delay 开启时生效。
+    target_delay_range: str = Field(default="2,10", description='target_delay_range_help')
     # 点击进攻按钮前随机等待范围；填写 0 表示关闭。
     fire_delay: str = Field(default="2,5", description='fire_delay_help')
 

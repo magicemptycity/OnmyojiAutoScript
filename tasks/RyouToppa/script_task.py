@@ -418,14 +418,15 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RyouToppaAssets):
         if area_status is not AreaAttackResult.ATTACKABLE:
             return area_status
 
-        target_delay_range = parse_delay_range(
-            self.config.ryou_toppa.raid_config.random_delay,
-            legacy_default=(2.0, 10.0),
-        )
-        if target_delay_range != (0.0, 0.0):
-            delay = random_delay(*target_delay_range)
-            logger.info(f'寮突破选择目标前随机等待: delay={delay:.1f}s')
-            time.sleep(delay)
+        if self.config.ryou_toppa.raid_config.random_delay:
+            target_delay_range = parse_delay_range(
+                self.config.ryou_toppa.raid_config.target_delay_range,
+                legacy_default=(2.0, 10.0),
+            )
+            if target_delay_range != (0.0, 0.0):
+                delay = random_delay(*target_delay_range)
+                logger.info(f'寮突破选择目标前随机等待: delay={delay:.1f}s')
+                time.sleep(delay)
 
         rcl = area_map[index].get("rule_click")
         # 塔塔开！
