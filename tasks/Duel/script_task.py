@@ -62,6 +62,8 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
                 continue
             if not self.can_start_duel():
                 break
+            # 只在斗技主界面的安全节点检查，避免匹配、选式神或战斗中途退出。
+            self.yield_to_higher_priority_task()
             self.start_duel()
         logger.info('Duel battle end')
         self.goto_page(page_main)
@@ -78,6 +80,30 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
         self.goto_page(page_duel)
         self.switch_all_soul()
         self.current_score = self.conf.duel_celeb_config.initial_score
+
+    def yield_to_higher_priority_task(self) -> None:
+        """在每场斗技之间让出已经到期的更高优先级任务。"""
+        if not self.conf.duel_config.check_higher_priority_task:
+            return
+
+        self.config.update_scheduler()
+        duel_priority = self.conf.scheduler.priority
+        higher_priority_tasks = [
+            task
+            for task in self.config.pending_task
+            if task.command != 'Duel' and task.priority < duel_priority
+        ]
+        if not higher_priority_tasks:
+            return
+
+        task_names = ', '.join(task.command for task in higher_priority_tasks)
+        logger.info(
+            '发现更高优先级待执行任务: %s，结束本次斗技并让出调度',
+            task_names,
+        )
+        self.goto_page(page_main)
+        # 不修改斗技原有的 next_run，使高优先级任务结束后可以继续调度斗技。
+        raise TaskEnd('Duel')
 
     def can_start_duel(self) -> bool:
         """是否可以运行斗技"""
