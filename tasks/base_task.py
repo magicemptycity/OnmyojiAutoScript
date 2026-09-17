@@ -16,6 +16,7 @@ from module.atom.ocr import RuleOcr
 from module.atom.swipe import RuleSwipe
 from module.base.timer import Timer
 from module.config.config import Config
+from module.config.utils import convert_to_underscore
 from module.device.device import Device
 from module.exception import ScriptError
 from module.image.rpc import get_image_client
@@ -311,12 +312,80 @@ class BaseTask(GlobalGameAssets, CostumeBase):
 
         return appear
 
+    @staticmethod
+    def _parse_click_reaction_delay(value, source: str) -> tuple[float, float] | None:
+        """解析“最小值,最大值”；0 表示关闭，非法值不产生等待。"""
+        raw = str(value or '').strip()
+        try:
+            values = [float(item.strip()) for item in raw.split(',')]
+            if len(values) == 1 and values[0] == 0:
+                return None
+            if len(values) != 2 or any(item < 0 for item in values):
+                raise ValueError
+            low, high = min(values), max(values)
+            return None if high == 0 else (low, high)
+        except (TypeError, ValueError):
+            logger.warning('%s点击前随机等待范围无效：%r，本次点击不等待', source, raw)
+            return None
+
+    def _global_click_reaction_delay(self) -> tuple[float, float] | None:
+        """读取全局点击前随机等待。"""
+        optimization = getattr(getattr(self.config, 'script', None), 'optimization', None)
+        if optimization is None or not getattr(optimization, 'click_reaction_delay_enable', False):
+            return None
+        return self._parse_click_reaction_delay(
+            getattr(optimization, 'click_reaction_delay_range', ''),
+            '全局',
+        )
+
+    def _task_click_reaction_config(self):
+        """返回当前任务调度器中的三态点击延迟配置。"""
+        model = getattr(self.config, 'model', None)
+        if model is None:
+            return None
+
+        candidates = []
+        task_name = getattr(self, 'task_name', '')
+        if task_name:
+            candidates.append(task_name)
+        module_parts = self.__class__.__module__.split('.')
+        if len(module_parts) > 1 and module_parts[0] == 'tasks':
+            candidates.append(module_parts[1])
+        running_task = str(getattr(model, 'running_task', '') or '')
+        if running_task:
+            candidates.append(running_task)
+
+        for name in dict.fromkeys(candidates):
+            task_config = getattr(model, convert_to_underscore(name), None)
+            scheduler = getattr(task_config, 'scheduler', None)
+            if scheduler is not None and hasattr(scheduler, 'click_reaction_delay_mode'):
+                return scheduler
+        return None
+
+    def _configured_click_reaction_delay(self):
+        """按任务三态解析等待；无法解析任务时兼容旧类常量。"""
+        scheduler = self._task_click_reaction_config()
+        if scheduler is not None:
+            mode = getattr(scheduler.click_reaction_delay_mode, 'value', scheduler.click_reaction_delay_mode)
+            if mode == 'Disabled':
+                return None
+            if mode == 'Custom':
+                return self._parse_click_reaction_delay(
+                    scheduler.click_reaction_delay_range,
+                    '任务独立',
+                )
+            return self._global_click_reaction_delay()
+
+        if self.CLICK_REACTION_DELAY is not None:
+            return self.CLICK_REACTION_DELAY
+        return self._global_click_reaction_delay()
+
     def _wait_click_reaction(self, reaction_delay: tuple[float, float] | float | None = None) -> None:
-        """按任务声明的区间等待一次点击反应时间。"""
-        delay = self.CLICK_REACTION_DELAY if reaction_delay is None else reaction_delay
+        """按单次覆盖、任务三态、全局配置的优先级等待。"""
+        delay = reaction_delay if reaction_delay is not None else self._configured_click_reaction_delay()
         if delay is None:
             return
-        if isinstance(delay, tuple):
+        if isinstance(delay, (tuple, list)):
             low, high = delay
             delay = random.uniform(min(low, high), max(low, high))
         if delay > 0:
@@ -364,6 +433,7 @@ class BaseTask(GlobalGameAssets, CostumeBase):
         if not self.wait_until_appear(target, wait_time):
             return False
         click_x, click_y = target.coord()
+        self._wait_click_reaction()
         if action is None:
             self.device.click(click_x, click_y, control_name=target.name)
         elif isinstance(action, RuleLongClick):
@@ -626,6 +696,7 @@ class BaseTask(GlobalGameAssets, CostumeBase):
             self.click(action, interval)
         else:
             x, y = target.coord()
+            self._wait_click_reaction()
             self.device.click(x=x, y=y, control_name=target.name)
         return True
 
@@ -683,6 +754,7 @@ class BaseTask(GlobalGameAssets, CostumeBase):
         appear = self.list_find(target, name=target.array[0], max_swipe=max_swipe)
         if isinstance(appear, tuple) and interval:
             x, y = appear
+            self._wait_click_reaction()
             self.device.click(x, y)
             self.interval_timer[target.name].reset()
             return True

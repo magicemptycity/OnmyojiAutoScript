@@ -4,7 +4,7 @@
 from pydantic import BaseModel, Field
 from enum import Enum
 
-from tasks.Component.config_scheduler import Scheduler
+from tasks.Component.config_scheduler import CustomClickReactionScheduler
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
 from tasks.Component.config_base import ConfigBase
 from tasks.Component.SwitchSoul.switch_soul_config import SwitchSoulConfig
@@ -34,7 +34,7 @@ class RaidConfig(BaseModel):
     quick_exit_retry_delay_range: str = Field(default='1,2', description='quick_exit_retry_delay_range_help')
 
 class RealmRaid(ConfigBase):
-    scheduler: Scheduler = Field(default_factory=Scheduler)
+    scheduler: CustomClickReactionScheduler = Field(default_factory=CustomClickReactionScheduler)
     raid_config: RaidConfig = Field(default_factory=RaidConfig)
     general_battle_config: GeneralBattleConfig = Field(default_factory=GeneralBattleConfig)
     switch_soul_config: SwitchSoulConfig = Field(default_factory=SwitchSoulConfig)

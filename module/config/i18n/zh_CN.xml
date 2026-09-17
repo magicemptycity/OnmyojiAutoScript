@@ -546,6 +546,17 @@ mode_3策略是刷到五个契灵后开始结契，选择高级、中级盘来�
 <context>
     <name>Args</name>
 	<message><source>ScheduleRule</source><translation>选择任务调度规则</translation></message>	
+	<message><source>ClickReactionDelayEnable</source><translation>全局点击前随机等待</translation></message>
+	<message><source>click_reaction_delay_enable_help</source><translation>开启后，为未声明独立点击延迟的任务增加点击前随机等待。</translation></message>
+	<message><source>ClickReactionDelayRange</source><translation>全局点击前等待范围</translation></message>
+	<message><source>click_reaction_delay_range_help</source><translation>填写最小值,最大值，例如 0.18,0.22；填写 0 表示不等待。任务独立范围和单次点击参数优先于全局设置。</translation></message>
+	<message><source>ClickReactionDelayMode</source><translation>点击前随机等待模式</translation></message>
+	<message><source>click_reaction_delay_mode_help</source><translation>跟随全局使用脚本优化中的全局设置；独立关闭不等待；自定义使用本任务的独立范围。</translation></message>
+	<message><source>TaskClickReactionDelayRange</source><translation>任务点击前等待范围</translation></message>
+	<message><source>task_click_reaction_delay_range_help</source><translation>仅在模式为自定义时生效；填写最小值,最大值，例如 0.18,0.22；填写 0 表示不等待。</translation></message>
+	<message><source>Global</source><translation>跟随全局</translation></message>
+	<message><source>Disabled</source><translation>独立关闭</translation></message>
+	<message><source>Custom</source><translation>自定义</translation></message>
 	<message><source>schedule_rule_help</source><translation>这里所指的调度的对象是指Pending中的，Waiting中的任务不属于。
 基于过滤器(Filter)的调度：默认的选项，任务的执行顺序会根据开发时所确定的顺序来调度，一般是最优解
 基于先来后到(FIFO)的调度：是会按照下次执行时间进行排序，靠前的先执行

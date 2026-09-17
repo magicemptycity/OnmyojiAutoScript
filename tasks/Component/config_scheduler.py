@@ -13,6 +13,12 @@ class ScheduleMode(str, Enum):
     WEEKDAY = 'weekday'
 
 
+class ClickReactionDelayMode(str, Enum):
+    GLOBAL = 'Global'
+    DISABLED = 'Disabled'
+    CUSTOM = 'Custom'
+
+
 class Scheduler(ConfigBase):
     enable: bool = Field(default=False, description='enable_help')
     next_run: DateTime = Field(default=DateTime.fromisoformat("2023-01-01 00:00:00"), description='next_run_help')
@@ -32,6 +38,22 @@ class Scheduler(ConfigBase):
         description='选择任务允许运行的星期，只有强制日期规则为指定星期时生效。',
     )
     float_time: Time = Field(default=Time(hour=0, minute=0, second=0), description='float_time_help')
+    click_reaction_delay_mode: ClickReactionDelayMode = Field(
+        default=ClickReactionDelayMode.GLOBAL,
+        description='click_reaction_delay_mode_help',
+    )
+    click_reaction_delay_range: str = Field(
+        default='0.18,0.22',
+        description='task_click_reaction_delay_range_help',
+    )
+
+
+class CustomClickReactionScheduler(Scheduler):
+    """用于原本已有独立点击延迟的任务，兼容旧配置缺少三态字段。"""
+    click_reaction_delay_mode: ClickReactionDelayMode = Field(
+        default=ClickReactionDelayMode.CUSTOM,
+        description='click_reaction_delay_mode_help',
+    )
 
 
 if __name__ == "__main__":
