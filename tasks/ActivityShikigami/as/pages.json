@@ -178,5 +178,23 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "活动主界面进入体力爬塔标志"
+  },
+  {
+    "itemName": "to_battle_boss_phase2",
+    "imageName": "climb/as_to_battle_boss_phase2.png",
+    "roiFront": "126,421,79,87",
+    "roiBack": "42,353,234,327",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "二阶段BOSS入口"
+  },
+  {
+    "itemName": "check_battle_boss_phase2",
+    "imageName": "climb/as_check_battle_boss_phase2.png",
+    "roiFront": "151,18,129,46",
+    "roiBack": "141,0,151,85",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "二阶段BOSS页面标志"
   }
 ]

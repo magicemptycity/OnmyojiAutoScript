@@ -30,5 +30,8 @@ page_act_ap100 = Page(ActivityShikigamiAssets.I_CLIMB_MODE_AP100)
 page_act_ap100.add_enter_failure_hooks(GlobalGameAssets.I_UI_BACK_RED)
 page_act_ap100.connect(page_climb_main, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_act_ap100->page_climb_main")
 # BOSS爬塔页面
-page_act_boss = Page(ActivityShikigamiAssets.I_AS_BOSS_FIRE)
+page_act_boss = Page(any_of(
+    ActivityShikigamiAssets.I_AS_BOSS_FIRE,
+    ActivityShikigamiAssets.I_CHECK_BATTLE_BOSS_PHASE2,
+))
 page_act_boss.connect(page_climb_main, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_act_boss->page_climb_main")

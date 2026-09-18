@@ -134,6 +134,14 @@ class ActivityShikigamiAssets:
 	I_TO_BATTLE_BOSS = RuleImage(roi_front=(125,449,88,58), roi_back=(97,402,145,138), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_to_battle_boss.png")
 	# boss界面标志 
 	I_CHECK_BATTLE_BOSS = RuleImage(roi_front=(151,18,129,46), roi_back=(141,0,151,85), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_check_battle_boss.png")
+	# 二阶段上锁图标
+	I_LOCK_PHASE2 = RuleImage(roi_front=(897,646,23,24), roi_back=(685,612,330,86), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_lock_phase2.png")
+	# 二阶段未上锁图标
+	I_UNLOCK_PHASE2 = RuleImage(roi_front=(897,646,28,25), roi_back=(686,610,313,92), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_unlock_phase2.png")
+	# 二阶段BOSS入口
+	I_TO_BATTLE_BOSS_PHASE2 = RuleImage(roi_front=(126,421,79,87), roi_back=(42,353,234,327), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_to_battle_boss_phase2.png")
+	# 二阶段BOSS页面标志
+	I_CHECK_BATTLE_BOSS_PHASE2 = RuleImage(roi_front=(151,18,129,46), roi_back=(141,0,151,85), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_check_battle_boss_phase2.png")
 	# 从爬塔战斗页进入式神录
 	I_BATTLE_MAIN_TO_RECORDS = RuleImage(roi_front=(1015,560,39,42), roi_back=(674,539,439,157), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/climb/as_battle_main_to_records.png")
 	# 爬塔战斗页面标志

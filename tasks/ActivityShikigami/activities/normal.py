@@ -35,7 +35,15 @@ class NormalClimbAct(BaseAct):
             condition=ActivityShikigamiAssets.I_CLIMB_MODE_AP, action=ActivityShikigamiAssets.I_CLIMB_MODE_SWITCH))
         page_climb_main.connect(page_act_ap100, ActivityShikigamiAssets.I_TO_BATTLE_CLIMB,
                                 key="page_climb_main->page_act_ap100")
-        page_climb_main.connect(page_act_boss, ActivityShikigamiAssets.I_TO_BATTLE_BOSS,
+        def boss_entry_action(task):
+            """兼容活动一、二阶段的不同BOSS入口。"""
+            if task.appear(ActivityShikigamiAssets.I_TO_BATTLE_BOSS):
+                return ActivityShikigamiAssets.I_TO_BATTLE_BOSS
+            if task.appear(ActivityShikigamiAssets.I_TO_BATTLE_BOSS_PHASE2):
+                return ActivityShikigamiAssets.I_TO_BATTLE_BOSS_PHASE2
+            return False
+
+        page_climb_main.connect(page_act_boss, boss_entry_action,
                                 key="page_climb_main->page_act_boss")
         # 门票和体力互相切换
         page_act_pass.connect(page_act_ap, ActivityShikigamiAssets.I_CLIMB_MODE_SWITCH, key="page_act_pass->page_act_ap")
@@ -45,8 +53,14 @@ class NormalClimbAct(BaseAct):
         enable = battle_conf.lock_team_enable
         match self.climb_type:
             case 'boss':
-                lock_rule = self.I_LOCK
-                unlock_rule = self.I_UNLOCK
+                # 一、二阶段的锁定按钮外观和位置不同，按当前页面自动选择。
+                self.screenshot()
+                if self.appear(self.I_LOCK_PHASE2) or self.appear(self.I_UNLOCK_PHASE2):
+                    lock_rule = self.I_LOCK_PHASE2
+                    unlock_rule = self.I_UNLOCK_PHASE2
+                else:
+                    lock_rule = self.I_LOCK
+                    unlock_rule = self.I_UNLOCK
             case _:
                 lock_rule = self.I_AP_LOCK
                 unlock_rule = self.I_AP_UNLOCK

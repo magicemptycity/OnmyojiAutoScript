@@ -124,5 +124,23 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "门票简单模式标志"
+  },
+  {
+    "itemName": "lock_phase2",
+    "imageName": "climb/as_lock_phase2.png",
+    "roiFront": "897,646,23,24",
+    "roiBack": "685,612,330,86",
+    "method": "Template matching",
+    "threshold": 0.7,
+    "description": "二阶段上锁图标"
+  },
+  {
+    "itemName": "unlock_phase2",
+    "imageName": "climb/as_unlock_phase2.png",
+    "roiFront": "897,646,28,25",
+    "roiBack": "686,610,313,92",
+    "method": "Template matching",
+    "threshold": 0.7,
+    "description": "二阶段未上锁图标"
   }
 ]
