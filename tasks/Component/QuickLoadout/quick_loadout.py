@@ -29,6 +29,7 @@ class QuickLoadoutOcr(RuleOcr):
     """适配快捷配置面板的棕色/橙色文字。"""
 
     def pre_process(self, image):
+        # 项目截图使用 RGB；该小面板的选中态文字在交换红蓝通道后识别更稳定。
         return cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
 
@@ -48,8 +49,13 @@ class QuickLoadoutLayout:
 class QuickLoadout(BaseTask, SwitchSoulAssets):
     """战斗界面内的一键配置组件。
 
-    接入任务提供入口图片、面板内“出战”锚点和面板外安全关闭区域；
-    面板内部点击点、OCR 和滑动范围由锚点动态生成。
+    每个接入任务必须提供三项任务资源：队伍预设入口图片、面板内“出战”
+    锚点图片和面板外安全关闭点击区域；
+    面板内部点击点、OCR 和滑动范围全部根据锚点动态生成。
+
+    该官方功能会同时装配预设御魂和上阵阵容，并且切换操作不受任务页面
+    下方的“阵容锁定”开关影响。完成切换后，接入任务仍应根据通用战斗
+    配置独立确认阵容锁定状态。
     """
 
     PANEL_FROM_FIGHT = (-263, -331, 551, 386)
@@ -79,6 +85,7 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
     def _parse_custom_presets(
         value: str,
     ) -> dict[str, tuple[int, int] | tuple[str, str]]:
+        """解析混合预设；数字元组按编号，字符串元组按 OCR 名称。"""
         presets = {}
         for raw_item in re.split(r'[;；]+', value):
             item = raw_item.strip()
@@ -87,7 +94,7 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
             parts = re.split(r'[:：]', item, maxsplit=1)
             if len(parts) != 2 or not parts[0].strip():
                 raise ValueError(f'Invalid custom quick loadout item: {item}')
-            stage_name, target_text = parts[0].strip(), parts[1].strip()
+            boss_name, target_text = parts[0].strip(), parts[1].strip()
             try:
                 target = ast.literal_eval(target_text)
             except (SyntaxError, ValueError) as exc:
@@ -110,10 +117,11 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
                 group, preset = group.strip(), preset.strip()
                 if not group or not preset:
                     raise ValueError(f'Custom quick loadout target cannot be empty: {item}')
-            presets[stage_name] = (group, preset)
+            presets[boss_name] = (group, preset)
         return presets
 
     def _read_quick_loadout_stage_name(self, name_ocr: RuleOcr) -> str:
+        """在打开一键配置面板前读取任务关卡名称。"""
         best = ''
         for attempt in range(1, 4):
             self.screenshot()
@@ -150,22 +158,24 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
         self,
         config: NamedQuickLoadoutConfig,
         name_ocr: RuleOcr,
-    ) -> QuickLoadoutConfig:
+    ) -> tuple[QuickLoadoutConfig, str | None]:
+        """按 OCR 关卡名生成本轮配置，并返回用于一次性装魂的稳定键。"""
         stage_name = self._read_quick_loadout_stage_name(name_ocr)
-        if not self._normalize_name(stage_name):
+        normalized_stage = self._normalize_name(stage_name)
+        if not normalized_stage:
             logger.warning('Quick loadout stage name OCR is empty, use default preset')
-            return config
+            return config, None
 
         try:
             presets = self._parse_custom_presets(config.custom_preset)
         except ValueError as exc:
             logger.warning(str(exc))
-            return config
+            return config, normalized_stage
 
         best_name, best_target, best_score = self._match_custom_preset(stage_name, presets)
         if best_target is None:
             logger.info(f'No custom quick loadout for stage {stage_name}, use default preset')
-            return config
+            return config, normalized_stage
 
         group, preset = best_target
         if isinstance(group, int) and isinstance(preset, int):
@@ -184,10 +194,10 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
             f'Custom quick loadout matched stage {stage_name} -> '
             f'({group}, {preset}) [{best_score:.2f}]'
         )
-        return config.model_copy(update=updates)
+        return config.model_copy(update=updates), self._normalize_name(best_name)
 
     @staticmethod
-    def _offset_roi(panel, relative):
+    def _offset_roi(panel: tuple[int, int, int, int], relative: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
         return panel[0] + relative[0], panel[1] + relative[1], relative[2], relative[3]
 
     @staticmethod
@@ -220,6 +230,7 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
         preset_roi = self._offset_roi(panel, self.PRESET_OCR_ROI)
         group_ocr = QuickLoadoutOcr(roi=group_roi, area=group_roi, mode='Full', method='Default', keyword='', name='quick_loadout_group_name')
         preset_ocr = QuickLoadoutOcr(roi=preset_roi, area=preset_roi, mode='Full', method='Default', keyword='', name='quick_loadout_preset_name')
+
         group_swipe_to_top = RuleSwipe(roi_front=(x + 55, y + 105, 25, 20), roi_back=(x + 55, y + 285, 25, 20), mode='default', name='quick_loadout_group_to_top')
         group_swipe_down = RuleSwipe(roi_front=(x + 55, y + 285, 25, 20), roi_back=(x + 55, y + 105, 25, 20), mode='default', name='quick_loadout_group_down')
         preset_swipe_to_top = RuleSwipe(roi_front=(x + 355, y + 105, 30, 20), roi_back=(x + 355, y + 280, 30, 20), mode='default', name='quick_loadout_preset_to_top')
@@ -248,6 +259,7 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
         return False
 
     def _rewind_list(self, ocr: RuleOcr, swipe: RuleSwipe, max_swipes: int) -> None:
+        """将列表拖到顶部；OCR 内容连续不变时提前停止。"""
         previous = None
         stable_count = 0
         for _ in range(max_swipes):
@@ -264,7 +276,7 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
             self.swipe(swipe)
             sleep(0.45)
 
-    def _find_name_y(self, ocr: RuleOcr, target: str, results=None):
+    def _find_name_y(self, ocr: RuleOcr, target: str, results=None) -> tuple[int | None, float]:
         best_y = None
         best_score = 0.0
         if results is None:
@@ -276,7 +288,17 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
                 best_y = self._result_center_y(result, ocr.roi[1])
         return best_y, best_score
 
-    def _find_visible_preset_number_y(self, layout: QuickLoadoutLayout, target: int):
+    def _find_number_y(self, ocr: RuleOcr, target: int, results=None) -> int | None:
+        if results is None:
+            results = ocr.detect_and_ocr(self.device.image)
+        for result in results:
+            numbers = [int(value) for value in re.findall(r'\d+', str(result.ocr_text))]
+            if target in numbers:
+                return self._result_center_y(result, ocr.roi[1])
+        return None
+
+    def _find_visible_preset_number_y(self, layout: QuickLoadoutLayout, target: int) -> int | None:
+        """逐行识别预设左上角菱形编号，避免整块名称 OCR 丢弃小数字。"""
         panel_x, panel_y, _, _ = layout.panel
         number_width, number_height = self.PRESET_NUMBER_SIZE
         for slot in range(self.PRESET_VISIBLE_SLOTS):
@@ -286,7 +308,14 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
                 number_width,
                 number_height,
             )
-            number_ocr = RuleOcr(roi=roi, area=roi, mode='Digit', method='Default', keyword='', name=f'quick_loadout_preset_number_{slot + 1}')
+            number_ocr = RuleOcr(
+                roi=roi,
+                area=roi,
+                mode='Digit',
+                method='Default',
+                keyword='',
+                name=f'quick_loadout_preset_number_{slot + 1}',
+            )
             if number_ocr.ocr(self.device.image) == target:
                 return panel_y + self.PRESET_FIRST_Y + slot * self.PRESET_ROW_HEIGHT
         return None
@@ -308,6 +337,7 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
             current = tuple(result.ocr_text for result in results)
             y, score = self._find_name_y(layout.group_ocr, config.group_name, results)
             if y is not None and score >= 0.55:
+                logger.info(f'Quick loadout group OCR matched {config.group_name} [{score:.2f}]')
                 self.device.click(panel_x + self.GROUP_CLICK_X, y, control_name='QUICK_LOADOUT_GROUP_OCR')
                 sleep(0.6)
                 return True
@@ -320,7 +350,7 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
         logger.warning(f'Quick loadout group not found: {config.group_name}')
         return False
 
-    def _select_preset_row(self, layout: QuickLoadoutLayout, config: QuickLoadoutConfig):
+    def _select_preset_row(self, layout: QuickLoadoutLayout, config: QuickLoadoutConfig) -> int | None:
         self._rewind_list(layout.preset_ocr, layout.preset_swipe_to_top, self.MAX_PRESET_SWIPES)
         panel_y = layout.panel[1]
         if config.mode == QuickLoadoutMode.NUMBER and config.preset_number <= self.PRESET_FULL_VISIBLE_ROWS:
@@ -339,6 +369,7 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
             else:
                 y, score = self._find_name_y(layout.preset_ocr, config.preset_name, results)
             if y is not None and score >= 0.55:
+                logger.info(f'Quick loadout preset matched {target_label} [{score:.2f}]')
                 return y
             stable_count = stable_count + 1 if current and current == previous else 0
             if stable_count >= 2:
@@ -358,11 +389,12 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
             if not self.appear(self.I_SOU_SWITCH_SURE):
                 sleep(0.15)
                 continue
+            logger.info('Confirm quick loadout soul equipment')
             self.ui_click_until_disappear(self.I_SOU_SWITCH_SURE, interval=0.6)
             return
         logger.info('Quick loadout soul confirmation did not appear; preset may already be equipped')
 
-    def _deploy_quick_loadout(self, layout, fight_anchor, dismiss, row_y) -> bool:
+    def _deploy_quick_loadout(self, layout: QuickLoadoutLayout, fight_anchor: RuleImage, dismiss: RuleClick, row_y: int) -> bool:
         panel_x = layout.panel[0]
         self.device.click(panel_x + self.PRESET_SELECT_X, row_y, control_name='QUICK_LOADOUT_PRESET')
         sleep(0.4)
@@ -394,13 +426,14 @@ class QuickLoadout(BaseTask, SwitchSoulAssets):
             if name_ocr is None:
                 logger.warning('Named quick loadout enabled without a stage-name OCR rule')
             else:
-                config = self._resolve_named_quick_loadout(config, name_ocr)
+                config, _ = self._resolve_named_quick_loadout(config, name_ocr)
         config.validate_target()
         logger.hr('Quick loadout', 2)
         if not self._open_quick_loadout(entry, fight_anchor):
             return False
         try:
             layout = self._build_quick_loadout_layout(fight_anchor)
+            logger.info(f'Quick loadout panel: {layout.panel}')
             if not self._select_group(layout, config):
                 self._dismiss_quick_loadout(fight_anchor, dismiss)
                 return False

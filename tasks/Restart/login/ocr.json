@@ -10,8 +10,8 @@
   },
   {
     "itemName": "login_enter_game",
-    "roiFront": "550,567,176,56",
-    "roiBack": "558,574,154,49",
+    "roiFront": "592,558,96,89",
+    "roiBack": "587,553,106,99",
     "mode": "Single",
     "method": "Default",
     "keyword": "进入游戏",
@@ -43,5 +43,14 @@
     "method": "Default",
     "keyword": "",
     "description": "登录指定角色，默认第一个"
+  },
+  {
+    "itemName": "login_enter_game_old",
+    "roiFront": "550,567,176,56",
+    "roiBack": "545,562,186,66",
+    "mode": "Single",
+    "method": "Default",
+    "keyword": "",
+    "description": ""
   }
 ]
