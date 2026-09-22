@@ -11,7 +11,7 @@ from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
 from pydantic import BaseModel, ValidationError
 from module.config.model_overrides import model_with_field_overrides, model_with_group_overrides
-from module.config.utils import convert_to_underscore, parse_next_server_weekday, parse_tomorrow_server
+from module.config.utils import convert_to_underscore, parse_next_server_schedule
 from tasks.MultiAccountTaskOrchestration.task_name_resolver import TaskNameResolver
 from tasks.Restart.server_update import build_server_update_delay_target, is_server_update_window
 from tasks.Component.MultiAccount.multi_account_priority import MultiAccountPriorityMixin
@@ -304,10 +304,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         random_float = random.randint(0, float_time.hour * 3600 + float_time.minute * 60 + float_time.second)
         if scheduler.server_update == time(hour=9):
             return next_run + timedelta(seconds=random_float)
-        mode = getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode)
-        if mode == "weekday":
-            return parse_next_server_weekday(scheduler.server_update, scheduler.weekdays, random_float)
-        return parse_tomorrow_server(scheduler.server_update, scheduler.delay_date, random_float)
+        return parse_next_server_schedule(scheduler, random_float)
 
     def _build_due_fixed_batch_plan(self, now: datetime):
         """收集账号下到点的顺序任务组，按原生 Scheduler 规则排序。"""

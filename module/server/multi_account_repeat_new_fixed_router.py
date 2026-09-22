@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
 from module.config.model_overrides import model_with_group_overrides
-from module.config.utils import convert_to_underscore, parse_next_server_weekday, parse_tomorrow_server
+from module.config.utils import apply_random_week_schedule_edit, convert_to_underscore, parse_next_server_schedule
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
 from module.server.multi_account_router_support import is_multi_account_task, runnable_account
@@ -140,9 +140,7 @@ def _scheduler_next_run(scheduler: Scheduler, *, run_now: bool) -> datetime:
     random_float = random.randint(0, float_time.hour * 3600 + float_time.minute * 60 + float_time.second)
     if scheduler.server_update == time(hour=9):
         return next_run + timedelta(seconds=random_float)
-    if getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode) == "weekday":
-        return parse_next_server_weekday(scheduler.server_update, scheduler.weekdays, random_float)
-    return parse_tomorrow_server(scheduler.server_update, scheduler.delay_date, random_float)
+    return parse_next_server_schedule(scheduler, random_float)
 
 
 def _fixed_batch_target(script_name: str, section) -> datetime | None:
@@ -210,6 +208,7 @@ def _serialize_fixed_batch(account: MultiAccountRepeatNewAccount, batch: MultiAc
         "schedule_mode": getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode),
         "interval_days": scheduler.delay_date,
         "weekdays": scheduler.weekdays,
+        "random_week_days": scheduler.random_week_days,
         "last_complete_time": batch.last_complete_time.isoformat(sep=" ", timespec="seconds"),
         "task_progress_time": batch.task_progress_time.isoformat(sep=" ", timespec="seconds"),
         "next_run": next_run.isoformat(sep=" ", timespec="seconds") if next_run else None,
@@ -516,6 +515,7 @@ async def set_fixed_time_batch_schedule(
         schedule_mode: str = "daily",
         interval_days: int = 1,
         weekdays: str = "",
+        random_week_days: int = 1,
 ):
     """一次性更新时间段的时间和运行周期。"""
     section = _section(script_name)
@@ -524,8 +524,8 @@ async def set_fixed_time_batch_schedule(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="运行时间格式错误，应为 HH:MM") from exc
     mode = schedule_mode.strip().lower()
-    if mode not in {"daily", "interval", "weekday"}:
-        raise HTTPException(status_code=400, detail="运行周期只能是每天、间隔天数或指定星期")
+    if mode not in {"daily", "interval", "weekday", "random_week"}:
+        raise HTTPException(status_code=400, detail="运行周期只能是每天、间隔天数、指定星期或每周随机")
     if not 1 <= interval_days <= 365:
         raise HTTPException(status_code=400, detail="间隔天数必须在 1 到 365 之间")
     try:
@@ -538,15 +538,25 @@ async def set_fixed_time_batch_schedule(
         raise HTTPException(status_code=400, detail="星期格式错误") from exc
     if any(day < 1 or day > 7 for day in parsed_weekdays):
         raise HTTPException(status_code=400, detail="星期只能选择周一到周日")
-    if mode == "weekday" and not parsed_weekdays:
-        raise HTTPException(status_code=400, detail="指定星期至少选择一天")
+    if mode in {"weekday", "random_week"} and not parsed_weekdays:
+        raise HTTPException(status_code=400, detail="指定星期或每周随机至少选择一天")
 
     batch = _batch(_task_account(section, account_index), batch_id)
     scheduler = batch.scheduler
     scheduler.server_update = parsed_time
-    scheduler.schedule_mode = ScheduleMode.WEEKDAY if mode == "weekday" else ScheduleMode.INTERVAL
+    if not 1 <= random_week_days <= len(parsed_weekdays or list(range(1, 8))):
+        raise HTTPException(status_code=400, detail="随机运行天数不能超过候选星期数量")
+    scheduler.schedule_mode = (
+        ScheduleMode.RANDOM_WEEK if mode == "random_week"
+        else ScheduleMode.WEEKDAY if mode == "weekday"
+        else ScheduleMode.INTERVAL
+    )
     scheduler.delay_date = interval_days
     scheduler.weekdays = parsed_weekdays or list(range(1, 8))
+    scheduler.random_week_days = random_week_days
+    scheduler.random_week_key = ""
+    scheduler.random_weekdays = []
+    scheduler.random_week_rule = ""
     scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
@@ -559,7 +569,7 @@ async def get_fixed_time_batch_scheduler_args(script_name: str, account_index: i
     account = _task_account(_section(script_name), account_index)
     batch = _batch(account, batch_id)
     # 固定时间段完整复用 OAS 原生 Scheduler 的所有字段。
-    allowed = {"enable", "next_run", "priority", "success_interval", "failure_interval", "server_update", "schedule_mode", "delay_date", "weekdays", "float_time"}
+    allowed = {"enable", "next_run", "priority", "success_interval", "failure_interval", "server_update", "schedule_mode", "delay_date", "weekdays", "random_week_days", "float_time"}
     arguments = [
         item for item in _serialize_group(_fixed_batch_scheduler(account, batch))
         if item.get("name") in allowed
@@ -581,13 +591,18 @@ async def set_fixed_time_batch_scheduler_arg(
     account = _task_account(section, account_index)
     batch = _batch(account, batch_id)
     argument_name = convert_to_underscore(argument)
-    allowed = {"enable", "next_run", "priority", "success_interval", "failure_interval", "server_update", "schedule_mode", "delay_date", "weekdays", "float_time"}
+    allowed = {"enable", "next_run", "priority", "success_interval", "failure_interval", "server_update", "schedule_mode", "delay_date", "weekdays", "random_week_days", "float_time"}
     if argument_name not in allowed:
         raise HTTPException(status_code=400, detail="该时间段不支持修改此调度器参数")
     try:
         scheduler_data = _fixed_batch_scheduler(account, batch).model_dump(mode="json")
         scheduler_data[argument_name] = _convert_argument(types, value)
         scheduler = Scheduler.model_validate(scheduler_data)
+        apply_random_week_schedule_edit(
+            scheduler, argument_name, getattr(scheduler, argument_name)
+        )
+        if argument_name in {"schedule_mode", "weekdays", "random_week_days", "random_weekdays"}:
+            scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
         _apply_fixed_batch_scheduler(batch, scheduler)
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"特殊任务调度器参数无效：{exc}") from exc

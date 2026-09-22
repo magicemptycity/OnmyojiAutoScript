@@ -480,6 +480,14 @@ class ConfigModel(ConfigBase):
         # 设置参数
         try:
             setattr(group_object, argument, value)
+            if group == "scheduler" and argument in {
+                "schedule_mode", "weekdays", "random_week_days", "random_weekdays"
+            }:
+                apply_random_week_schedule_edit(group_object, argument, value)
+                if group_object.server_update != datetime.strptime(
+                    "09:00:00", "%H:%M:%S"
+                ).time():
+                    group_object.next_run = parse_next_server_schedule(group_object)
             logger.info(f'Set arg {self.config_name}.{task}.{group}.{argument}.{value}')
             self.save()  # 我是没有想到什么方法可以使得属性改变自动保存的
             return True

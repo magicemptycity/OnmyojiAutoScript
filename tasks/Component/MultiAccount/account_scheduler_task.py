@@ -8,8 +8,7 @@ from typing import Any, ClassVar
 from module.config.model_overrides import model_with_field_overrides
 from module.config.utils import (
     convert_to_underscore,
-    parse_next_server_weekday,
-    parse_tomorrow_server,
+    parse_next_server_schedule,
 )
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
@@ -332,14 +331,7 @@ class AccountSchedulerTaskBase(MultiAccountRepeatNewBase):
         )
         if scheduler.server_update == time(hour=9):
             return next_run + timedelta(seconds=random_float)
-        schedule_mode = getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode)
-        if schedule_mode == "weekday":
-            return parse_next_server_weekday(
-                scheduler.server_update, scheduler.weekdays, random_float
-            )
-        return parse_tomorrow_server(
-            scheduler.server_update, scheduler.delay_date, random_float
-        )
+        return parse_next_server_schedule(scheduler, random_float)
 
     def _schedule_account_next_run(
         self, account: Any, *, success: bool, start_time: datetime

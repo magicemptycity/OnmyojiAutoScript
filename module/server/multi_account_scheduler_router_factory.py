@@ -8,12 +8,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
 from module.config.model_overrides import model_with_field_overrides, model_with_group_overrides
-from module.config.utils import convert_to_underscore
+from module.config.utils import apply_random_week_schedule_edit, convert_to_underscore
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
 from module.server.multi_account_feature_registry import MultiAccountFeature
 from tasks.Component.MultiAccount.shared_public_accounts import SharedPublicAccount
-from module.config.utils import parse_next_server_weekday, parse_tomorrow_server
+from module.config.utils import parse_next_server_schedule
 
 @dataclass(frozen=True)
 class AccountSchedulerRouterSpec:
@@ -226,9 +226,7 @@ def create_account_scheduler_router(spec: AccountSchedulerRouterSpec) -> APIRout
         random_float = random.randint(0, float_time.hour * 3600 + float_time.minute * 60 + float_time.second)
         if scheduler.server_update == time(hour=9):
             return next_run + timedelta(seconds=random_float)
-        if getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode) == "weekday":
-            return parse_next_server_weekday(scheduler.server_update, scheduler.weekdays, random_float)
-        return parse_tomorrow_server(scheduler.server_update, scheduler.delay_date, random_float)
+        return parse_next_server_schedule(scheduler, random_float)
 
 
     def _overview_sort_key(row: dict, index: int) -> tuple:
@@ -376,6 +374,12 @@ def create_account_scheduler_router(spec: AccountSchedulerRouterSpec) -> APIRout
             )
         except (ValidationError, ValueError, TypeError) as exc:
             raise HTTPException(status_code=400, detail=f"账号任务调度器无效：{exc}") from exc
+        apply_random_week_schedule_edit(
+            candidate, convert_to_underscore(argument),
+            getattr(candidate, convert_to_underscore(argument)),
+        )
+        if convert_to_underscore(argument) in {"schedule_mode", "weekdays", "random_week_days", "random_weekdays"}:
+            candidate.next_run = _scheduler_next_run(candidate, run_now=False)
         account.scheduler = candidate
         setattr(account, spec.next_run_field, candidate.next_run)
         _save(script_name, section)

@@ -266,7 +266,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, SameHeartTeamAssets):
             if self.appear_then_click(self.I_DT_GW_DONATE_RECORD_THANKS, interval=1.5):  # 受赠界面的一键感谢
                 timeout_timer.reset()
                 continue
-            if self.appear(self.I_DT_GW_DONATE_RED, interval=2.5):  # 赠予界面的一键领取
+            if self.appear(self.I_DT_GW_DONATE_RED, interval=2.5) and not self.appear(self.I_UI_BACK_RED, interval=0.6):  # 赠予界面的一键领取
                 self.ui_click(self.I_DT_GW_GIVE, self.I_DT_GW_ONE_COLLECT)
                 self.appear_then_click(self.I_DT_GW_ONE_COLLECT, interval=0.6)
                 timeout_timer.reset()

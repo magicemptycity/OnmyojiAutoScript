@@ -11,7 +11,10 @@ from pydantic import BaseModel, Field
 from fastapi.responses import Response, StreamingResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime, timedelta
-from module.config.utils import convert_to_underscore, update_json_file
+from module.config.utils import (
+    apply_random_week_schedule_edit, convert_to_underscore,
+    parse_next_server_schedule, update_json_file,
+)
 from module.config.config_model import ConfigModel
 from module.config.weekly_schedule import WeeklySchedule
 
@@ -635,13 +638,35 @@ async def update_script_arguments(script_name: str, task: str, updates: list[Scr
         task_data = source.get(task_key)
         if not isinstance(task_data, dict):
             raise HTTPException(status_code=404, detail="Task not found")
+        changed_scheduler_fields = set()
         for group, argument, value in converted:
             group_data = task_data.get(group)
             if not isinstance(group_data, dict) or argument not in group_data:
                 raise HTTPException(status_code=404, detail=f"Argument not found: {group}.{argument}")
+            if group == "scheduler" and group_data.get(argument) != value:
+                changed_scheduler_fields.add(argument)
             group_data[argument] = value
         source.pop("config_name", None)
-        return ConfigModel(config_name=script_name, **source).model_dump()
+        model = ConfigModel(config_name=script_name, **source)
+        scheduler = getattr(getattr(model, task_key, None), "scheduler", None)
+        if scheduler is not None and changed_scheduler_fields:
+            # 先重置候选规则，再应用用户手动选择的最终星期。
+            for argument in ("schedule_mode", "weekdays", "random_week_days"):
+                if argument in changed_scheduler_fields:
+                    apply_random_week_schedule_edit(
+                        scheduler, argument, getattr(scheduler, argument)
+                    )
+            if "random_weekdays" in changed_scheduler_fields:
+                apply_random_week_schedule_edit(
+                    scheduler, "random_weekdays", scheduler.random_weekdays
+                )
+            if (
+                changed_scheduler_fields
+                & {"schedule_mode", "weekdays", "random_week_days", "random_weekdays"}
+                and scheduler.server_update != datetime.strptime("09:00:00", "%H:%M:%S").time()
+            ):
+                scheduler.next_run = parse_next_server_schedule(scheduler)
+        return model.model_dump()
     update_json_file(filepath, apply)
     return True
 

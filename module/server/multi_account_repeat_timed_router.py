@@ -9,8 +9,7 @@ from pydantic import BaseModel, ValidationError
 from module.config.model_overrides import model_with_field_overrides, model_with_group_overrides
 from module.config.utils import (
     convert_to_underscore,
-    parse_next_server_weekday,
-    parse_tomorrow_server,
+    parse_next_server_schedule,
 )
 from module.server.api_logger import ApiLoggingRoute
 from module.server.main_manager import mm
@@ -108,19 +107,7 @@ def _scheduler_next_run(scheduler, *, run_now: bool) -> datetime:
     server_update = getattr(scheduler, "server_update", time(hour=9))
     if server_update == time(hour=9):
         return next_run + timedelta(seconds=random_float)
-    schedule_mode = getattr(scheduler, "schedule_mode", "interval_days")
-    schedule_mode = getattr(schedule_mode, "value", schedule_mode)
-    if schedule_mode == "weekday":
-        return parse_next_server_weekday(
-            server_update,
-            getattr(scheduler, "weekdays", list(range(1, 8))),
-            random_float,
-        )
-    return parse_tomorrow_server(
-        server_update,
-        getattr(scheduler, "delay_date", 1),
-        random_float,
-    )
+    return parse_next_server_schedule(scheduler, random_float)
 
 
 def _refresh_outer_scheduler(script_name: str, section) -> None:

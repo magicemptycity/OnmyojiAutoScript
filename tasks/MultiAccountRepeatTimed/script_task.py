@@ -8,8 +8,7 @@ from typing import Any, ClassVar
 from module.config.model_overrides import model_with_group_overrides
 from module.config.utils import (
     convert_to_underscore,
-    parse_next_server_weekday,
-    parse_tomorrow_server,
+    parse_next_server_schedule,
 )
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
@@ -355,21 +354,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
             # 与 OAS 默认 09:00 规则一致：在间隔结果上增加随机延迟。
             return next_run + timedelta(seconds=random_float)
 
-        schedule_mode = getattr(scheduler, "schedule_mode", "interval_days")
-        schedule_mode = getattr(schedule_mode, "value", schedule_mode)
-        if schedule_mode == "weekday":
-            return parse_next_server_weekday(
-                server_update,
-                getattr(scheduler, "weekdays", list(range(1, 8))),
-                random_float,
-            )
-
-        # 间隔天数规则：指定日期间隔后的固定时刻。
-        return parse_tomorrow_server(
-            server_update,
-            getattr(scheduler, "delay_date", 1),
-            random_float,
-        )
+        return parse_next_server_schedule(scheduler, random_float)
 
     def _fallback_next_run(
         self, task_name: str, entry: MultiAccountRepeatTimedTask, success: bool

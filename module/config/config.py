@@ -604,20 +604,7 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
             if scheduler.server_update == time(hour=9):
                 next_run += timedelta(seconds=random_float)
             else:
-                schedule_mode = getattr(scheduler, 'schedule_mode', 'interval_days')
-                schedule_mode = getattr(schedule_mode, 'value', schedule_mode)
-                if schedule_mode == 'weekday':
-                    next_run = parse_next_server_weekday(
-                        scheduler.server_update,
-                        scheduler.weekdays,
-                        random_float,
-                    )
-                else:
-                    next_run = parse_tomorrow_server(
-                        scheduler.server_update,
-                        scheduler.delay_date,
-                        random_float,
-                    )
+                next_run = parse_next_server_schedule(scheduler, random_float)
 
         # 将这些连接起来，方便日志输出
         kv = dict_to_kv(

@@ -330,6 +330,116 @@ def parse_next_server_weekday(server_update: time, weekdays: list[int], float_se
     return next_run
 
 
+def parse_next_server_random_weekday(
+    scheduler,
+    float_seconds: int = 0,
+    now: datetime | None = None,
+) -> datetime:
+    """按周保存随机星期，并返回下一个随机运行时间。
+
+    仅从 ``scheduler.weekdays`` 中抽取；周中首次启用时优先从本周尚未
+    过去的日期抽取。本周没有可用日期时直接为下一周抽签。
+    """
+    import random
+
+    now = (now or datetime.now()).replace(microsecond=0)
+    server_update = scheduler.server_update
+    if isinstance(server_update, str):
+        server_update = time.fromisoformat(server_update)
+    allowed = sorted({int(day) for day in scheduler.weekdays if 1 <= int(day) <= 7})
+    if not allowed:
+        allowed = list(range(1, 8))
+    count = min(max(int(getattr(scheduler, 'random_week_days', 1)), 1), len(allowed))
+
+    for week_offset in range(2):
+        reference = now.date() + timedelta(days=7 * week_offset)
+        iso_year, iso_week, _ = reference.isocalendar()
+        week_key = f'{iso_year}-W{iso_week:02d}'
+        week_start = reference - timedelta(days=reference.isoweekday() - 1)
+        candidates = list(allowed)
+        if week_offset == 0 and getattr(scheduler, 'random_week_key', '') != week_key:
+            remaining = [
+                day for day in allowed
+                if datetime.combine(week_start + timedelta(days=day - 1), server_update) > now
+            ]
+            if remaining:
+                candidates = remaining
+            else:
+                continue
+        selected = sorted({
+            int(day) for day in getattr(scheduler, 'random_weekdays', [])
+            if int(day) in allowed
+        })
+        rule_key = f'{allowed}:{count}'
+        same_week = getattr(scheduler, 'random_week_key', '') == week_key
+        same_rule = getattr(scheduler, 'random_week_rule', '') == rule_key
+        manual = bool(getattr(scheduler, 'random_week_manual', False))
+        if not same_week or not same_rule or not selected:
+            selected = sorted(random.sample(candidates, min(count, len(candidates))))
+            scheduler.random_week_key = week_key
+            scheduler.random_weekdays = selected
+            scheduler.random_week_rule = rule_key
+            scheduler.random_week_manual = False
+            logger.info(f'Weekly random schedule {week_key}: {selected}')
+        elif manual:
+            logger.debug(f'Use manually adjusted weekly schedule {week_key}: {selected}')
+
+        for weekday in selected:
+            candidate = datetime.combine(week_start + timedelta(days=weekday - 1), server_update)
+            if candidate > now:
+                if float_seconds:
+                    candidate += timedelta(seconds=float_seconds)
+                    start = datetime.combine(candidate.date(), time.min)
+                    end = datetime.combine(candidate.date(), time(hour=23, minute=50))
+                    candidate = max(start, min(candidate, end))
+                return candidate
+
+    raise ValueError('Unable to calculate next weekly random run time')
+
+
+def apply_random_week_schedule_edit(scheduler, argument: str, value):
+    """应用用户对随机周调度字段的修改，并维护手动/自动状态。"""
+    argument = str(argument)
+    setattr(scheduler, argument, value)
+    if argument == 'random_weekdays':
+        selected = sorted({int(day) for day in value})
+        allowed = sorted({int(day) for day in scheduler.weekdays})
+        expected = min(int(scheduler.random_week_days), len(allowed))
+        if not selected:
+            raise ValueError('本周运行星期至少选择一天')
+        if any(day not in allowed for day in selected):
+            raise ValueError('本周运行星期必须位于候选运行星期范围内')
+        if len(selected) != expected:
+            raise ValueError(f'本周运行星期必须选择 {expected} 天')
+        now = datetime.now()
+        iso_year, iso_week, _ = now.isocalendar()
+        scheduler.random_week_key = f'{iso_year}-W{iso_week:02d}'
+        scheduler.random_weekdays = selected
+        scheduler.random_week_rule = f'{allowed}:{expected}'
+        scheduler.random_week_manual = True
+    elif argument in {'schedule_mode', 'weekdays', 'random_week_days'}:
+        scheduler.random_week_key = ''
+        scheduler.random_weekdays = []
+        scheduler.random_week_rule = ''
+        scheduler.random_week_manual = False
+    return scheduler
+
+
+def parse_next_server_schedule(scheduler, float_seconds: int = 0) -> datetime:
+    """计算非默认 09:00 强制日期规则的下次运行时间。"""
+    mode = getattr(getattr(scheduler, 'schedule_mode', 'interval_days'), 'value',
+                   getattr(scheduler, 'schedule_mode', 'interval_days'))
+    if mode == 'weekday':
+        return parse_next_server_weekday(
+            scheduler.server_update, scheduler.weekdays, float_seconds
+        )
+    if mode == 'random_week':
+        return parse_next_server_random_weekday(scheduler, float_seconds)
+    return parse_tomorrow_server(
+        scheduler.server_update, scheduler.delay_date, float_seconds
+    )
+
+
 def deep_get(d, keys, default=None):
     """
     Get values in dictionary safely.

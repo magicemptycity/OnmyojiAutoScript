@@ -180,7 +180,7 @@ class MultiAccountRepeatNewFixedTimeBatch(ConfigBase, extra="allow"):
         elif not isinstance(scheduler, dict):
             legacy_scheduler_keys = {
                 "enable", "next_run", "priority", "success_interval", "failure_interval",
-                "run_time", "schedule_mode", "interval_days", "weekdays", "float_time",
+                "run_time", "schedule_mode", "interval_days", "weekdays", "random_week_days", "float_time",
             }
             if legacy_scheduler_keys.intersection(data):
                 mode = str(data.get("schedule_mode", "daily")).strip().lower()
@@ -191,9 +191,10 @@ class MultiAccountRepeatNewFixedTimeBatch(ConfigBase, extra="allow"):
                     "success_interval": data.get("success_interval", "1 00:00:00"),
                     "failure_interval": data.get("failure_interval", "1 00:00:00"),
                     "server_update": data.get("run_time", "09:00:00"),
-                    "schedule_mode": "weekday" if mode == "weekday" else "interval_days",
+                    "schedule_mode": mode if mode in {"weekday", "random_week"} else "interval_days",
                     "delay_date": data.get("interval_days", 1),
                     "weekdays": data.get("weekdays") or list(range(1, 8)),
+                    "random_week_days": data.get("random_week_days", 1),
                     "float_time": data.get("float_time", "00:00:00"),
                 }
             else:
