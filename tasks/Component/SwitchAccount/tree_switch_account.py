@@ -46,6 +46,8 @@ class TreeSwitchAccount(SwitchAccount):
         """新多账号专用登录流程：网易账号阶段只使用控件树。"""
         is_account_logon = False
         character_selected = False
+        account_selected = False
+        login_button_clicked = False
         for _ in range(120):
             self.screenshot()
             ui = self._account_ui()
@@ -71,13 +73,20 @@ class TreeSwitchAccount(SwitchAccount):
                 account_list_visible = bool(ui.nodes(root, "netease_mpay__user_list"))
                 account_page_visible = bool(ui.nodes(root, "netease_mpay__login_user_item"))
                 if account_list_visible or account_page_visible:
-                    if not self.selectAccount(accountInfo):
-                        logger.error("控件树中未找到目标网易账号：%s", getattr(accountInfo, "account", ""))
-                        return False
-                    time.sleep(0.5)
-                    if not self._account_ui().click_resource("netease_mpay__login", "网易账号登录"):
-                        logger.error("控件树中未找到网易登录按钮")
-                        return False
+                    # 账号已选中后，账号列表节点可能在页面过渡期间短暂残留，
+                    # 不得再次 selectAccount，否则会把正常过渡误判成“找不到账号”。
+                    if not account_selected:
+                        if not self.selectAccount(accountInfo):
+                            logger.error("控件树中未找到目标网易账号：%s", getattr(accountInfo, "account", ""))
+                            return False
+                        account_selected = True
+                        time.sleep(0.5)
+                    if not login_button_clicked:
+                        if not self._account_ui().click_resource("netease_mpay__login", "网易账号登录"):
+                            logger.error("控件树中未找到网易登录按钮")
+                            return False
+                        login_button_clicked = True
+                    time.sleep(1)
                     continue
             except AccountUiUnavailable as exc:
                 logger.error("网易账号控件树不可用：%s", exc)
@@ -98,6 +107,8 @@ class TreeSwitchAccount(SwitchAccount):
                     "netease_mpay__switch_account", "网易用户中心-切换账号"
                 ):
                     is_account_logon = False
+                    account_selected = False
+                    login_button_clicked = False
                     time.sleep(1)
                     continue
             except AccountUiUnavailable as exc:
@@ -106,7 +117,14 @@ class TreeSwitchAccount(SwitchAccount):
 
             # 登录页没有进入用户中心时，点击原有用户中心入口；
             # 这是从庭院或重新登录页进入账号切换流程的必经步骤。
-            if not is_account_logon and self.click(self.C_SA_LOGIN_FORM_USER_CENTER, interval=1):
+            # 网易游戏登录页/账号选择页顶部会显示网易 LOGO；
+            # 已在该流程中时禁止再次点击游戏内用户中心入口。
+            login_surface_visible = self.appear(self.I_SA_NETEASE_GAME_LOGO)
+            if (
+                not is_account_logon
+                and not login_surface_visible
+                and self.click(self.C_SA_LOGIN_FORM_USER_CENTER, interval=1)
+            ):
                 time.sleep(1)
                 continue
 

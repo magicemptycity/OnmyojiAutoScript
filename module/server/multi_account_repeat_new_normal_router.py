@@ -219,6 +219,35 @@ async def list_task_accounts(script_name: str):
     return {"accounts": accounts}
 
 
+@multi_account_repeat_new_normal_app.get('/{script_name}/multi_account_repeat_new_normal/account-summaries')
+async def list_task_account_summaries(script_name: str):
+    """返回账号列表所需摘要，不传输每个任务的完整明细。"""
+    data = await list_task_accounts(script_name)
+    summaries = []
+    for account in data["accounts"]:
+        enabled_tasks = [task for task in account["tasks"] if task["enabled"]]
+        completed_count = sum(task["status"] == "completed" for task in enabled_tasks)
+        failed_count = sum(task["status"] in {"failed", "unfinished"} for task in enabled_tasks)
+        summaries.append({
+            key: value for key, value in account.items() if key != "tasks"
+        } | {
+            "enabled_task_count": len(enabled_tasks),
+            "completed_task_count": completed_count,
+            "failed_task_count": failed_count,
+        })
+    return {"accounts": summaries}
+
+
+@multi_account_repeat_new_normal_app.get('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}')
+async def get_task_account(script_name: str, account_index: int):
+    """返回单个运行账号详情，避免进入任务列表时重新加载全部账号。"""
+    data = await list_task_accounts(script_name)
+    account = next((item for item in data["accounts"] if item["index"] == account_index), None)
+    if account is None:
+        raise HTTPException(status_code=404, detail="运行账号不存在")
+    return account
+
+
 @multi_account_repeat_new_normal_app.post('/{script_name}/multi_account_repeat_new_normal/accounts')
 async def add_task_account(script_name: str, public_account_identifier: str):
     section = _section(script_name)

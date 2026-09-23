@@ -799,11 +799,13 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         except (ValidationError, ValueError) as exc:
             raise ValueError(f"账号私有配置无效：{task_name}: {exc}") from exc
         BaseModel.__setattr__(self.config.model, task_key, active)
+        config_source = "私有配置" if use_private else "公共配置"
         logger.info(
-            "为账号 %s-%s 套用任务 %s 的私有配置和运行记录",
+            "为账号 %s-%s 套用任务 %s 的%s和独立运行记录",
             getattr(getattr(self, "current_account_info", None), "character", ""),
             getattr(getattr(self, "current_account_info", None), "svr", ""),
-            task_name,
+            self._task_display_name(task_name),
+            config_source,
         )
         return task_key, public_backup, active.model_dump()
 
