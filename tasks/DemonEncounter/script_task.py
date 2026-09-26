@@ -443,11 +443,13 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
         :param index: 四个灯笼，从1开始
         :return:
         """
+        # 分类模板的搜索区(须容纳完整灯笼图案), 与点击区 C_DE_* 分离:
+        # 点击区只包住内部图形, 模板放不进搜索区会全部误判成 battle
         match_roi = {
-            1: self.C_DE_1.roi_front,
-            2: self.C_DE_2.roi_front,
-            3: self.C_DE_3.roi_front,
-            4: self.C_DE_4.roi_front,
+            1: self.C_DE_MATCH_1.roi_front,
+            2: self.C_DE_MATCH_2.roi_front,
+            3: self.C_DE_MATCH_3.roi_front,
+            4: self.C_DE_MATCH_4.roi_front,
         }
         match_empty = {
             1: self.I_DE_DEFEAT_1,
