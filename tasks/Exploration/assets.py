@@ -119,9 +119,9 @@ class ExplorationAssets:
 	I_E_REWARD_BOX_SMALL = RuleImage(roi_front=(234,626,43,32), roi_back=(0,597,327,100), threshold=0.8, method="Template matching", file="./tasks/Exploration/res/res_e_reward_box_small.png")
 	# 右侧候补标志 
 	I_E_ROTATE_EXIST_RIGHT = RuleImage(roi_front=(829,580,33,35), roi_back=(700,574,450,46), threshold=0.8, method="Template matching", file="./tasks/Exploration/res/res_e_ratate_exsit.png")
-	# 主线tab中的 “章” 
+	# 主线tab中的 “章”
 	I_CHECK_MAIN_TITLE = RuleImage(roi_front=(1150,457,32,32), roi_back=(1069,222,113,336), threshold=0.85, method="Template matching", file="./tasks/Exploration/res/res_check_main_title.png")
-	# 玩法tab中“御魂” 
+	# 玩法tab中“御魂”
 	I_CHECK_PLAY_TITLE = RuleImage(roi_front=(1073,214,40,32), roi_back=(1065,210,190,316), threshold=0.85, method="Template matching", file="./tasks/Exploration/res/res_check_play_title.png")
 
 

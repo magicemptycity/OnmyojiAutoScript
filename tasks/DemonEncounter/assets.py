@@ -99,7 +99,7 @@ class DemonEncounterAssets:
 	I_JADE_50 = RuleImage(roi_front=(593,425,84,46), roi_back=(548,405,182,83), threshold=0.8, method="Template matching", file="./tasks/DemonEncounter/demon/demon_jade_50.png")
 	# 逢魔之时前往现世逢魔标志 
 	I_DE_TO_REAL_WORLD = RuleImage(roi_front=(993,488,104,28), roi_back=(960,458,186,104), threshold=0.8, method="Template matching", file="./tasks/DemonEncounter/demon/demon_de_to_real_world.png")
-	# 地图中央未购买的宝箱展示 
+	# 地图中央未购买的宝箱展示
 	I_DE_BOX_CENTER = RuleImage(roi_front=(618,325,45,34), roi_back=(547,264,190,157), threshold=0.8, method="Template matching", file="./tasks/DemonEncounter/demon/demon_de_box_center.png")
 
 
@@ -137,7 +137,7 @@ class DemonEncounterAssets:
 	# Ocr Rule Assets
 	# 计数已经开启多少的 
 	O_DE_COUNTER = RuleOcr(roi=(1204,685,48,34), area=(1204,685,48,34), mode="DigitCounter", method="Default", keyword="", name="de_counter")
-	# 今日挑战次数(剩余/总) 
+	# 今日挑战次数(剩余/总)
 	O_DE_CHALLENGE = RuleOcr(roi=(685,65,68,34), area=(540,60,220,42), mode="DigitCounter", method="Default", keyword="", name="de_challenge")
 
 
