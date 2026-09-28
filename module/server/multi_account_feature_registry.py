@@ -17,6 +17,7 @@ class MultiAccountFeature:
     fixed_batches: bool = False
     orchestration: bool = False
     overview_kind: str | None = None
+    account_copy_kind: str | None = None
     protocol_version: int = 1
 
     def __post_init__(self) -> None:
@@ -32,6 +33,10 @@ class MultiAccountFeature:
             "fixed_batches",
             "orchestration",
         }
+        expected_copy = {"normal": "tasks", "task_list": "tasks", "timed": "tasks",
+                         "fixed_group": "groups", "fixed_batches": "groups", "orchestration": "items"}
+        if self.account_copy_kind is not None and self.account_copy_kind != expected_copy.get(self.mode):
+            raise ValueError(f"功能 {self.key} 的账号复制能力与页面模式不匹配")
         if self.mode not in valid_modes:
             raise ValueError(f"不支持的多账号页面模式：{self.mode}")
         inferred_task_list = self.mode in {
@@ -49,6 +54,7 @@ class MultiAccountFeature:
 MULTI_ACCOUNT_FEATURES = (
     MultiAccountFeature(
         key="multi_account_repeat_new_normal",
+        account_copy_kind="tasks",
         task_name="MultiAccountRepeatNewNormal",
         display_name="多账号多任务新普通",
         mode="normal",
@@ -57,6 +63,7 @@ MULTI_ACCOUNT_FEATURES = (
     ),
     MultiAccountFeature(
         key="multi_account_cooperation",
+        account_copy_kind="tasks",
         task_name="MultiAccountCooperation",
         display_name="多账号协战",
         mode="normal",
@@ -65,6 +72,7 @@ MULTI_ACCOUNT_FEATURES = (
     ),
     MultiAccountFeature(
         key="multi_account_repeat_timed",
+        account_copy_kind="tasks",
         task_name="MultiAccountRepeatTimed",
         display_name="多账号多任务定时",
         mode="timed",
@@ -72,6 +80,7 @@ MULTI_ACCOUNT_FEATURES = (
     ),
     MultiAccountFeature(
         key="multi_account_repeat_new_fixed",
+        account_copy_kind="groups",
         task_name="MultiAccountRepeatNewFixed",
         display_name="多账号多任务新固定时间",
         mode="fixed_group",
@@ -79,6 +88,7 @@ MULTI_ACCOUNT_FEATURES = (
     ),
     MultiAccountFeature(
         key="multi_account_task_orchestration",
+        account_copy_kind="items",
         task_name="MultiAccountTaskOrchestration",
         display_name="多账号任务编排",
         mode="orchestration",

@@ -30,6 +30,7 @@ async def list_multi_account_features(script_name: str):
                 "fixed_batches": feature.fixed_batches,
                 "orchestration": feature.orchestration,
                 "overview_kind": feature.overview_kind,
+                "account_copy_kind": feature.account_copy_kind,
                 "available": getattr(model, feature.key, None) is not None,
             }
             for feature in MULTI_ACCOUNT_FEATURES
@@ -59,6 +60,7 @@ async def get_multi_account_feature_manifest(script_name: str, feature_key: str)
         "fixed_batches": feature.fixed_batches,
         "orchestration": feature.orchestration,
         "overview_kind": feature.overview_kind,
+        "account_copy_kind": feature.account_copy_kind,
         "capabilities": {
             "accounts": hasattr(section, "account_list"),
             "tasks": feature.task_list or any(hasattr(account, "task_list") for account in getattr(section, "account_list", [])),

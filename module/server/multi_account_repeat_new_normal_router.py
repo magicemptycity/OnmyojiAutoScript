@@ -8,6 +8,22 @@ from pydantic import BaseModel, ValidationError
 from module.config.model_overrides import model_with_group_overrides
 from module.config.utils import convert_to_underscore
 from module.server.api_logger import ApiLoggingRoute
+from module.server.multi_account_account_write_service import (
+    add_account as _add_account,
+    delete_account as _delete_account,
+    set_account_enabled as _set_account_enabled,
+)
+from module.server.multi_account_task_write_service import (
+    add_task_entry as _add_task_entry,
+    delete_task_entry as _delete_task_entry,
+    validate_task_name as _validate_task_name,
+)
+from module.server.multi_account_task_list_service import reorder_enabled_tasks as _reorder_enabled_tasks
+from module.server.multi_account_progress_service import set_task_progress_status as _set_task_progress_status
+from module.server.multi_account_copy_router_factory import register_normal_account_copy_route
+from module.server.multi_account_normal_copy import CopyAccountTasksRequest
+from module.server.multi_account_feature_registry import FEATURE_BY_KEY
+from module.server.multi_account_read_router_factory import register_account_read_routes, summarize_task_account
 from module.server.main_manager import mm
 from module.server.multi_account_router_support import is_multi_account_task
 from module.server.multi_account_task_config_service import (
@@ -31,6 +47,7 @@ from tasks.MultiAccountTaskOrchestration.task_name_resolver import TASK_NAME_ALI
 
 
 multi_account_repeat_new_normal_app = APIRouter(route_class=ApiLoggingRoute)
+
 
 
 def _section(script_name: str):
@@ -174,16 +191,47 @@ def _default_private_config(script_name: str, task_name: str) -> dict:
     )
 
 @multi_account_repeat_new_normal_app.get('/{script_name}/multi_account_repeat_new_normal/accounts')
-async def list_task_accounts(script_name: str):
+async def list_task_accounts(script_name: str, account_index: int | None = None, summary: bool = False):
     section = _section(script_name)
     accounts = []
     for index, item in enumerate([entry for entry in section.account_list if entry.public_account_identifier.strip()], start=1):
+        if account_index is not None and index != account_index:
+            continue
         completed = set(item.completed_task_names)
         failed = set(item.failed_task_names)
         unfinished = set(item.unfinished_task_names)
         # 旧的完成清单可能来自昨天；只有当天记录过进度才用于页面状态。
         progress_time = max(item.task_progress_time, item.last_complete_time)
         progress_is_today = progress_time.date() == datetime.now().date()
+        if summary:
+            enabled_tasks = [task for task in item.task_list if task.task_name and task.enable]
+            status = lambda task: (
+                "failed" if progress_is_today and task.task_name in failed
+                else "unfinished" if progress_is_today and task.task_name in unfinished
+                else "completed" if progress_is_today and task.task_name in completed
+                else "pending"
+            )
+            accounts.append({
+                "index": index,
+                "public_account_identifier": item.public_account_identifier,
+                "character": item.character,
+                "svr": item.svr,
+                "account": item.account,
+                "account_alias": item.account_alias,
+                "apple_or_android": item.apple_or_android,
+                "enabled": item.enabled,
+                "last_complete_time": item.last_complete_time.isoformat(sep=" ", timespec="seconds"),
+                "task_progress_time": item.task_progress_time.isoformat(sep=" ", timespec="seconds"),
+                "task_progress": {
+                    "completed_task_list": str(item.completed_task_list),
+                    "failed_task_list": str(item.failed_task_list),
+                    "unfinished_task_list": str(item.unfinished_task_list),
+                },
+                "enabled_task_count": len(enabled_tasks),
+                "completed_task_count": sum(status(task) == "completed" for task in enabled_tasks),
+                "failed_task_count": sum(status(task) in {"failed", "unfinished"} for task in enabled_tasks),
+            })
+            continue
         accounts.append({
             "index": index,
             "public_account_identifier": item.public_account_identifier,
@@ -219,46 +267,19 @@ async def list_task_accounts(script_name: str):
     return {"accounts": accounts}
 
 
-@multi_account_repeat_new_normal_app.get('/{script_name}/multi_account_repeat_new_normal/account-summaries')
-async def list_task_account_summaries(script_name: str):
-    """返回账号列表所需摘要，不传输每个任务的完整明细。"""
-    data = await list_task_accounts(script_name)
-    summaries = []
-    for account in data["accounts"]:
-        enabled_tasks = [task for task in account["tasks"] if task["enabled"]]
-        completed_count = sum(task["status"] == "completed" for task in enabled_tasks)
-        failed_count = sum(task["status"] in {"failed", "unfinished"} for task in enabled_tasks)
-        summaries.append({
-            key: value for key, value in account.items() if key != "tasks"
-        } | {
-            "enabled_task_count": len(enabled_tasks),
-            "completed_task_count": completed_count,
-            "failed_task_count": failed_count,
-        })
-    return {"accounts": summaries}
-
-
-@multi_account_repeat_new_normal_app.get('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}')
-async def get_task_account(script_name: str, account_index: int):
-    """返回单个运行账号详情，避免进入任务列表时重新加载全部账号。"""
-    data = await list_task_accounts(script_name)
-    account = next((item for item in data["accounts"] if item["index"] == account_index), None)
-    if account is None:
-        raise HTTPException(status_code=404, detail="运行账号不存在")
-    return account
+list_task_account_summaries, get_task_account = register_account_read_routes(
+    multi_account_repeat_new_normal_app, FEATURE_BY_KEY["multi_account_repeat_new_normal"],
+    list_task_accounts, summarize_task_account,
+    list_summaries=lambda script_name: list_task_accounts(script_name, summary=True),
+)
 
 
 @multi_account_repeat_new_normal_app.post('/{script_name}/multi_account_repeat_new_normal/accounts')
 async def add_task_account(script_name: str, public_account_identifier: str):
     section = _section(script_name)
     source = _public_account(_library(script_name), public_account_identifier)
-    if any(item.public_account_identifier == source.identifier for item in section.account_list):
-        return True
-    account = MultiAccountRepeatNewAccount()
-    _sync_task_account(account, source)
-    section.account_list = [item for item in section.account_list if item.public_account_identifier.strip()]
-    section.account_list.append(account)
-    _save(script_name, multi_account_repeat_new_normal=section)
+    if _add_account(section, source, MultiAccountRepeatNewAccount):
+        _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
 
@@ -266,8 +287,7 @@ async def add_task_account(script_name: str, public_account_identifier: str):
 async def set_task_account_enabled(script_name: str, account_index: int, enable: bool):
     """仅切换当前功能内的账号开关，保留该账号全部任务、调度和运行记录。"""
     section = _section(script_name)
-    account = _task_account(section, account_index)
-    account.enabled = enable
+    _set_account_enabled(section, account_index, enable)
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
@@ -275,8 +295,7 @@ async def set_task_account_enabled(script_name: str, account_index: int, enable:
 @multi_account_repeat_new_normal_app.delete('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}')
 async def delete_task_account(script_name: str, account_index: int):
     section = _section(script_name)
-    account = _task_account(section, account_index)
-    section.account_list.remove(account)
+    _delete_account(section, account_index)
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
@@ -285,47 +304,17 @@ async def delete_task_account(script_name: str, account_index: int):
 async def add_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
-    key = convert_to_underscore(task_name.strip())
-    if not key or getattr(mm.config_cache(script_name).model, key, None) is None:
-        raise HTTPException(status_code=400, detail="任务不存在")
-    if is_multi_account_task(key):
-        raise HTTPException(status_code=400, detail="不能嵌套多账号多任务")
-    if not _has_task_script(key):
-        raise HTTPException(status_code=400, detail="该功能没有可执行任务，不能添加到多账号任务")
-    existing = next((item for item in account.task_list if convert_to_underscore(item.task_name) == key), None)
-    if existing is not None:
-        existing.enable = True
+    key = _validate_task_name(script_name, task_name)
+    if _add_task_entry(account, key, MultiAccountRepeatNewTask, mode="normal"):
         _save(script_name, multi_account_repeat_new_normal=section)
-        return True
-    account.task_list.append(MultiAccountRepeatNewTask(task_name=key, enable=True))
-    _save(script_name, multi_account_repeat_new_normal=section)
     return True
-
 
 @multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/tasks/order')
 async def reorder_tasks(script_name: str, account_index: int, task_names: str):
     """保存已启用任务的执行顺序，不触碰停用任务及其私有配置。"""
     section = _section(script_name)
     account = _task_account(section, account_index)
-    enabled = [item for item in account.task_list if item.enable]
-    requested_names = [
-        convert_to_underscore(name.strip())
-        for name in re.split(r'[,\n]', task_names)
-        if name.strip()
-    ]
-    enabled_names = [convert_to_underscore(item.task_name) for item in enabled]
-    if (
-        len(requested_names) != len(enabled_names)
-        or len(set(requested_names)) != len(requested_names)
-        or set(requested_names) != set(enabled_names)
-    ):
-        raise HTTPException(status_code=400, detail="排序任务必须与当前已启用任务完全一致")
-
-    enabled_by_name = {convert_to_underscore(item.task_name): item for item in enabled}
-    account.task_list = [
-        *(enabled_by_name[name] for name in requested_names),
-        *(item for item in account.task_list if not item.enable),
-    ]
+    account.task_list = _reorder_enabled_tasks(account.task_list, task_names)
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
@@ -335,10 +324,9 @@ async def delete_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
-    entry.enable = False
+    _delete_task_entry(account, entry, mode="normal")
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
-
 
 @multi_account_repeat_new_normal_app.put('/{script_name}/multi_account_repeat_new_normal/accounts/{account_index}/tasks/{task_name}/enable')
 async def set_task_enable(script_name: str, account_index: int, task_name: str, value: str):
@@ -354,25 +342,7 @@ async def set_task_status(script_name: str, account_index: int, task_name: str, 
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
-    status = value.strip().lower()
-    if status not in {"completed", "failed", "unfinished", "pending"}:
-        raise HTTPException(status_code=400, detail="任务状态只能是 completed、failed、unfinished 或 pending")
-
-    task_key = convert_to_underscore(entry.task_name)
-    completed = [name for name in account.completed_task_names if name != task_key]
-    failed = [name for name in account.failed_task_names if name != task_key]
-    unfinished = [name for name in account.unfinished_task_names if name != task_key]
-    if status == "completed":
-        completed.append(task_key)
-    elif status == "failed":
-        failed.append(task_key)
-    elif status == "unfinished":
-        unfinished.append(task_key)
-    elif account.last_complete_time.date() == datetime.now().date():
-        # "未开始" must not leave the account silently skipped by today's completion marker.
-        account.last_complete_time = datetime(2023, 1, 1)
-
-    _save_account_task_progress(account, completed, failed, unfinished)
+    _set_task_progress_status(account, entry.task_name, value, _task_display_name)
     _save(script_name, multi_account_repeat_new_normal=section)
     return True
 
@@ -577,3 +547,10 @@ async def reset_private_args_to_default(script_name: str, account_index: int, ta
     return True
 
 
+
+
+copy_account_tasks_to_accounts = register_normal_account_copy_route(
+    multi_account_repeat_new_normal_app, FEATURE_BY_KEY["multi_account_repeat_new_normal"],
+    load=lambda name: _section(name),
+    save=lambda name, candidate: _save(name, multi_account_repeat_new_normal=candidate),
+)

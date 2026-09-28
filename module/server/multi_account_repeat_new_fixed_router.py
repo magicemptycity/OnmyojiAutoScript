@@ -1,7 +1,6 @@
 import copy
-import random
 import re
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,8 +8,38 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
 from module.config.model_overrides import model_with_group_overrides
-from module.config.utils import apply_random_week_schedule_edit, convert_to_underscore, parse_next_server_schedule
+from module.config.utils import apply_random_week_schedule_edit, convert_to_underscore
+from module.config.multi_account_scheduler import quick_schedule_next_run
 from module.server.api_logger import ApiLoggingRoute
+from module.server.multi_account_schedule_commit import broadcast_schedule_overview, commit_schedule_change
+from module.server.multi_account_copy_service import copy_group_configuration, copy_task_configuration
+from module.server.multi_account_account_write_service import (
+    add_account as _add_account,
+    delete_account as _delete_account,
+    set_account_enabled as _set_account_enabled,
+)
+from module.server.multi_account_task_write_service import (
+    add_task_entry as _add_task_entry,
+    delete_task_entry as _delete_task_entry,
+    validate_task_name as _validate_task_name,
+)
+from module.server.multi_account_task_list_service import (
+    add_group_task as _add_group_task,
+    reorder_enabled_tasks as _reorder_enabled_tasks,
+    set_entry_enabled as _set_entry_enabled,
+)
+from module.server.multi_account_progress_service import set_task_progress_status as _set_task_progress_status
+from module.server.multi_account_group_adapter import (
+    ensure_disabled_group_task as _ensure_group_task,
+    find_group as _find_group_batch,
+    normalize_group_task_names as _normalize_group_names,
+    require_group_task as _require_group_task,
+    serialize_group as _serialize_group_batch,
+)
+from module.server.multi_account_schedule_summary import schedule_item_metrics
+from module.server.multi_account_copy_router_factory import register_account_copy_route
+from module.server.multi_account_feature_registry import FEATURE_BY_KEY
+from module.server.multi_account_read_router_factory import register_account_read_routes, summarize_group_account
 from module.server.main_manager import mm
 from module.server.multi_account_router_support import is_multi_account_task, runnable_account
 from module.server.multi_account_task_config_service import (
@@ -39,6 +68,12 @@ from tasks.MultiAccountTaskOrchestration.task_name_resolver import TASK_NAME_ALI
 multi_account_repeat_new_fixed_app = APIRouter(route_class=ApiLoggingRoute)
 
 
+class CopyFixedAccountGroupsRequest(BaseModel):
+    batch_ids: list[str]
+    target_account_indexes: list[int]
+    overwrite_existing: bool = False
+
+
 def _section(script_name: str):
     section = getattr(mm.config_cache(script_name).model, "multi_account_repeat_new_fixed", None)
     if section is None:
@@ -58,41 +93,15 @@ def _save(script_name: str, **fields) -> None:
 
 
 async def _broadcast_multi_account_overview(script_name: str) -> None:
-    """通过当前 OAS WebSocket 立即通知虚拟调度总览重排。"""
-    process = mm.script_process.get(script_name)
-    if process is not None:
-        await process.broadcast_state({
-            "multi_account_overview": {"kind": "fixed"},
-        })
-        config = mm.config_cache(script_name)
-        config.get_next()
-        await process.broadcast_state({"schedule": config.get_schedule_data()})
-
-
+    await broadcast_schedule_overview(script_name, "fixed", mm)
 
 
 def _normalize_batch_task_names(script_name: str, task_names: str) -> list[str]:
-    """校验固定时间批次中的任务；批次只保存内部任务标识。"""
-    model = mm.config_cache(script_name).model
-    result: list[str] = []
-    for raw_name in re.split(r"[,\n]", task_names or ""):
-        task_key = convert_to_underscore(raw_name.strip())
-        if not task_key:
-            continue
-        if is_multi_account_task(task_key):
-            raise HTTPException(status_code=400, detail="不能在固定时间批次中嵌套多账号任务")
-        if getattr(model, task_key, None) is None or not _has_task_script(task_key):
-            raise HTTPException(status_code=400, detail=f"任务不可执行：{raw_name.strip()}")
-        if task_key not in result:
-            result.append(task_key)
-    return result
+    return _normalize_group_names(mm.config_cache(script_name).model, task_names, '固定时间批次')
 
 
 def _batch(account: MultiAccountRepeatNewAccount, batch_id: str) -> MultiAccountRepeatNewFixedTimeBatch:
-    for item in account.fixed_time_batch_list:
-        if item.batch_id == batch_id:
-            return item
-    raise HTTPException(status_code=404, detail="该账号没有此固定时间批次")
+    return _find_group_batch(account, batch_id, '该账号没有此固定时间批次')
 
 
 def _find_batch_task_entry(
@@ -106,41 +115,20 @@ def _batch_task_entry(
     batch: MultiAccountRepeatNewFixedTimeBatch,
     task_name: str,
 ) -> MultiAccountRepeatNewFixedTimeBatchTask:
-    """确认任务属于该批次，并返回任务的独立配置项。"""
-    entry = _find_batch_task_entry(batch, task_name)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="该时间批次没有配置此任务")
-    return entry
+    return _require_group_task(batch, task_name, '该时间批次没有配置此任务')
 
 
 def _ensure_disabled_batch_task_entry(
     batch: MultiAccountRepeatNewFixedTimeBatch,
     task_name: str,
 ) -> MultiAccountRepeatNewFixedTimeBatchTask:
-    """首次保存批次私有配置时创建停用任务，不改变批次的执行列表。"""
-    entry = _find_batch_task_entry(batch, task_name)
-    if entry is None:
-        entry = MultiAccountRepeatNewFixedTimeBatchTask(
-            task_name=convert_to_underscore(task_name.strip()),
-            enable=False,
-        )
-        batch.task_list.append(entry)
-    return entry
+    return _ensure_group_task(batch, task_name, MultiAccountRepeatNewFixedTimeBatchTask)
 
 
 
 
 def _scheduler_next_run(scheduler: Scheduler, *, run_now: bool) -> datetime:
-    """复用 OAS 原生 Scheduler 的立即执行/立即等待计算方式。"""
-    now = datetime.now().replace(microsecond=0)
-    if run_now:
-        return now - timedelta(days=1)
-    next_run = now + scheduler.success_interval
-    float_time = scheduler.float_time
-    random_float = random.randint(0, float_time.hour * 3600 + float_time.minute * 60 + float_time.second)
-    if scheduler.server_update == time(hour=9):
-        return next_run + timedelta(seconds=random_float)
-    return parse_next_server_schedule(scheduler, random_float)
+    return quick_schedule_next_run(scheduler, run_now=run_now)
 
 
 def _fixed_batch_target(script_name: str, section) -> datetime | None:
@@ -193,47 +181,9 @@ def _apply_fixed_batch_scheduler(batch: MultiAccountRepeatNewFixedTimeBatch, sch
 
 
 def _serialize_fixed_batch(account: MultiAccountRepeatNewAccount, batch: MultiAccountRepeatNewFixedTimeBatch) -> dict:
-    now = datetime.now()
-    progress_is_today = batch.task_progress_time.date() == now.date()
-    completed = set(batch.completed_task_names) if progress_is_today else set()
-    failed = set(batch.failed_task_names) if progress_is_today else set()
-    unfinished = set(batch.unfinished_task_names) if progress_is_today else set()
-    next_run = _fixed_batch_next_run(account, batch, now)
-    scheduler = batch.scheduler
-    return {
-        "batch_id": batch.batch_id,
-        "name": batch.name or "固定时间特殊任务",
-        "enable": scheduler.enable,
-        "run_time": scheduler.server_update.strftime("%H:%M"),
-        "schedule_mode": getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode),
-        "interval_days": scheduler.delay_date,
-        "weekdays": scheduler.weekdays,
-        "random_week_days": scheduler.random_week_days,
-        "last_complete_time": batch.last_complete_time.isoformat(sep=" ", timespec="seconds"),
-        "task_progress_time": batch.task_progress_time.isoformat(sep=" ", timespec="seconds"),
-        "next_run": next_run.isoformat(sep=" ", timespec="seconds") if next_run else None,
-        "due": bool(next_run and next_run <= now),
-        "schedule_status": "pending" if next_run and next_run <= now else "waiting",
-        "priority": scheduler.priority,
-        "task_progress": {
-            "completed_task_list": str(batch.completed_task_list),
-            "failed_task_list": str(batch.failed_task_list),
-            "unfinished_task_list": str(batch.unfinished_task_list),
-        },
-        "tasks": [
-            {
-                "task_name": task.task_name,
-                "task_display_name": _task_display_name(task.task_name),
-                "enable": task.enable,
-                "has_private_config": bool(task.private_config),
-                "status": (
-                    "failed" if task.task_name in failed else "unfinished" if task.task_name in unfinished
-                    else "completed" if task.task_name in completed else "pending"
-                ),
-            }
-            for task in batch.task_list if task.task_name
-        ],
-    }
+    return _serialize_group_batch(account, batch, display_name=_task_display_name,
+                                  next_run_for=_fixed_batch_next_run, default_name='固定时间特殊任务',
+                                  include_item_type=False)
 
 
 def _task_display_name(task_name: str) -> str:
@@ -274,10 +224,74 @@ def _default_private_config(script_name: str, task_name: str) -> dict:
     )
 
 @multi_account_repeat_new_fixed_app.get('/{script_name}/multi_account_repeat_new_fixed/accounts')
-async def list_task_accounts(script_name: str):
+async def list_task_accounts(script_name: str, account_index: int | None = None, summary: bool = False):
     section = _section(script_name)
     accounts = []
     for index, item in enumerate([entry for entry in section.account_list if entry.public_account_identifier.strip()], start=1):
+        if account_index is not None and index != account_index:
+            continue
+        if summary:
+            batches = []
+            total = completed_count = failed_count = 0
+            now = datetime.now()
+            for _, batch in sorted(
+                enumerate(item.fixed_time_batch_list),
+                key=lambda indexed: _fixed_batch_overview_sort_key(item, indexed[1], indexed[0], now),
+            ):
+                scheduler = batch.scheduler
+                next_run = _fixed_batch_next_run(item, batch, now)
+                today = batch.task_progress_time.date() == now.date()
+                done = set(batch.completed_task_names) if today else set()
+                failed = set(batch.failed_task_names) if today else set()
+                unfinished = set(batch.unfinished_task_names) if today else set()
+                enabled_tasks = [task for task in batch.task_list if task.task_name and task.enable]
+                count = len(enabled_tasks)
+                complete = sum(task.task_name in done and task.task_name not in failed and task.task_name not in unfinished for task in enabled_tasks)
+                abnormal = sum(task.task_name in failed or task.task_name in unfinished for task in enabled_tasks)
+                if scheduler.enable:
+                    total += count
+                    completed_count += complete
+                    failed_count += abnormal
+                batches.append({
+                    "batch_id": batch.batch_id,
+                    "name": batch.name or "固定时间特殊任务",
+                    "enable": scheduler.enable,
+                    "run_time": scheduler.server_update.strftime("%H:%M"),
+                    "schedule_mode": getattr(scheduler.schedule_mode, "value", scheduler.schedule_mode),
+                    "interval_days": scheduler.delay_date,
+                    "weekdays": scheduler.weekdays,
+                    "random_week_days": scheduler.random_week_days,
+                    "last_complete_time": batch.last_complete_time.isoformat(sep=" ", timespec="seconds"),
+                    "task_progress_time": batch.task_progress_time.isoformat(sep=" ", timespec="seconds"),
+                    "next_run": next_run.isoformat(sep=" ", timespec="seconds") if next_run else None,
+                    "due": bool(next_run and next_run <= now),
+                    "schedule_status": "pending" if next_run and next_run <= now else "waiting",
+                    "priority": scheduler.priority,
+                    "task_progress": {
+                        "completed_task_list": str(batch.completed_task_list),
+                        "failed_task_list": str(batch.failed_task_list),
+                        "unfinished_task_list": str(batch.unfinished_task_list),
+                    },
+                    "enabled_task_count": count,
+                    "completed_task_count": complete,
+                    "failed_task_count": abnormal,
+                })
+            accounts.append({
+                "index": index,
+                "public_account_identifier": item.public_account_identifier,
+                "character": item.character,
+                "svr": item.svr,
+                "account": item.account,
+                "account_alias": item.account_alias,
+                "apple_or_android": item.apple_or_android,
+                "enabled": item.enabled,
+                "fixed_time_batches": batches,
+                "enabled_task_count": total,
+                "completed_task_count": completed_count,
+                "failed_task_count": failed_count,
+                **schedule_item_metrics(batches, runnable=runnable_account(script_name, item), now=now),
+            })
+            continue
         accounts.append({
             "index": index,
             "public_account_identifier": item.public_account_identifier,
@@ -306,17 +320,21 @@ async def list_task_accounts(script_name: str):
     return {"accounts": accounts}
 
 
+list_task_account_summaries, get_task_account = register_account_read_routes(
+    multi_account_repeat_new_fixed_app, FEATURE_BY_KEY["multi_account_repeat_new_fixed"],
+    list_task_accounts, summarize_group_account,
+    list_summaries=lambda script_name: list_task_accounts(script_name, summary=True),
+)
+
+
 @multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts')
 async def add_task_account(script_name: str, public_account_identifier: str):
     section = _section(script_name)
     source = _public_account(_library(script_name), public_account_identifier)
-    if any(item.public_account_identifier == source.identifier for item in section.account_list):
-        return True
-    account = MultiAccountRepeatNewAccount()
-    _sync_task_account(account, source)
-    section.account_list = [item for item in section.account_list if item.public_account_identifier.strip()]
-    section.account_list.append(account)
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    if _add_account(section, source, MultiAccountRepeatNewAccount):
+        refresh_fixed_time_scheduler(script_name, section)
+        _save(script_name, multi_account_repeat_new_fixed=section)
+        await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -324,8 +342,7 @@ async def add_task_account(script_name: str, public_account_identifier: str):
 async def set_task_account_enabled(script_name: str, account_index: int, enable: bool):
     """仅切换当前功能内的账号开关，保留该账号全部任务、调度和运行记录。"""
     section = _section(script_name)
-    account = _task_account(section, account_index)
-    account.enabled = enable
+    _set_account_enabled(section, account_index, enable)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
     await _broadcast_multi_account_overview(script_name)
@@ -335,9 +352,10 @@ async def set_task_account_enabled(script_name: str, account_index: int, enable:
 @multi_account_repeat_new_fixed_app.delete('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}')
 async def delete_task_account(script_name: str, account_index: int):
     section = _section(script_name)
-    account = _task_account(section, account_index)
-    section.account_list.remove(account)
+    _delete_account(section, account_index)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -345,29 +363,19 @@ async def delete_task_account(script_name: str, account_index: int):
 async def add_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
-    key = convert_to_underscore(task_name.strip())
-    if not key or getattr(mm.config_cache(script_name).model, key, None) is None:
-        raise HTTPException(status_code=400, detail="任务不存在")
-    if is_multi_account_task(key):
-        raise HTTPException(status_code=400, detail="不能嵌套多账号多任务")
-    if not _has_task_script(key):
-        raise HTTPException(status_code=400, detail="该功能没有可执行任务，不能添加到多账号任务")
-    if any(convert_to_underscore(item.task_name) == key for item in account.task_list):
-        return True
-    account.task_list.append(MultiAccountRepeatNewTask(task_name=key))
-    _save(script_name, multi_account_repeat_new_fixed=section)
+    key = _validate_task_name(script_name, task_name)
+    if _add_task_entry(account, key, MultiAccountRepeatNewTask, mode="group"):
+        _save(script_name, multi_account_repeat_new_fixed=section)
     return True
-
 
 @multi_account_repeat_new_fixed_app.delete('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/tasks/{task_name}')
 async def delete_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
-    account.task_list.remove(entry)
+    _delete_task_entry(account, entry, mode="group")
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
-
 
 @multi_account_repeat_new_fixed_app.get('/{script_name}/multi_account_repeat_new_fixed/fixed-time-tasks')
 async def list_fixed_time_tasks(script_name: str):
@@ -422,6 +430,7 @@ async def add_fixed_time_batch(
     account.fixed_time_batch_list.append(batch)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return _serialize_fixed_batch(account, batch)
 
 
@@ -433,7 +442,46 @@ async def delete_fixed_time_batch(script_name: str, account_index: int, batch_id
     account.fixed_time_batch_list.remove(batch)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
+
+
+async def copy_account_groups_to_accounts(
+    script_name: str, account_index: int, request: CopyFixedAccountGroupsRequest,
+):
+    """Copy selected schedule groups atomically; target runtime is never overwritten."""
+    section = _section(script_name)
+    source = _task_account(section, account_index)
+    requested = list(dict.fromkeys(request.batch_ids))
+    groups = [batch for batch in source.fixed_time_batch_list if batch.batch_id in requested]
+    if not requested or len(groups) != len(requested):
+        raise HTTPException(status_code=400, detail="所选任务组不属于来源账号")
+    if len({group.name for group in groups}) != len(groups):
+        raise HTTPException(status_code=400, detail="所选任务组存在同名项，请先重命名")
+    targets = list(dict.fromkeys(request.target_account_indexes))
+    if not targets or account_index in targets:
+        raise HTTPException(status_code=400, detail="目标账号无效")
+    for index in targets:
+        target = _task_account(section, index)
+        if not request.overwrite_existing and any(
+            batch.name == source_batch.name
+            for batch in target.fixed_time_batch_list for source_batch in groups
+        ):
+            raise HTTPException(status_code=409, detail="目标账号已有同名任务组，请确认覆盖")
+    candidate = copy.deepcopy(section)
+    copied = {}
+    for index in targets:
+        target = _task_account(candidate, index)
+        for source_batch in groups:
+            copy_group_configuration(source_batch, target)
+        copied[index] = [batch.name for batch in groups]
+    await commit_schedule_change(
+        script_name, candidate,
+        refresh=refresh_fixed_time_scheduler,
+        save=lambda name, value: _save(name, multi_account_repeat_new_fixed=value),
+        broadcast=_broadcast_multi_account_overview,
+    )
+    return {"success": True, "copied": copied, "failed": {}}
 
 
 @multi_account_repeat_new_fixed_app.post('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/copy')
@@ -481,6 +529,7 @@ async def copy_fixed_time_batch_to_accounts(
         raise HTTPException(status_code=400, detail="没有可复制的目标账号")
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 @multi_account_repeat_new_fixed_app.put('/{script_name}/multi_account_repeat_new_fixed/accounts/{account_index}/fixed-time-batches/{batch_id}/enable')
 async def set_fixed_time_batch_enable(script_name: str, account_index: int, batch_id: str, value: str):
@@ -489,6 +538,7 @@ async def set_fixed_time_batch_enable(script_name: str, account_index: int, batc
     batch.scheduler.enable = _convert_argument("boolean", value)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -503,6 +553,7 @@ async def set_fixed_time_batch_run_time(script_name: str, account_index: int, ba
         raise HTTPException(status_code=400, detail="运行时间格式错误，应为 HH:MM") from exc
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -560,6 +611,7 @@ async def set_fixed_time_batch_schedule(
     scheduler.next_run = _scheduler_next_run(scheduler, run_now=False)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -654,13 +706,7 @@ async def set_fixed_time_batch_last_complete_time(script_name: str, account_inde
 async def reorder_fixed_time_batch_tasks(script_name: str, account_index: int, batch_id: str, task_names: str):
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
-    enabled = [item for item in batch.task_list if item.enable]
-    requested = [convert_to_underscore(name.strip()) for name in re.split(r"[,\n]", task_names) if name.strip()]
-    enabled_names = [convert_to_underscore(item.task_name) for item in enabled]
-    if len(requested) != len(enabled_names) or len(set(requested)) != len(requested) or set(requested) != set(enabled_names):
-        raise HTTPException(status_code=400, detail="排序任务必须与当前已启用任务完全一致")
-    by_name = {convert_to_underscore(item.task_name): item for item in enabled}
-    batch.task_list = [*(by_name[name] for name in requested), *(item for item in batch.task_list if not item.enable)]
+    batch.task_list = _reorder_enabled_tasks(batch.task_list, task_names)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 
@@ -670,25 +716,7 @@ async def set_fixed_time_batch_task_status(script_name: str, account_index: int,
     section = _section(script_name)
     batch = _batch(_task_account(section, account_index), batch_id)
     entry = _batch_task_entry(batch, task_name)
-    status = value.strip().lower()
-    if status not in {"completed", "failed", "unfinished", "pending"}:
-        raise HTTPException(status_code=400, detail="任务状态只能是 completed、failed、unfinished 或 pending")
-    key = convert_to_underscore(entry.task_name)
-    completed = [name for name in batch.completed_task_names if name != key]
-    failed = [name for name in batch.failed_task_names if name != key]
-    unfinished = [name for name in batch.unfinished_task_names if name != key]
-    if status == "completed":
-        completed.append(key)
-    elif status == "failed":
-        failed.append(key)
-    elif status == "unfinished":
-        unfinished.append(key)
-    elif batch.last_complete_time.date() == datetime.now().date():
-        batch.last_complete_time = datetime(2023, 1, 1)
-    batch.task_progress_time = datetime.now()
-    batch.completed_task_list = "\n".join(_task_display_name(name) for name in completed)
-    batch.failed_task_list = "\n".join(_task_display_name(name) for name in failed)
-    batch.unfinished_task_list = "\n".join(_task_display_name(name) for name in unfinished)
+    _set_task_progress_status(batch, entry.task_name, value, _task_display_name)
     _save(script_name, multi_account_repeat_new_fixed=section)
     return True
 
@@ -702,15 +730,11 @@ async def add_fixed_time_batch_task(script_name: str, account_index: int, batch_
     if not normalized:
         raise HTTPException(status_code=400, detail="请选择要添加的任务")
     task_key = normalized[0]
-    entry = batch.task_entry(task_key)
-    if entry is None:
-        batch.task_list.append(MultiAccountRepeatNewFixedTimeBatchTask(task_name=task_key))
-    else:
-        # 重新添加只恢复启用状态，保留之前停用时留下的私有配置和运行记录。
-        entry.enable = True
+    _add_group_task(batch, task_key, MultiAccountRepeatNewFixedTimeBatchTask)
     _refresh_fixed_batch_next_run(batch, force=True)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -727,10 +751,11 @@ async def set_fixed_time_batch_task_enable(
     account = _task_account(section, account_index)
     batch = _batch(account, batch_id)
     entry = _batch_task_entry(batch, task_name)
-    entry.enable = _convert_argument("boolean", value)
+    _set_entry_enabled(entry, _convert_argument("boolean", value))
     _refresh_fixed_batch_next_run(batch, force=True)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -741,10 +766,11 @@ async def delete_fixed_time_batch_task(script_name: str, account_index: int, bat
     batch = _batch(account, batch_id)
     entry = _batch_task_entry(batch, task_name)
     # OAS 左滑停用语义：不删除任务私有配置，仅取消当前时间段的启用状态。
-    entry.enable = False
+    _set_entry_enabled(entry, False)
     _refresh_fixed_batch_next_run(batch, force=True)
     refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -962,3 +988,9 @@ async def reset_private_args_to_default(script_name: str, account_index: int, ta
 
 
 
+
+
+register_account_copy_route(
+    multi_account_repeat_new_fixed_app, FEATURE_BY_KEY["multi_account_repeat_new_fixed"],
+    copy_account_groups_to_accounts, kind="groups",
+)

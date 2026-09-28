@@ -1,17 +1,35 @@
 import copy
-import random
 import re
-from datetime import datetime, time, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
-from module.config.model_overrides import model_with_field_overrides, model_with_group_overrides
+from module.config.multi_account_task_progress import task_local_status_today
+from module.config.model_overrides import model_with_group_overrides
+from module.config.multi_account_scheduler import resolve_independent_scheduler, timed_next_run, set_timed_next_run, quick_schedule_next_run
 from module.config.utils import (
     convert_to_underscore,
-    parse_next_server_schedule,
 )
 from module.server.api_logger import ApiLoggingRoute
+from module.server.multi_account_schedule_commit import broadcast_schedule_overview, commit_schedule_change
+from module.server.multi_account_copy_service import copy_task_configuration
+from module.server.multi_account_account_write_service import (
+    add_account as _add_account,
+    delete_account as _delete_account,
+    set_account_enabled as _set_account_enabled,
+)
+from module.server.multi_account_task_write_service import (
+    add_task_entry as _add_task_entry,
+    delete_task_entry as _delete_task_entry,
+    validate_task_name as _validate_task_name,
+)
+from module.server.multi_account_independent_scheduler import (
+    set_private_scheduler_enabled as _set_private_scheduler_enabled,
+)
+from module.server.multi_account_copy_router_factory import register_account_copy_route
+from module.server.multi_account_feature_registry import FEATURE_BY_KEY
+from module.server.multi_account_read_router_factory import register_account_read_routes, summarize_task_account
 from module.server.main_manager import mm
 from module.server.multi_account_router_support import is_multi_account_task, runnable_account
 from module.server.multi_account_task_config_service import (
@@ -38,6 +56,12 @@ from tasks.MultiAccountRepeatTimed.task_name_resolver import TASK_NAME_ALIASES, 
 multi_account_repeat_timed_app = APIRouter(route_class=ApiLoggingRoute)
 
 
+class CopyTimedAccountTasksRequest(BaseModel):
+    task_names: list[str]
+    target_account_indexes: list[int]
+    overwrite_existing: bool = False
+
+
 def _section(script_name: str):
     section = getattr(mm.config_cache(script_name).model, "multi_account_repeat_timed", None)
     if section is None:
@@ -57,67 +81,31 @@ def _save(script_name: str, **fields) -> None:
 
 
 async def _broadcast_multi_account_overview(script_name: str) -> None:
-    """通过当前 OAS WebSocket 立即通知虚拟调度总览重排。"""
-    process = mm.script_process.get(script_name)
-    if process is not None:
-        await process.broadcast_state({
-            "multi_account_overview": {"kind": "timed"},
-        })
-        config = mm.config_cache(script_name)
-        config.get_next()
-        await process.broadcast_state({"schedule": config.get_schedule_data()})
+    await broadcast_schedule_overview(script_name, "timed", mm)
 
 
 def _entry_scheduler_enabled(script_name: str, entry: MultiAccountRepeatTimedTask) -> bool:
-    """读取任务自身 scheduler.enable，账号列表只展示已启用任务。"""
-    private_scheduler = entry.private_config.get("scheduler", {})
-    if isinstance(private_scheduler, dict) and "enable" in private_scheduler:
-        return bool(private_scheduler["enable"])
-    task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
-    scheduler = getattr(task_config, "scheduler", None)
-    return bool(getattr(scheduler, "enable", False))
+    scheduler = _entry_scheduler(script_name, entry)
+    return bool(scheduler and scheduler.enable)
 
 
 def _entry_scheduler(script_name: str, entry: MultiAccountRepeatTimedTask):
-    """返回账号任务实际使用的 scheduler，保持与执行器的私有覆盖规则一致。"""
     task_config = getattr(mm.config_cache(script_name).model, convert_to_underscore(entry.task_name), None)
-    public_scheduler = getattr(task_config, "scheduler", None)
-    if public_scheduler is None:
-        return None
-    private_scheduler = entry.private_config.get("scheduler", {})
-    private_keys = set(private_scheduler) if isinstance(private_scheduler, dict) else set()
-    use_public = private_keys <= {"enable", "next_run"}
-    scheduler = copy.deepcopy(public_scheduler) if use_public else public_scheduler.__class__()
-    if isinstance(private_scheduler, dict):
-        # 私有配置在 JSON 中存储为字符串；统一交给 Pydantic 恢复时间、间隔和枚举类型。
-        scheduler = model_with_field_overrides(scheduler, private_scheduler)
-    return scheduler
+    return resolve_independent_scheduler(getattr(task_config, "scheduler", None), entry)
 
 
 def _scheduler_next_run(scheduler, *, run_now: bool) -> datetime:
-    """按 OAS quick run/quick wait 规则计算账号任务下次时间。"""
-    if run_now:
-        return datetime.now().replace(microsecond=0) - timedelta(days=1)
-    start = datetime.now().replace(microsecond=0)
-    interval = getattr(scheduler, "success_interval", timedelta(days=1))
-    next_run = start + interval
-    float_time = getattr(scheduler, "float_time", time.min)
-    float_seconds = float_time.hour * 3600 + float_time.minute * 60 + float_time.second
-    random_float = random.randint(0, float_seconds)
-    server_update = getattr(scheduler, "server_update", time(hour=9))
-    if server_update == time(hour=9):
-        return next_run + timedelta(seconds=random_float)
-    return parse_next_server_schedule(scheduler, random_float)
+    return quick_schedule_next_run(scheduler, run_now=run_now)
 
 
 def _refresh_outer_scheduler(script_name: str, section) -> None:
     """保存前刷新外层任务时间，使其始终指向账号任务的最早时间。"""
     next_runs = [
-        entry.next_run
+        timed_next_run(entry)
         for account in section.account_list
         if runnable_account(script_name, account)
         for entry in account.task_list
-        if _entry_scheduler_enabled(script_name, entry) and entry.task_name and entry.next_run
+        if _entry_scheduler_enabled(script_name, entry) and entry.task_name and timed_next_run(entry)
     ]
     section.scheduler.next_run = (
         min(next_runs).replace(microsecond=0)
@@ -198,20 +186,46 @@ def _timed_task_overview_sort_key(
 
 
 
+def _timed_task_status(task: MultiAccountRepeatTimedTask, now: datetime) -> str:
+    """Timed task status follows orchestration's task-local, today-only semantics."""
+    return task_local_status_today(task, now=now)
+
+
 def _default_private_config(script_name: str, task_name: str) -> dict:
     return _build_default_private_config(
         script_name, task_name, include_scheduler=True
     )
 
 @multi_account_repeat_timed_app.get('/{script_name}/multi_account_repeat_timed/accounts')
-async def list_task_accounts(script_name: str):
+async def list_task_accounts(script_name: str, account_index: int | None = None, summary: bool = False):
     section = _section(script_name)
     accounts = []
     for index, item in enumerate([entry for entry in section.account_list if entry.public_account_identifier.strip()], start=1):
-        account_runnable = runnable_account(script_name, item)
-        completed = set(item.completed_task_names)
-        failed = set(item.failed_task_names)
-        unfinished = set(item.unfinished_task_names)
+        if account_index is not None and index != account_index:
+            continue
+        account_runnable = runnable_account(script_name, item) if not summary else False
+        if summary:
+            now = datetime.now()
+            enabled_tasks = [task for task in item.task_list
+                             if task.task_name and _entry_scheduler_enabled(script_name, task)]
+            next_runs = [timed_next_run(task) for task in enabled_tasks]
+            due_count = sum(timed_next_run(task) <= now for task in enabled_tasks) if runnable_account(script_name, item) else 0
+            accounts.append({
+                "index": index,
+                "public_account_identifier": item.public_account_identifier,
+                "character": item.character,
+                "svr": item.svr,
+                "account": item.account,
+                "account_alias": item.account_alias,
+                "apple_or_android": item.apple_or_android,
+                "enabled": item.enabled,
+                "next_run": min(next_runs).isoformat(sep=" ", timespec="seconds") if next_runs else None,
+                "enabled_task_count": len(enabled_tasks),
+                "due_task_count": due_count,
+                "completed_task_count": sum(_timed_task_status(task, now) == "completed" for task in enabled_tasks),
+                "failed_task_count": sum(_timed_task_status(task, now) in {"failed", "unfinished"} for task in enabled_tasks),
+            })
+            continue
         task_rows = []
         now = datetime.now()
         for task_index, task in enumerate(item.task_list):
@@ -219,7 +233,7 @@ async def list_task_accounts(script_name: str):
                 continue
             scheduler = _entry_scheduler(script_name, task)
             enabled = _entry_scheduler_enabled(script_name, task)
-            next_run = task.next_run
+            next_run = timed_next_run(task)
             schedule_status = (
                 "pending" if account_runnable and enabled and next_run <= now else "waiting"
             )
@@ -236,12 +250,12 @@ async def list_task_accounts(script_name: str):
                 "next_run_value": next_run,
                 "priority": priority,
                 "schedule_status": schedule_status,
-                "status": (
-                    "failed" if task.task_name in failed
-                    else "unfinished" if task.task_name in unfinished
-                    else "completed" if task.task_name in completed
-                    else "pending"
-                ),
+                "task_progress": {
+                    "status": _timed_task_status(task, now),
+                    "task_progress_time": task.task_progress_time.isoformat(sep=" ", timespec="seconds"),
+                    "last_complete_time": task.last_complete_time.isoformat(sep=" ", timespec="seconds"),
+                },
+                "status": _timed_task_status(task, now),
                 "_index": task_index,
             })
         task_rows.sort(
@@ -265,17 +279,20 @@ async def list_task_accounts(script_name: str):
     return {"accounts": accounts}
 
 
+list_task_account_summaries, get_task_account = register_account_read_routes(
+    multi_account_repeat_timed_app, FEATURE_BY_KEY["multi_account_repeat_timed"],
+    list_task_accounts, summarize_task_account,
+    list_summaries=lambda script_name: list_task_accounts(script_name, summary=True),
+)
+
+
 @multi_account_repeat_timed_app.post('/{script_name}/multi_account_repeat_timed/accounts')
 async def add_task_account(script_name: str, public_account_identifier: str):
     section = _section(script_name)
     source = _public_account(_library(script_name), public_account_identifier)
-    if any(item.public_account_identifier == source.identifier for item in section.account_list):
-        return True
-    account = MultiAccountRepeatTimedAccount()
-    _sync_task_account(account, source)
-    section.account_list = [item for item in section.account_list if item.public_account_identifier.strip()]
-    section.account_list.append(account)
-    _save_timed_section(script_name, section)
+    if _add_account(section, source, MultiAccountRepeatTimedAccount):
+        _save_timed_section(script_name, section)
+        await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -283,8 +300,7 @@ async def add_task_account(script_name: str, public_account_identifier: str):
 async def set_task_account_enabled(script_name: str, account_index: int, enable: bool):
     """仅切换当前功能内的账号开关，保留该账号全部任务、调度和运行记录。"""
     section = _section(script_name)
-    account = _task_account(section, account_index)
-    account.enabled = enable
+    _set_account_enabled(section, account_index, enable)
     _save_timed_section(script_name, section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -293,9 +309,9 @@ async def set_task_account_enabled(script_name: str, account_index: int, enable:
 @multi_account_repeat_timed_app.delete('/{script_name}/multi_account_repeat_timed/accounts/{account_index}')
 async def delete_task_account(script_name: str, account_index: int):
     section = _section(script_name)
-    account = _task_account(section, account_index)
-    section.account_list.remove(account)
+    _delete_account(section, account_index)
     _save_timed_section(script_name, section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -303,50 +319,30 @@ async def delete_task_account(script_name: str, account_index: int):
 async def add_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
-    key = convert_to_underscore(task_name.strip())
-    if not key or getattr(mm.config_cache(script_name).model, key, None) is None:
-        raise HTTPException(status_code=400, detail="任务不存在")
-    if is_multi_account_task(key):
-        raise HTTPException(status_code=400, detail="不能嵌套多账号多任务")
-    if not _has_task_script(key):
-        raise HTTPException(status_code=400, detail="该功能没有可执行任务，不能添加到多账号任务")
-    existing = next(
-        (item for item in account.task_list
-         if convert_to_underscore(item.task_name) == key),
-        None,
-    )
-    if existing is not None:
-        # 重新添加等同于重新启用，原有私有配置和调度时间全部保留。
-        existing.private_config.setdefault("scheduler", {})["enable"] = True
+    key = _validate_task_name(script_name, task_name)
+    if _add_task_entry(account, key, MultiAccountRepeatTimedTask, mode="timed"):
         _save_timed_section(script_name, section)
-        return True
-    account.task_list.append(
-        MultiAccountRepeatTimedTask(
-            task_name=key,
-            private_config={"scheduler": {"enable": True}},
-        )
-    )
-    _save_timed_section(script_name, section)
+        await _broadcast_multi_account_overview(script_name)
     return True
-
 
 @multi_account_repeat_timed_app.delete('/{script_name}/multi_account_repeat_timed/accounts/{account_index}/tasks/{task_name}')
 async def delete_task(script_name: str, account_index: int, task_name: str):
     section = _section(script_name)
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
-    # DELETE 接口保留兼容旧客户端，但语义改为关闭 scheduler；配置不删除。
-    entry.private_config.setdefault("scheduler", {})["enable"] = False
+    # DELETE retains the private scheduler and other task configuration.
+    _delete_task_entry(account, entry, mode="timed")
     _save_timed_section(script_name, section)
+    await _broadcast_multi_account_overview(script_name)
     return True
-
 
 @multi_account_repeat_timed_app.put('/{script_name}/multi_account_repeat_timed/accounts/{account_index}/tasks/{task_name}/enable')
 async def set_task_enable(script_name: str, account_index: int, task_name: str, value: str):
     section = _section(script_name)
     entry = _task_entry(_task_account(section, account_index), task_name)
-    entry.private_config.setdefault("scheduler", {})["enable"] = _convert_argument("boolean", value)
+    _set_private_scheduler_enabled(entry.private_config, _convert_argument("boolean", value))
     _save_timed_section(script_name, section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -364,10 +360,7 @@ async def quick_schedule_task(
     if scheduler is None:
         raise HTTPException(status_code=400, detail="任务调度器不存在")
     next_run = _scheduler_next_run(scheduler, run_now=run_now)
-    entry.next_run = next_run
-    entry.private_config.setdefault("scheduler", {})["next_run"] = next_run.strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    set_timed_next_run(entry, next_run)
     _save_timed_section(script_name, section)
     await _broadcast_multi_account_overview(script_name)
     return True
@@ -429,6 +422,9 @@ async def get_private_args(script_name: str, account_index: int, task_name: str)
             for item in task_args["scheduler"]:
                 if item.get("name") in scheduler_values:
                     item["value"] = scheduler_values[item["name"]]
+    scheduler = _entry_scheduler(script_name, entry)
+    if scheduler is not None:
+        task_args["scheduler"] = _serialize_group(scheduler)
     return with_config_mode_group(task_args, entry)
 
 
@@ -449,7 +445,7 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
         entry.config_mode = mode
         _save_timed_section(script_name, section)
         return True
-    if getattr(entry.config_mode, "value", entry.config_mode) != "private":
+    if normalized_group != "scheduler" and getattr(entry.config_mode, "value", entry.config_mode) != "private":
         raise HTTPException(status_code=400, detail="当前使用公共配置，请先切换为私有配置")
     private = copy.deepcopy(entry.private_config)
     private.setdefault(convert_to_underscore(group), {})[convert_to_underscore(argument)] = _convert_argument(types, value)
@@ -459,14 +455,58 @@ async def set_private_arg(script_name: str, account_index: int, task_name: str, 
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"私有参数无效：{exc}") from exc
     entry.private_config = private
-    # 定时版以任务项的 next_run 作为调度比较依据；私有调度器修改后同步两处。
+    # 私有 Scheduler 持有下次运行时间，任务项 next_run 仅保留兼容镜像。
     scheduler_changed = convert_to_underscore(group) == "scheduler"
     if scheduler_changed and convert_to_underscore(argument) == "next_run":
-        entry.next_run = candidate.scheduler.next_run
+        set_timed_next_run(entry, candidate.scheduler.next_run)
     _save_timed_section(script_name, section)
     if scheduler_changed:
         await _broadcast_multi_account_overview(script_name)
     return True
+
+
+async def copy_account_tasks_to_accounts(
+    script_name: str, account_index: int, request: CopyTimedAccountTasksRequest,
+):
+    """Atomically copy selected timed schedules, never copying runtime records."""
+    section = _section(script_name)
+    source = _task_account(section, account_index)
+    keys = {convert_to_underscore(name.strip()) for name in request.task_names if name.strip()}
+    entries = [entry for entry in source.task_list if convert_to_underscore(entry.task_name) in keys]
+    if not keys or len(entries) != len(keys):
+        raise HTTPException(status_code=400, detail="所选任务不属于来源账号")
+    targets = list(dict.fromkeys(request.target_account_indexes))
+    if not targets or account_index in targets:
+        raise HTTPException(status_code=400, detail="目标账号无效")
+    for index in targets:
+        target = _task_account(section, index)
+        if not request.overwrite_existing and any(
+            convert_to_underscore(item.task_name) in keys for item in target.task_list
+        ):
+            raise HTTPException(status_code=409, detail="目标账号已有同名任务，请确认覆盖")
+    candidate = copy.deepcopy(section)
+    copied = {}
+    for index in targets:
+        target = _task_account(candidate, index)
+        existing = {convert_to_underscore(item.task_name): item for item in target.task_list}
+        for entry in entries:
+            key = convert_to_underscore(entry.task_name)
+            item = existing.get(key)
+            if item is None:
+                item = MultiAccountRepeatTimedTask(task_name=entry.task_name)
+                target.task_list.append(item)
+            item.task_name = entry.task_name
+            copy_task_configuration(entry, item)
+            set_timed_next_run(item, timed_next_run(entry))
+            # Existing runtime state stays untouched; new items retain model defaults.
+        copied[index] = [entry.task_name for entry in entries]
+    await commit_schedule_change(
+        script_name, candidate,
+        # The timed save wrapper already refreshes the outer scheduler.
+        save=_save_timed_section,
+        broadcast=_broadcast_multi_account_overview,
+    )
+    return {"success": True, "copied": copied, "failed": {}}
 
 
 @multi_account_repeat_timed_app.post('/{script_name}/multi_account_repeat_timed/accounts/{account_index}/tasks/{task_name}/private/copy')
@@ -513,13 +553,14 @@ async def copy_private_args_to_accounts(
         # 复制配置不覆盖目标账号原有的下次运行时间。
         scheduler = copied_config.get("scheduler")
         if isinstance(scheduler, dict):
-            scheduler["next_run"] = target_entry.next_run.strftime("%Y-%m-%d %H:%M:%S")
+            scheduler["next_run"] = timed_next_run(target_entry).strftime("%Y-%m-%d %H:%M:%S")
         target_entry.config_mode = source_entry.config_mode
         target_entry.private_config = copied_config
         copied_count += 1
     if not copied_count:
         raise HTTPException(status_code=400, detail="没有可复制的目标账号")
     _save_timed_section(script_name, section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
@@ -540,9 +581,13 @@ async def reset_private_args_to_default(script_name: str, account_index: int, ta
     except (ValidationError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"默认私有参数无效：{exc}") from exc
     entry.private_config = private
-    entry.next_run = candidate.scheduler.next_run
+    set_timed_next_run(entry, candidate.scheduler.next_run)
     _save_timed_section(script_name, section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 
-
+register_account_copy_route(
+    multi_account_repeat_timed_app, FEATURE_BY_KEY["multi_account_repeat_timed"],
+    copy_account_tasks_to_accounts, kind="tasks",
+)
