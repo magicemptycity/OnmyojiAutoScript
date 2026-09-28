@@ -1,4 +1,5 @@
 import math
+import re
 import time
 
 from module.atom.click import RuleClick
@@ -216,7 +217,14 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
         logger.info("start selectAccount")
         self.O_SA_ACCOUNT_ACCOUNT_LIST.keyword = accountInfo.account
         self.O_SA_ACCOUNT_ACCOUNT_SELECTED.keyword = accountInfo.account
-        # 每次调用仅完整扫描一次账号列表；重新打开页面后的重试由 login() 负责。
+        # 单轮允许扫描长列表，但只有 OCR 确认出现新账号后，才解除这次上滑的
+        # 连续操作记录。卡住或 OCR 失效时仍保留设备级防死循环保护。
+        max_swipes = 60
+        max_stalled_pages = 3
+        swipes = 0
+        stalled_pages = 0
+        seen_accounts = set()
+        pending_swipe = False
         while 1:
             self.screenshot()
             if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED):
@@ -246,10 +254,38 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                 logger.info("account [ %s ] found", accountInfo.account)
                 return True
 
-            # 未找到该账号
+            # 只用账号标识比较翻页进展，忽略“上次登录”等动态 OCR 文本。
+            # 相邻两页会有重叠项，因此以“出现新账号”而不是整页文本不同为准。
+            visible_accounts = {
+                text.strip().lower()
+                for item in ocrRes
+                if (text := item.ocr_text) and (
+                    "@" in text or re.search(r"\d\*{2,}\d", text)
+                )
+            }
+            new_accounts = visible_accounts - seen_accounts
+            if pending_swipe:
+                if new_accounts:
+                    self.device.click_record_remove(self.S_SA_ACCOUNT_LIST_UP)
+                    stalled_pages = 0
+                else:
+                    stalled_pages += 1
+                pending_swipe = False
+            seen_accounts.update(visible_accounts)
+
+            # 未找到该账号。优先检查列表末尾；不允许为尝试识别末尾而无限滑动。
             if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_ADD_ACCOUNT):
+                logger.warning("网易账号列表已到底，未找到目标账号")
+                break
+            if stalled_pages >= max_stalled_pages:
+                logger.warning("网易账号列表连续 %d 次上滑未识别到新账号，停止本轮扫描", stalled_pages)
+                break
+            if swipes >= max_swipes:
+                logger.warning("网易账号列表达到单轮上滑上限 %d，停止本轮扫描", max_swipes)
                 break
             self.swipe(self.S_SA_ACCOUNT_LIST_UP, 1.5)
+            swipes += 1
+            pending_swipe = True
             time.sleep(0.5)
         logger.info("account [ %s ] not found ", accountInfo.account)
         return False
@@ -374,6 +410,7 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
 
                     if not found:
                         logger.error("selectAccount failed after %d retries", MAX_RETRY)
+                        self.save_error_log()
                         return False
                     # selectAccount 后更新图片
                     self.screenshot()
