@@ -5,7 +5,10 @@ import random
 from datetime import datetime, time, timedelta
 from typing import Any, ClassVar
 
+from module.config.multi_account_task_progress import set_task_local_status
 from module.config.model_overrides import model_with_group_overrides
+from module.config.multi_account_scheduler import has_private_task_overrides, resolve_independent_scheduler, timed_next_run, set_timed_next_run
+from module.config.multi_account_task_source import effective_task_config, uses_private_config
 from module.config.utils import (
     convert_to_underscore,
     parse_next_server_schedule,
@@ -86,6 +89,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
                     for _, _, _, planned_account, planned_entry in due_plan:
                         if id(planned_account) != account_id:
                             continue
+                        set_task_local_status(planned_entry, "failed")
                         self._sync_entry_scheduler_next_run(
                             planned_entry,
                             self._fallback_next_run(
@@ -104,7 +108,11 @@ class ScriptTask(MultiAccountRepeatNewBase):
                 "timed",
                 {"account_index": account_index + 1, "task_name": entry.task_name},
             )
-            if not self._run_timed_task(account, entry):
+            set_task_local_status(entry, "running")
+            self._save_repeat_config()
+            success = self._run_timed_task(account, entry)
+            set_task_local_status(entry, "completed" if success else "failed")
+            if not success:
                 overall_failed = True
             # 每个账号任务结束后立即落盘，避免等待该账号其他任务结束，
             # 也避免外层调度器继续使用旧的 next_run 反复循环。状态保存
@@ -128,7 +136,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
                 continue
             for task_index, entry in enumerate(account.task_list):
                 scheduler = self._entry_scheduler(entry.task_name, entry)
-                if not getattr(scheduler, "enable", False) or not entry.task_name or entry.next_run > now:
+                if not getattr(scheduler, "enable", False) or not entry.task_name or timed_next_run(entry) > now:
                     continue
                 priority = self._entry_priority(entry)
                 due_plan.append((account_index, task_index, priority, account, entry))
@@ -155,7 +163,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
                 continue
             for entry in account.task_list:
                 scheduler = self._entry_scheduler(entry.task_name, entry)
-                if not getattr(scheduler, "enable", False) or not entry.task_name or entry.next_run >= delay_target:
+                if not getattr(scheduler, "enable", False) or not entry.task_name or timed_next_run(entry) >= delay_target:
                     continue
                 self._sync_entry_scheduler_next_run(entry, delay_target)
                 delayed_tasks.append(
@@ -177,14 +185,14 @@ class ScriptTask(MultiAccountRepeatNewBase):
     def _refresh_outer_next_run(self, success: bool | None = None) -> None:
         """立即刷新并保存外层任务的 next_run，取所有账号任务的最早时间。"""
         next_runs = [
-            entry.next_run
+            timed_next_run(entry)
             for account in self.fade_conf.account_list
             if self._prepare_runnable_account(account)
             for entry in account.task_list
             if (
                 getattr(self._entry_scheduler(entry.task_name, entry), "enable", False)
                 and entry.task_name
-                and entry.next_run
+                and timed_next_run(entry)
             )
         ]
         target = min(next_runs) if next_runs else None
@@ -229,16 +237,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
 
     @staticmethod
     def _has_private_task_overrides(private_config: dict[str, Any]) -> bool:
-        """判断私有配置是否包含用户设置，自动记录的 next_run 不算私有覆盖。"""
-        for group_name, arguments in private_config.items():
-            if not isinstance(arguments, dict):
-                continue
-            if convert_to_underscore(group_name) == "scheduler" and set(arguments) <= {"next_run", "enable"}:
-                # enable/next_run are account-local routing state, not a reason
-                # to discard the task's public interval/time defaults.
-                continue
-            return True
-        return False
+        return has_private_task_overrides(private_config)
 
     def _apply_timed_task_config(
         self,
@@ -253,29 +252,19 @@ class ScriptTask(MultiAccountRepeatNewBase):
 
         public_backup = copy.deepcopy(public_config)
         # 私有配置只覆盖默认配置，不能把已经修改过的公共配置带入账号任务。
-        use_private = getattr(task_entry.config_mode, "value", task_entry.config_mode) == "private"
-        active = public_config.__class__() if use_private else copy.deepcopy(public_config)
-        # 运行记录只恢复任务产生的状态；用户当前保存的私有配置必须最后
-        # 应用，避免历史记录覆盖后来修改的角色、层数、次数及调度参数。
-        if task_entry.runtime_record:
-            active = active.__class__.model_validate(
-                self._deep_merge(active.model_dump(), task_entry.runtime_record)
-            )
-        overrides = task_entry.private_config if use_private else {
-            "scheduler": task_entry.private_config.get("scheduler", {})
-        }
+        use_private = uses_private_config(task_entry.config_mode)
         try:
-            active = model_with_group_overrides(active, overrides)
+            active = effective_task_config(public_config, task_entry, private_scheduler=True)
         except (ValidationError, ValueError) as exc:
             raise ValueError(f"账号私有配置无效：{task_name}: {exc}") from exc
-
         baseline = active.model_dump()
         BaseModel.__setattr__(self.config.model, task_key, active)
         logger.info(
-            "为账号 %s-%s 套用任务 %s 的私有配置和运行记录",
+            "为账号 %s-%s 套用任务 %s 的%s和运行记录",
             self.current_account_info.character,
             self.current_account_info.svr,
             task_name,
+            "私有配置" if use_private else "公共配置",
         )
         return task_key, public_backup, active.model_dump()
 
@@ -288,28 +277,14 @@ class ScriptTask(MultiAccountRepeatNewBase):
         self.config.save_selected_fields({task_key: public_backup})
 
     def _entry_scheduler(self, task_name: str, entry: MultiAccountRepeatTimedTask):
-        """读取当前账号任务的私有调度器，未私有化的字段继承公共配置。"""
         task_config = getattr(self.config.model, convert_to_underscore(task_name), None)
-        scheduler_config = getattr(task_config, "scheduler", None)
-        if scheduler_config is not None and self._has_private_task_overrides(entry.private_config):
-            scheduler = scheduler_config.__class__()
-        else:
-            scheduler = copy.deepcopy(scheduler_config)
-        private = entry.private_config.get("scheduler", {})
-        if scheduler is not None and isinstance(private, dict):
-            for name, value in private.items():
-                if hasattr(scheduler, name):
-                    setattr(scheduler, name, value)
-        return scheduler
+        return resolve_independent_scheduler(getattr(task_config, "scheduler", None), entry)
 
     def _sync_entry_scheduler_next_run(
         self, entry: MultiAccountRepeatTimedTask, next_run: datetime
     ) -> None:
         """任务实际下次时间同时保存到私有调度器，供设置页读取和比较。"""
-        entry.next_run = next_run
-        entry.private_config.setdefault("scheduler", {})["next_run"] = next_run.strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        set_timed_next_run(entry, next_run)
 
     def _next_run_from_scheduler(
         self,
@@ -459,7 +434,7 @@ class ScriptTask(MultiAccountRepeatNewBase):
                     account.character,
                     account.svr,
                     task_name,
-                    entry.next_run,
+                    timed_next_run(entry),
                 )
                 return True
             if attempt < self.task_retry_limit:

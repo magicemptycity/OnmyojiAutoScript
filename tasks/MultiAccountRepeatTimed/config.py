@@ -35,7 +35,7 @@ class MultiAccountRepeatTimedTask(ConfigBase, extra="allow"):
     """一个账号下的任务和私有参数；启用状态使用任务自身 scheduler.enable。"""
 
     task_name: str = Field(default="")
-    config_mode: MultiAccountTaskConfigMode = Field(default=MultiAccountTaskConfigMode.PRIVATE, title="配置来源")
+    config_mode: MultiAccountTaskConfigMode = Field(default=MultiAccountTaskConfigMode.PUBLIC, title="配置来源")
     private_config: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
 
     @model_validator(mode="before")
@@ -52,12 +52,19 @@ class MultiAccountRepeatTimedTask(ConfigBase, extra="allow"):
             scheduler.setdefault("enable", bool(legacy_enable))
         # 旧版本的任务项没有独立开关，默认等同于已启用。
         scheduler.setdefault("enable", True)
+        # Migrate the old task field once. Existing private Scheduler time wins.
+        scheduler.setdefault("next_run", data.get("next_run", "2023-01-01 00:00:00"))
         private["scheduler"] = scheduler
         data["private_config"] = private
+        data["next_run"] = scheduler["next_run"]
         return data
     # 自动保存的配置型运行记录（例如每日琐事的 done_record），按账号和任务隔离。
     runtime_record: dict[str, Any] = Field(default_factory=dict, json_schema_extra={"default": {}})
-    next_run: datetime = Field(default=datetime(2023, 1, 1), title="任务下次运行时间")
+    next_run: datetime = Field(default=datetime(2023, 1, 1), title="任务下次运行时间（兼容镜像）")
+    # 兼容阶段：任务级记录仅用于观察和迁移，账号级清单仍为现有恢复/展示依据。
+    last_complete_time: datetime = Field(default=datetime(2023, 1, 1), title="任务上次完成时间")
+    task_progress_time: datetime = Field(default=datetime(2023, 1, 1), title="任务进度记录时间")
+    status: str = Field(default="pending", title="任务执行状态")
 
 
 class MultiAccountRepeatTimedAccount(ConfigBase, extra="allow"):

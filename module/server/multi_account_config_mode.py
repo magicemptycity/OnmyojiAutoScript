@@ -15,7 +15,7 @@ def parse_config_mode(value) -> str | None:
 
 
 def config_mode_value(entry) -> str:
-    mode = getattr(entry, "config_mode", "private")
+    mode = getattr(entry, "config_mode", "public")
     return getattr(mode, "value", mode)
 
 
@@ -26,7 +26,7 @@ def with_config_mode_group(task_args: dict, entry) -> dict:
             "name": "config_mode",
             "title": "config_mode",
             "description": "config_mode_help",
-            "default": "private",
+            "default": "public",
             "value": config_mode_value(entry),
             "type": "enum",
             "enumEnum": ["public", "private"],

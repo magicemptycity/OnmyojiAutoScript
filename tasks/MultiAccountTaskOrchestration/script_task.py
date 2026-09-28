@@ -10,7 +10,10 @@ from typing import Any, ClassVar
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
 from pydantic import BaseModel, ValidationError
-from module.config.model_overrides import model_with_field_overrides, model_with_group_overrides
+from module.config.multi_account_task_progress import set_task_local_status
+from module.config.model_overrides import model_with_group_overrides
+from module.config.multi_account_scheduler import resolve_independent_scheduler
+from module.config.multi_account_task_source import effective_task_config, uses_private_config
 from module.config.utils import convert_to_underscore, parse_next_server_schedule
 from tasks.MultiAccountTaskOrchestration.task_name_resolver import TaskNameResolver
 from tasks.Restart.server_update import build_server_update_delay_target, is_server_update_window
@@ -49,6 +52,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         active: dict[str, Any] | None,
     ) -> None:
         """Publishes virtual multi-account execution state over OAS's native queue."""
+        self._overview_active = active
         state_queue = getattr(self, "state_queue", None)
         if state_queue is not None:
             state_queue.put({"multi_account_overview": {"kind": kind, "active": active}})
@@ -223,16 +227,8 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         return True
 
     def _single_task_scheduler(self, entry: MultiAccountRepeatNewTask):
-        """独立单任务复用自身私有 Scheduler，和多账号定时使用同一覆盖方式。"""
         task_config = getattr(self.config.model, convert_to_underscore(entry.task_name), None)
-        public_scheduler = getattr(task_config, "scheduler", None)
-        if public_scheduler is None:
-            return None
-        private_scheduler = entry.private_config.get("scheduler", {})
-        return model_with_field_overrides(
-            public_scheduler,
-            private_scheduler if isinstance(private_scheduler, dict) else {},
-        )
+        return resolve_independent_scheduler(getattr(task_config, "scheduler", None), entry)
 
     def _enabled_single_tasks(self, account_info: MultiAccountRepeatNewAccount):
         return [
@@ -293,6 +289,9 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         batch.failed_task_list = "\n".join(self._task_display_name(name) for name in dict.fromkeys(failed_task_names))
         batch.unfinished_task_list = "\n".join(self._task_display_name(name) for name in dict.fromkeys(unfinished_task_names))
         self._save_repeat_config()
+        # 组内任务的状态已落盘，立即通知正在查看任务列表的页面。
+        if getattr(self, "_overview_active", None) is not None:
+            self._publish_multi_account_overview(self.overview_kind, self._overview_active)
 
     @staticmethod
     def _scheduler_next_run(scheduler, *, success: bool) -> datetime:
@@ -374,14 +373,10 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         scheduler = self._single_task_scheduler(entry)
         if scheduler is None:
             return False
-        entry.task_progress_time = datetime.now()
-        entry.status = "running"
+        set_task_local_status(entry, "running")
         self._save_repeat_config()
         success = self._run_task_with_retry(account_info, entry.task_name, entry)
-        entry.task_progress_time = datetime.now()
-        entry.status = "completed" if success else "failed"
-        if success:
-            entry.last_complete_time = datetime.now()
+        set_task_local_status(entry, "completed" if success else "failed")
         scheduler.next_run = self._scheduler_next_run(scheduler, success=success)
         entry.private_config.setdefault("scheduler", {}).update(scheduler.model_dump(mode="json"))
         self._save_repeat_config()
@@ -544,6 +539,8 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
         # 状态列表只代表当天本轮执行进度，供任务页面准确展示“今日已完成/未完成”。
         account_info.task_progress_time = datetime.now()
         self._save_repeat_config()
+        if getattr(self, "_overview_active", None) is not None:
+            self._publish_multi_account_overview(self.overview_kind, self._overview_active)
 
     def _get_task_names_to_run(
         self,
@@ -783,19 +780,9 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
 
         public_backup = copy.deepcopy(public_config)
         # 私有配置只覆盖默认配置，不能把已经修改过的公共配置带入账号任务。
-        use_private = getattr(task_entry.config_mode, "value", task_entry.config_mode) == "private"
-        active = public_config.__class__() if use_private else copy.deepcopy(public_config)
-        # 运行记录只用于恢复任务产生的状态。先恢复旧记录，再套用用户当前
-        # 保存的私有配置，避免历史记录把后来修改的角色、层数等设置覆盖掉。
-        if task_entry.runtime_record:
-            active = active.__class__.model_validate(
-                self._deep_merge(active.model_dump(), task_entry.runtime_record)
-            )
-        overrides = task_entry.private_config if use_private else {
-            "scheduler": task_entry.private_config.get("scheduler", {})
-        }
+        use_private = uses_private_config(task_entry.config_mode)
         try:
-            active = model_with_group_overrides(active, overrides)
+            active = effective_task_config(public_config, task_entry, private_scheduler=isinstance(task_entry, MultiAccountRepeatNewTask) and self._has_orchestration_items())
         except (ValidationError, ValueError) as exc:
             raise ValueError(f"账号私有配置无效：{task_name}: {exc}") from exc
         BaseModel.__setattr__(self.config.model, task_key, active)

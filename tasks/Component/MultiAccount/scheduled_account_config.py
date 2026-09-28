@@ -24,7 +24,7 @@ class ScheduledAccountBase(ConfigBase, extra="allow"):
     )
     last_complete_time: datetime = Field(default=datetime(2023, 1, 1))
     config_mode: MultiAccountTaskConfigMode = Field(
-        default=MultiAccountTaskConfigMode.PRIVATE,
+        default=MultiAccountTaskConfigMode.PUBLIC,
         title="配置来源",
     )
     private_config: dict[str, Any] = Field(

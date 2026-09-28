@@ -132,8 +132,11 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
         """进行一次斗技"""
         logger.hr('Duel battle', 2)
         self.current_count += 1
-        self.enter_battle()
-        self.battle_prepare()
+        ended_before_prepare = self.enter_battle()
+        if not ended_before_prepare:
+            self.battle_prepare()
+        # 对方可能在匹配、选式神或自动上阵前后直接退出；
+        # 结算页仍复用正常胜负识别，由 wait_battle 统一处理。
         battle_ret = self.wait_battle()
         if battle_ret:
             self.pre_battle_win_cnt = self.battle_win_count
@@ -155,12 +158,13 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
             # 对方在进入准备页前退出，直接出现胜利结算。
             if self.is_battle_end():
                 logger.info("Duel ended before battle preparation")
-                return
+                return True
             # 战斗按钮
             self.ui_click_until_disappear(self.I_D_BATTLE, interval=1.2)
             self.ui_click_until_disappear(self.I_D_BATTLE2, interval=1.2)
             # 战斗带保护的按钮
             self.ui_click_until_disappear(self.I_D_BATTLE_PROTECT, interval=1.2)
+        return False
 
     def battle_prepare(self):
         """选式神准备斗技阶段"""
@@ -209,6 +213,17 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
         while True:
             self.screenshot()
             self.check_and_get_reward()
+            # 对方提前退出时会直接进入正常胜负结算页，必须在点击自动/手动前处理。
+            if self.is_battle_end():
+                if self.is_battle_win():
+                    ret = True
+                    ret_timer.start()
+                    self.click(self._duel_settlement_click(), interval=1.2)
+                elif self.is_battle_lose():
+                    ret = False
+                    ret_timer.start()
+                    self.click(self._duel_settlement_click(), interval=1.2)
+                continue
             if self.appear(self.I_CHECK_DUEL) and self.appear(self.I_D_HELP):  # 斗技主界面
                 break
             if self.appear(self.I_D_WIN_SHARE,interval= 1.2): #拔得头筹
@@ -235,6 +250,8 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
                 self.duel_exit_battle()
                 continue
             if ret is None and not battle_operated:  # 进行战斗前的操作
+                if self.is_battle_end():
+                    continue
                 self.ui_click(self.O_BATTLE_HAND, self.O_BATTLE_AUTO, interval=0.8)
                 self.green_mark(self.conf.duel_config.green_enable, self.conf.duel_config.green_mark)
                 battle_operated = True
@@ -261,7 +278,7 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
         """检查荣誉是否满了"""
         if not self.appear(self.I_DUEL_HONOR):
             return False
-        roi_x = self.I_DUEL_HONOR.roi_front[0] + self.I_DUEL_HONOR.roi_front[2]
+        roi_x = self.I_DUEL_HONOR.roi_front[0] + 5
         roi_y = self.I_DUEL_HONOR.roi_front[1]
         roi_w = 110
         roi_h = self.I_DUEL_HONOR.roi_front[3]

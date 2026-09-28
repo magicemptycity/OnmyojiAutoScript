@@ -370,59 +370,63 @@ class ConfigModel(ConfigBase):
             logger.warning(f'{task} is no inexistence')
             return {}
 
-        def extract_groups(sch):
-            # 从schema 中提取未解析的group的数据
-            # properties = properties_groups(sch)
-            results = {}
-            properties = {}
-            for key, value in sch["properties"].items():
-                if 'items' in value:
-                    properties[key] = re.search(r"/([^/]+)$", value['items']['$ref']).group(1)
-                else:
-                    properties[key] = re.search(r"/([^/]+)$", value['$ref']).group(1)
+        schema = task.model_json_schema()
+        definitions = schema.get("$defs", {})
 
-            for key, value in properties.items():
-                results[key] = sch["$defs"][value]
-            return results
+        def resolve(definition):
+            ref = definition.get("$ref")
+            return definitions.get(ref.rsplit("/", 1)[-1], {}) if ref else definition
 
-        def merge_value(groups, jsons, definitions) -> list[dict]:
-            # 将 groups的参数，同导出的json一起合并, 用于前端显示
+        def merge_value(group, values):
             result = []
-            for key, value in groups["properties"].items():
-                # deal with exclude 
-                if key in jsons and jsons[key] == 0xABCDEF:
+            for key, definition in group.get("properties", {}).items():
+                if values.get(key) == 0xABCDEF:
                     continue
-                item = {}
-                item["name"] = key
-                item["title"] = value["title"] if "title" in value else inflection.underscore(key)
-                if "description" in value:
-                    item["description"] = value["description"]
-                item["default"] = value["default"]
-                item["value"] = jsons[key] if key in jsons else value["default"]
-                item["type"] = value["type"] if "type" in value else "enum"
-                if '$ref' in value:  # list
-                    enum_key = re.search(r"/([^/]+)$", value['$ref']).group(1)
-                    item["enumEnum"] = definitions[enum_key]["enum"]
-                # if 'allOf' in value:
-                #     enum_key = re.search(r"/([^/]+)$", value['allOf'][0]['$ref']).group(1)
-                #     item["enumEnum"] = definitions[enum_key]["enum"]
+                resolved = resolve(definition)
+                kind = definition.get("type", resolved.get("type"))
+                # Nested schedulers, task lists, private configs and forbid periods
+                # are edited by their feature-specific pages, not scalar controls.
+                if kind == "object" or (kind == "array" and
+                        resolve(resolved.get("items", {})).get("type") == "object"):
+                    continue
+                default = definition.get("default", resolved.get("default"))
+                if "default" not in definition and "default" not in resolved:
+                    # Required fields cannot invent a default. Current value is
+                    # still safe to display; absent fields have no scalar editor.
+                    if key not in values:
+                        continue
+                    default = values[key]
+                item = {
+                    "name": key,
+                    "title": definition.get("title", inflection.underscore(key)),
+                    "default": default,
+                    "value": values.get(key, default),
+                    "type": "enum" if "enum" in resolved else kind or "string",
+                }
+                if "description" in definition:
+                    item["description"] = definition["description"]
+                if "enum" in resolved:
+                    item["enumEnum"] = resolved["enum"]
                 result.append(item)
             return result
 
-        schema = task.model_json_schema()
-        groups = extract_groups(schema)
-        groups_value = groups.copy()
-
-        result: dict[str, list] = {}
-        for key, value in task.model_dump(context={'hide': True}).items():
-            if value == 0xABCDEF:
+        groups = {}
+        for key, definition in schema.get("properties", {}).items():
+            group = resolve(definition.get("items", definition))
+            if "properties" in group:
+                groups[key] = group
+        result = {}
+        for key, value in task.model_dump(context={"hide": True}).items():
+            if value == 0xABCDEF or not isinstance(value, dict):
                 continue
-            if key not in groups:
-                for group_name in groups.keys():
-                    if group_name in key:
-                        groups_value[key] = groups[group_name]
-            result[key] = merge_value(groups_value[key], value, schema["$defs"])
-
+            group = groups.get(key)
+            if group is None:
+                # Indexed account serialization uses account_list_1, _2, ...
+                group_name = next((name for name in groups
+                                   if key.startswith(name + "_") and key[len(name) + 1:].isdigit()), None)
+                group = groups.get(group_name)
+            if group is not None:
+                result[key] = merge_value(group, value)
         return result
 
     def script_set_arg(self, task: str, group: str, argument: str, value) -> bool:

@@ -10,12 +10,18 @@ class ConfigManual:
     SCHEDULER_PRIORITY = """
         Restart > SoulsTidy
         > KekkaiUtilize > KekkaiActivation > DemonEncounter
-        > AreaBoss > GoldYoukai > ExperienceYoukai > Nian > Tako > AutoCheckinBigGod > RealmRaid > RyouToppa > DailyTrifles > Exploration
+        > AreaBoss > GoldYoukai > ExperienceYoukai > Nian > Tako > AutoCheckinBigGod > RealmRaid > RyouToppa > DailyTrifles > DailyTriflesSpecial > SameHeartTeam > SameHeartTeamOrochi > SameHeartTeamAwaken > Exploration
         > Dokan > AbyssShadows > Hunt > GuildBanquet > DemonRetreat > GuildActivityMonitor
         > Orochi > OrochiMoans > OrochiJudgement > Sougenbi > FallenSun > EternitySea > SixRealms > OtherWorldTwilight
         > ActivityShikigami > MartialTournament > WantedQuests
         > BondlingFairyland > EvoZone > GoryouRealm > HeroTest > FindJade
         > CollectiveMissions
+        > MultiAccountKekkaiUtilize > MultiAccountKekkaiUtilizeNew > MultiAccountKekkaiActivation > MultiAccountKekkaiActivationNew
+        > MultiAccountDelegation > MultiAccountAreaBoss > MultiAccountHunt > MultiAccountRepeat
+        > MultiAccountTaskOrchestration > MultiAccountRepeatNewNormal > MultiAccountCooperation
+        > MultiAccountRepeatNewFixed > MultiAccountRepeatTimed
+        > MultiAccountRepeatMorning > MultiAccountRepeatAfternoon > MultiAccountRepeatMidnight
+        > MultiAccountRepeatDay > MultiAccountRepeatWeek > MultiAccountRepeatMonth
         > Pets > TalismanPass > Delegation > Hyakkiyakou
         > Secret > WeeklyTrifles > MysteryShop > Duel > Chess
         > TrueOrochi > RichMan
