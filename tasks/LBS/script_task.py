@@ -66,11 +66,12 @@ class ScriptTask(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, SwitchSoul, 
         raise TaskEnd('LBS')
 
     def _reach_exit(self, limit_count: int) -> bool:
-        """两种模式共用的循环退出判断：想打次数达到 或 活动剩余次数耗尽。"""
+        """挑战模式共用的退出判断：达到运行次数或活动剩余次数耗尽。"""
         self.screenshot()
-        remain, used, total = self.O_LBS_COUNT.ocr(self.device.image)
+        # DigitCounter 返回 (已使用, 剩余, 总数)，不可把首项当成剩余。
+        used, remain, total = self.O_LBS_COUNT.ocr(self.device.image)
         if total > 0 and remain <= 0:
-            logger.info(f'Challenge count exhausted: {remain}/{total}')
+            logger.info(f'Challenge count exhausted: {used}/{total}')
             return True
         if total == 0:
             logger.warning('Challenge count ocr failed, continue by time limit')
