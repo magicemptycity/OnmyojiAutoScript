@@ -1,28 +1,76 @@
 from __future__ import annotations
 
+from copy import copy
+
 from tasks.ActivityShikigami.assets import ActivityShikigamiAssets
 from tasks.Component.GeneralInvite.assets import GeneralInviteAssets
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Exploration.assets import ExplorationAssets
 from tasks.GameUi.action import conditional_action, sequence
+from tasks.GameUi.chess_battle import (
+    handle_chess_battle_page,
+    handle_chess_result_page,
+)
 from tasks.Pets.assets import PetsAssets
 from typing import Union
 
 """GameUi 全局页面定义。"""
 
 import random
+import time
 
+from module.exception import GamePageUnknownError
+from module.logger import logger
 from module.atom.click import RuleClick
+from module.base.timer import Timer
 from tasks.Component.GeneralBattle.assets import GeneralBattleAssets
+from tasks.Component.RightActivity.assets import RightActivityAssets
+from tasks.Chess.assets import ChessAssets
 from tasks.Component.Login.service import LoginService
 from tasks.DailyTrifles.assets import DailyTriflesAssets
 from tasks.GlobalGame.assets import GlobalGameAssets
 from tasks.GameUi.assets import GameUiAssets
-from tasks.GameUi.matcher import any_of, all_of
+from tasks.GameUi.matcher import any_of
 from tasks.GameUi.page_definition import Page
 from tasks.KekkaiUtilize.assets import KekkaiUtilizeAssets
 from tasks.Restart.assets import RestartAssets
 from tasks.RyouToppa.assets import RyouToppaAssets
+
+
+HIGH_DENSITY_RANDOM_CLICK_TASKS = frozenset({
+    'ActivityShikigami',
+    'Exploration',
+})
+
+# 依据现有设备日志：这些任务的结算点击量较低，或运行频率极低。
+# 未列出的普通任务也默认按低密度处理，仅高密度任务显式传入 Scatter。
+LOW_DENSITY_RANDOM_CLICK_TASKS = frozenset({
+    'AbyssShadows', 'AreaBoss', 'DailyTrifles', 'Delegation',
+    'DemonEncounter', 'Dokan', 'Duel', 'GoldYoukai', 'GuildBanquet',
+    'Hunt', 'KekkaiUtilize', 'Orochi', 'RealmRaid', 'Restart',
+    'WantedQuests', 'WeeklyPurchase',
+})
+
+# 百鬼棋局虽然日志点击量低，但其奖励页有独立安全多边形，不走通用四区域。
+DEDICATED_SCATTER_RANDOM_CLICK_TASKS = frozenset({'Chess'})
+
+
+def settlement_random_click(area=None) -> RuleClick:
+    """低密度任务使用四区域中的左右区域；高密度任务显式传入 Scatter。"""
+    if area is None:
+        enabled_areas = (
+            GeneralBattleAssets.C_RANDOM_LEFT,
+            GeneralBattleAssets.C_RANDOM_RIGHT,
+        )
+        area = random.choice(enabled_areas)
+    # 浅拷贝隔离单次结算的连点属性；scatter 沿用进入任务时生成的重心。
+    click = copy(area)
+    click.name = 'SETTLEMENT_RANDOM_CLICK'
+    click.burst_count = 1
+    click.burst_interval = (0.1, 0.2)
+    if random.random() < 0.15:
+        click.burst_count = random.randint(2, 3)
+    return click
 
 
 def random_click(
@@ -50,8 +98,86 @@ def random_click(
     return [click for _ in range(random.randint(low, high))]
 
 
+def reward_random_click() -> RuleClick:
+    """奖励页默认按低密度任务策略使用左右区域。"""
+    return settlement_random_click()
+
+
+def reward_details_visible(task) -> bool:
+    """识别奖励物品详情或御魂详情弹层。"""
+    return (
+        task.appear(GeneralBattleAssets.I_REWARD_PARTICULARS)
+        or task.appear(GeneralBattleAssets.I_REWARD_PARTICULARS_ORCHI)
+    )
+
+
+def close_reward_details(task) -> bool:
+    if not reward_details_visible(task):
+        return False
+    task.click(random_click(ltrb=(True, False, True, False)), interval=0.8)
+    return True
+
+
 def handle_login_page(task) -> bool:
     return LoginService(config=task.config, device=task.device).app_handle_login()
+
+
+ACTIVITY_COLUMN_SWITCH_MAX_TRIES = 8
+
+
+def find_activity_entry(task) -> bool:
+    """循环切换庭院右侧活动栏目，直到公共活动入口出现。"""
+    switched = 0
+    for _ in range(ACTIVITY_COLUMN_SWITCH_MAX_TRIES):
+        task.screenshot()
+        if not task.appear(GameUiAssets.I_CHECK_MAIN):
+            return False
+        if task.appear(GameUiAssets.I_MAIN_GOTO_ACTIVITY):
+            return True
+        if task.appear_then_click(RightActivityAssets.I_TOGGLE_BUTTON, interval=0.5):
+            switched += 1
+        time.sleep(0.5)
+
+    task.screenshot()
+    if task.appear(GameUiAssets.I_MAIN_GOTO_ACTIVITY):
+        return True
+    logger.warning(
+        f'Activity entry not found after switching columns {switched} times '
+        f'({ACTIVITY_COLUMN_SWITCH_MAX_TRIES} checks)'
+    )
+    raise GamePageUnknownError('Cannot find common activity entry')
+
+
+def handle_activity_overlay(task) -> bool:
+    """清理活动奖励页和签到弹窗，直到稳定显示活动主页。"""
+    timer = Timer(15).start()
+    award_clicked = False
+    while not timer.reached():
+        task.screenshot()
+
+        if task.appear(GlobalGameAssets.I_UI_REWARD):
+            if not award_clicked:
+                logger.info('Clear activity award overlay via ui_reward')
+                task.click(GlobalGameAssets.C_UI_REWARD, interval=0)
+                task.device.click_record_clear()
+                award_clicked = True
+            time.sleep(0.2)
+            continue
+
+        if task.appear_then_click(GameUiAssets.I_ACTIVITY_SIGNIN_CLOSE, interval=0):
+            logger.info('Close activity sign-in overlay')
+            task.device.click_record_clear()
+            time.sleep(0.2)
+            continue
+
+        if task.appear(GameUiAssets.I_CHECK_ACTIVITY):
+            logger.info('Activity main page ready')
+            return True
+
+        time.sleep(0.2)
+
+    logger.warning('Activity main page overlays did not finish within 15s')
+    return False
 
 
 # 登录页。
@@ -62,8 +188,43 @@ page_login.add_enter_success_hooks(handle_login_page)
 page_main = Page(GameUiAssets.I_CHECK_MAIN, category="global")
 page_main.add_enter_success_hooks(
     GameUiAssets.I_AD_CLOSE_RED, GlobalGameAssets.I_UI_BACK_RED, RestartAssets.I_CANCEL_BATTLE,
-    conditional_action(RestartAssets.I_LOGIN_COURTYARD, RestartAssets.C_LOGIN_SCROLL_CLOSE_AREA),
 )
+
+# 阵容助手可能从多个页面误触进入，黄色返回会回到实际来源页。
+# 不绑定固定父页面；导航器识别到该无出边全局页后，使用全局未知页
+# 关闭动作点击黄色返回，再重新识别返回后的页面。
+page_lineup_helper = Page(
+    GameUiAssets.I_CHECK_LINEUP_HELPER,
+    category="global",
+    priority=90,
+)
+
+# 公共活动主页。各活动任务只负责从这里继续导航到各自玩法页面。
+page_activity = Page(
+    any_of(
+        GameUiAssets.I_CHECK_ACTIVITY,
+        GlobalGameAssets.I_UI_REWARD,
+        GameUiAssets.I_ACTIVITY_SIGNIN_CLOSE,
+    ),
+    category="global",
+)
+page_activity.add_enter_success_hooks(handle_activity_overlay)
+page_activity.add_enter_failure_hooks(
+    find_activity_entry,
+    conditional_action(GlobalGameAssets.I_UI_REWARD, reward_random_click),
+    GlobalGameAssets.I_UI_BACK_RED,
+    GameUiAssets.I_ACTIVITY_SKIP,
+)
+page_activity.connect(page_main, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_activity->page_main")
+page_main.connect(page_activity, GameUiAssets.I_MAIN_GOTO_ACTIVITY, key="page_main->page_activity")
+
+# 闲庭使用独立设置图标识别，不依赖庭院皮肤；返回后由导航器截图确认到达庭院。
+page_relax = Page(
+    GameUiAssets.I_CHECK_MAIN_SET,
+    category="global",
+    priority=90,
+)
+page_relax.connect(page_main, GameUiAssets.I_BACK_BROWN, key="page_relax->page_main")
 
 # 庭院区域页面。
 page_shikigami_records = Page(GameUiAssets.I_CHECK_RECORDS, category="global")
@@ -166,6 +327,66 @@ page_town.connect(page_main, GameUiAssets.I_TOWN_GOTO_MAIN, key="page_town->page
 page_main.connect(page_town, GameUiAssets.I_MAIN_GOTO_TOWN, key="page_main->page_town")
 
 # 町中区域页面。
+page_entertainment = Page(GameUiAssets.I_CHECK_ENTERTAINMENT, category="global")
+page_entertainment.add_enter_success_hooks(ChessAssets.I_SKIP)
+page_town.connect(
+    page_entertainment,
+    GameUiAssets.I_TOWN_GOTO_ENTERTAINMENT,
+    key="page_town->page_entertainment",
+    on_enter_failure=[ChessAssets.I_SKIP],
+)
+
+page_chess = Page(GameUiAssets.I_CHECK_CHESS, category="global")
+page_entertainment.connect(
+    page_chess,
+    GameUiAssets.I_ENTERTAINMENT_GOTO_CHESS,
+    key="page_entertainment->page_chess",
+    on_leave_failure=[ChessAssets.I_SKIP],
+    on_enter_failure=[ChessAssets.I_SKIP],
+)
+page_chess.connect(
+    page_entertainment,
+    GlobalGameAssets.I_UI_BACK_YELLOW,
+    key="page_chess->page_entertainment",
+)
+
+# 棋局内页面属于全局异常恢复节点。任意任务启动时若停留在遗留棋局，
+# 导航器会先调用统一退出流程返回棋局大厅，再继续规划原目标页面。
+page_chess_battle = Page(
+    GameUiAssets.I_CHECK_CHESS_BATTLE,
+    category="global",
+    priority=95,
+)
+page_chess_battle.connect(
+    page_chess,
+    handle_chess_battle_page,
+    key="page_chess_battle->page_chess",
+)
+# 棋局可能在脚本已判定进入超时后才落到名次结算页。将全部既有结算
+# 标志注册为独立全局页面，使任何导航过程都能继续结算并返回大厅。
+page_chess_result = Page(
+    any_of(
+        GameUiAssets.I_CHESS_EXIT_TO_LOBBY,
+        GameUiAssets.I_CHESS_EXIT_TO_LOBBY_2,
+        ChessAssets.I_REWARD_CHESS,
+        ChessAssets.I_SHARE,
+        GameUiAssets.I_CHECK_CHESS_RANK,
+        GameUiAssets.I_CHESS_RANK_GOTO_LOBBY,
+    ),
+    category="global",
+    priority=96,
+)
+page_chess_result.connect(
+    page_chess,
+    handle_chess_result_page,
+    key="page_chess_result->page_chess",
+)
+page_entertainment.connect(
+    page_town,
+    GlobalGameAssets.I_UI_BACK_YELLOW,
+    key="page_entertainment->page_town",
+)
+
 page_duel = Page(GameUiAssets.I_CHECK_DUEL, category="global")
 page_duel.connect(page_town, GlobalGameAssets.I_UI_BACK_YELLOW, key="page_duel->page_town")
 page_town.connect(page_duel, GameUiAssets.I_TOWN_GOTO_DUEL, key="page_town->page_duel")
@@ -309,7 +530,10 @@ page_battle_result = Page(
     category="global",
     priority=25
 )
-page_battle_result.add_enter_success_hooks(lambda _task: random_click())
+page_battle_result.add_enter_success_hooks(
+    lambda task: task._battle_settlement_click()
+    if hasattr(task, '_battle_settlement_click') else settlement_random_click()
+)
 
 page_reward = Page(
     any_of(
@@ -324,6 +548,7 @@ page_reward = Page(
         GeneralBattleAssets.I_REWARD_SOUL_5,
         GeneralBattleAssets.I_REWARD_SOUL_6,
         GlobalGameAssets.I_UI_REWARD,
+        reward_details_visible,
     ),
     category="global",
     priority=25
@@ -338,9 +563,11 @@ def handle_battle_reward_page(task) -> bool:
     Returns:
         bool: 执行结果
     """
+    if close_reward_details(task):
+        return True
     if task.appear_then_click(GeneralBattleAssets.I_OVER_GHOST, interval=0.8):
         return True
-    return task.click(random_click(), interval=0.8)
+    return task.click(reward_random_click(), interval=0.8)
 
 page_reward.add_enter_success_hooks(handle_battle_reward_page)
 

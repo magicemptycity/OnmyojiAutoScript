@@ -37,6 +37,18 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
         }
 
     @cached_property
+    def gold_layer_map(self) -> dict:
+        """秘闻第 1-5 层的金币数量保底映射。"""
+        return {
+            10000: 1,
+            18000: 1,
+            20000: 2,
+            30000: 3,
+            40000: 4,
+            50000: 5,
+        }
+
+    @cached_property
     def battle_config(self) -> GeneralBattleConfig:
         conf = self.config.model.secret.general_battle
         conf.lock_team_enable = False
@@ -161,29 +173,29 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
             # print(f'检测到的未通过ROI: {roi}')
             # print(f'检测到的勾玉数量ROI: {ocr_target.roi}')
             jade_num = ocr_target.ocr(self.device.image)
-            if isinstance(jade_num, str):
-                logger.warning(f'OCR failed, try again {jade_num}')
-                return None
-            elif not isinstance(jade_num, int):
-                logger.warning(f'OCR failed, try again {jade_num}')
-                return None
-            if jade_num < 7:
-                # 第一个的时候可能是没有检测到
-                gold_number = self.O_SE_GOLD.ocr(self.device.image)
-                if isinstance(gold_number, int) and (gold_number == 10000 or gold_number == 18000):
-                    logger.info(f'No find jade number, but find gold number {gold_number}')
-                    return 1
-                return None
-            elif jade_num > 70:
-                logger.warning(f'OCR failed, try again {jade_num}')
-                return None
-            # 勾玉数量 = 层数 * 7
-            try:
-                lr = jade_num // 7
-                return lr
-            except TypeError:
-                logger.warning(f'OCR failed, try again {jade_num}')
-                return None
+            if (
+                isinstance(jade_num, int)
+                and 7 <= jade_num <= 70
+                and jade_num % 7 == 0
+            ):
+                # 勾玉数量 = 层数 * 7
+                return jade_num // 7
+
+            logger.warning(f'Jade OCR failed, try gold fallback: {jade_num}')
+            # 金币区域和“未通关”文字保持固定相对位置，因此跟随
+            # 当前找到的关卡框移动，兼容列表下方的卡片。
+            self.O_SE_GOLD.roi[0] = int(roi[0]) - 74
+            self.O_SE_GOLD.roi[1] = int(roi[1]) + 38
+            gold_number = self.O_SE_GOLD.ocr(self.device.image)
+            layer = self.gold_layer_map.get(gold_number)
+            if layer:
+                logger.info(
+                    'No valid jade number, but found gold number '
+                    f'{gold_number}, layer={layer}'
+                )
+                return layer
+            logger.warning(f'Gold OCR fallback failed: {gold_number}')
+            return None
 
         if screenshot:
             self.screenshot()

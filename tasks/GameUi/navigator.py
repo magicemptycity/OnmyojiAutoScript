@@ -24,6 +24,7 @@ from module.logger import logger
 from tasks.ActivityShikigami.assets import ActivityShikigamiAssets
 from tasks.GameUi.action import ActionSequence, ConditionalAction
 from tasks.GameUi.assets import GameUiAssets
+from tasks.GameUi.chess_battle import ChessBattleNavigationMixin
 from tasks.GameUi.common import infer_tasks_category_from_parts, infer_tasks_category_from_path
 from tasks.GameUi.matcher import collect_rule_images
 from tasks.GameUi.page_definition import Page, Transition, sort_pages_by_priority
@@ -33,7 +34,7 @@ from tasks.SixRealms.assets import SixRealmsAssets
 from tasks.base_task import BaseTask
 
 
-class GameUi(BaseTask, GameUiAssets):
+class GameUi(ChessBattleNavigationMixin, BaseTask, GameUiAssets):
     """页面识别、导航与未知页恢复的统一入口。"""
 
     REPEATED_TRANSITION_FAILURE_THRESHOLD = 3
@@ -515,6 +516,32 @@ class GameUi(BaseTask, GameUiAssets):
                 action_done = True
                 break
 
+        # 町中入口图标可能因动画或皮肤变化无法通过模板识别。只有在
+        # 两帧重新确认当前页仍为 town，且目标动作具有固定图标区域时，
+        # 才机械点击一次 roi_front 中心作为保底。
+        if (
+            not action_done
+            and source.key == "page_town"
+            and isinstance(transition.action, (RuleImage, RuleGif))
+            and self.confirm_page(source, skip_first_screenshot=False)
+        ):
+            x, y, width, height = transition.action.roi_front
+            click_x = x + width // 2
+            click_y = y + height // 2
+            logger.warning(
+                "Town target was not recognized; use one fixed-position "
+                f"fallback click: action={self._action_name(transition.action)}, "
+                f"position=({click_x}, {click_y})"
+            )
+            self.device.click(
+                x=click_x,
+                y=click_y,
+                control_name=(
+                    f"TOWN_FALLBACK_{self._action_name(transition.action)}"
+                ),
+            )
+            action_done = True
+
         if not action_done:
             self._run_hooks(source.on_leave_failure)
             self._run_hooks(transition.on_leave_failure)
@@ -740,7 +767,7 @@ class GameUi(BaseTask, GameUiAssets):
         return True
 
     def goto_page(self, destination: Page, confirm_wait: float = 0, skip_first_screenshot: bool = True,
-                  timeout: int = 30) -> bool | None:
+                  timeout: int = 30, *, accepted_pages: tuple[Page, ...] = ()) -> bool | None:
         """导航到目标页面。
 
         Args:
@@ -748,6 +775,7 @@ class GameUi(BaseTask, GameUiAssets):
             confirm_wait: 到达目标页面后额外等待的确认时间。
             skip_first_screenshot: 是否复用当前截图。
             timeout: 无有效进展超时时间，单位秒。
+            accepted_pages: 可直接继续任务的其他页面，识别到后无需转往目标页。
 
         Returns:
             是否成功到达目标页面。
@@ -798,9 +826,9 @@ class GameUi(BaseTask, GameUiAssets):
                 last_detected_page_key = current.key
                 reset_repeated_transition_failures()
 
-            if current == destination:
+            if current == destination or any(current.key == page.key for page in accepted_pages):
                 # current 来自 _refresh_current_page，其返回已是两帧稳定确认的结果，无需再次 confirm。
-                return self._finalize_arrival(destination, confirm_wait, start_time)
+                return self._finalize_arrival(current, confirm_wait, start_time)
 
             path = self._build_path(current, destination)
             if not path:

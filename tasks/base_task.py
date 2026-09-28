@@ -5,7 +5,7 @@
 from time import sleep, time
 
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, time as clock_time, timedelta
 from module.atom.animate import RuleAnimate
 from module.atom.click import RuleClick
 from module.atom.gif import RuleGif
@@ -221,6 +221,13 @@ class BaseTask(GlobalGameAssets, CostumeBase):
         else:
             appear = target.match(self.device.image, threshold=threshold, frame_id=self.device.image_frame_id)
 
+        if (
+            not appear
+            and isinstance(target, RuleImage)
+            and target is getattr(self, 'I_CHECK_MAIN', None)
+        ):
+            appear = self.detect_random_main_costume(threshold=threshold)
+
         if appear and interval:
             self.interval_timer[timer_key].reset()
 
@@ -308,10 +315,19 @@ class BaseTask(GlobalGameAssets, CostumeBase):
             self.device.click(click_x, click_y, control_name=target.name)
         return True
 
-    def wait_until_disappear(self, target: RuleImage) -> None:
+    def wait_until_disappear(self, target: RuleImage, timeout: float = None) -> None:
+        """
+        等待目标从屏幕上消失
+        :param target: 目标元素
+        :param timeout: 可选超时秒数，超时后即使目标仍在也会返回；不传则一直等到消失
+        """
+        timeout_timer = Timer(timeout).start() if timeout else None
         while 1:
             self.screenshot()
             if not self.appear(target):
+                break
+            if timeout_timer and timeout_timer.reached():
+                logger.warning(f'{target.name} still visible after {timeout}s')
                 break
 
     def wait_until_pos_stable(self, target: RuleImage, stable_time: float = 0.3, timeout: float = 2,
@@ -479,11 +495,22 @@ class BaseTask(GlobalGameAssets, CostumeBase):
             if not self.interval_timer[click.name].reached():
                 return False
 
-        x, y = click.coord()
-        if isinstance(click, RuleLongClick):
-            self.device.long_click(x=x, y=y, duration=click.duration / 1000, control_name=click.name)
-        elif isinstance(click, RuleClick) or isinstance(click, RuleImage) or isinstance(click, RuleOcr):
-            self.device.click(x=x, y=y, control_name=click.name)
+        burst_count = max(1, int(getattr(click, 'burst_count', 1)))
+        burst_interval = getattr(click, 'burst_interval', (0.1, 0.2))
+        if burst_count > 1:
+            logger.info(
+                f'Burst click in same area: count={burst_count}, '
+                f'interval={burst_interval[0]}-{burst_interval[1]}s'
+            )
+        for click_index in range(burst_count):
+            if click_index:
+                sleep(random.uniform(*burst_interval))
+            # 连点时每次重新取点：保持在同一规则区域内，但不重复同一坐标。
+            x, y = click.coord()
+            if isinstance(click, RuleLongClick):
+                self.device.long_click(x=x, y=y, duration=click.duration / 1000, control_name=click.name)
+            elif isinstance(click, RuleClick) or isinstance(click, RuleImage) or isinstance(click, RuleOcr):
+                self.device.click(x=x, y=y, control_name=click.name)
 
         # 执行后，如果有限制时间，则重置限制时间
         if interval:
@@ -637,6 +664,21 @@ class BaseTask(GlobalGameAssets, CostumeBase):
         else:
             start_time = self.start_time
         self.config.task_delay(task, start_time=start_time, success=success, server=server, target=target)
+
+    def set_next_run_next_monday(self, task: str, scheduler) -> None:
+        """周目标达成后改到下周一，保留显式配置的运行时刻。"""
+        finished_at = datetime.now().replace(microsecond=0)
+        configured_time = scheduler.server_update
+        run_time = (
+            finished_at.time()
+            if configured_time == clock_time(hour=9)
+            else configured_time
+        )
+        next_monday = finished_at.date() + timedelta(
+            days=7 - finished_at.weekday()
+        )
+        target = datetime.combine(next_monday, run_time)
+        self.set_next_run(task=task, server=False, target=target)
 
     def custom_next_run(self, task: str, custom_time: Time = None, time_delta: float = 1) -> None:
         """

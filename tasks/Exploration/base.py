@@ -16,6 +16,7 @@ from tasks.Exploration.assets import ExplorationAssets
 from tasks.Exploration.config import ChooseRarity, UpType, ExplorationLevel, AutoRotate, UserStatus, Exploration
 from tasks.Component.GeneralBattle.general_battle import GeneralBattle, ExitMatcher, BattleContext, BattleAction
 from tasks.GameUi.game_ui import GameUi
+from tasks.GameUi.default_pages import settlement_random_click
 from tasks.Utils.config_enum import ShikigamiClass
 import tasks.Exploration.page as pages
 
@@ -31,6 +32,9 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
     user_status: UserStatus = UserStatus.ALONE
     wait_start_time: datetime = datetime.now()
     pre_page: pages.Page = None
+
+    def _battle_settlement_click(self):
+        return settlement_random_click(self.C_SAFE_RANDOM_CLICK_AREA_EXP)
 
     def _exit_matcher(self) -> ExitMatcher:
         return pages.any_of(self.I_E_SETTINGS_BUTTON, self.I_E_AUTO_ROTATE_ON, self.I_E_AUTO_ROTATE_OFF)
@@ -51,6 +55,7 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
         return RuleAnimate(self.I_SWIPE_END)
 
     def pre_process(self):
+        self.C_SAFE_RANDOM_CLICK_AREA_EXP.reset_click_focuses()
         if self._config.switch_soul_config.enable:
             self.goto_page(pages.page_shikigami_records)
             self.run_switch_soul(self._config.switch_soul_config.switch_group_team)
@@ -255,7 +260,8 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
     def activate_realm_raid(self, con_scrolls, con, current_page: pages.Page | None) -> None:
         # 判断是否开启突破票检测
         if not con_scrolls.scrolls_enable or current_page is None or \
-                current_page not in (pages.page_exploration, pages.page_exp_entrance):
+                current_page not in (pages.page_mainline, pages.page_gameplay,
+                                     pages.page_exploration, pages.page_exp_entrance):
             return
         if current_page == pages.page_exp_entrance:
             cu, res, total = self.O_REALM_RAID_NUMBER1.ocr(self.device.image)
@@ -276,7 +282,7 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
         # 设置下次执行行时间
         logger.info("RealmRaid and Exploration  set_next_run !")
         next_run = datetime.now() + con_scrolls.scrolls_cd
-        self.goto_page(pages.page_exploration)
+        self.goto_page(pages.page_mainline)
         self.set_next_run(task='Exploration', success=False, finish=False, target=next_run)
         self.set_next_run(task='RealmRaid', success=False, finish=False, server=False, target=datetime.now())
         self.set_next_run(task='MemoryScrolls', success=False, finish=False, target=datetime.now())

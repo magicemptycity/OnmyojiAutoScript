@@ -65,6 +65,10 @@ class BondlingConfig(ConfigBase):
                                                                     '注:探查耗费的时间与次数也计入总时间和次数中')
     check_enable: bool = Field(default=True, description='是否检查契忆数量')
     limit_num: int = Field(default=2000, description='契忆数量限制,到达此限制将自动结束任务(仅在任务开始时判断)')
+    random_sleep: bool = Field(
+        default=False,
+        description='bondling_random_sleep_help',
+    )
 
     @field_validator("bondling_mode", mode="before")
     def convert_old_value(cls, v):
