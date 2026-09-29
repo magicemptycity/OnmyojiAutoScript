@@ -25,6 +25,14 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
             return ocrRes
         return None
 
+    def _dismiss_new_server_rally(self) -> bool:
+        """只在识别到新区集结提示时点击“取消”，保留当前选服流程。"""
+        if not self.appear(self.I_SA_NEW_SERVER_RALLY_CANCEL):
+            return False
+        logger.info("选择区服出现新区集结提示，点击取消")
+        self.click(self.I_SA_NEW_SERVER_RALLY_CANCEL)
+        return True
+
     def select_target(self, characterName: str, svrName: str = None) -> bool:
         """
         统一的选择目标方法：优先匹配服务器名（若提供），其次匹配角色名。
@@ -128,8 +136,17 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
         # ---------------------------------
 
         lastList = []
+        rally_dismissals = 0
         while 1:
             self.screenshot()
+            # 弹窗下方的区服名称仍会被 OCR 读到，必须先检查遮挡层。
+            if self._dismiss_new_server_rally():
+                rally_dismissals += 1
+                if rally_dismissals >= 3:
+                    logger.error("新区集结提示连续出现，停止选服")
+                    self.save_error_log()
+                    return False
+                continue
             ocrRes = self.O_SA_SELECT_SVR_CHARACTER_LIST.detect_and_ocr(self.device.image)
             #raw_names = [item.ocr_text for item in ocrRes]
             #logger.info(f"OCR raw names: {raw_names}")
@@ -176,10 +193,29 @@ class LoginAccount(BaseTask, SwitchAccountAssets):
                     tmpClick.roi_front[1] -= 30   # 角色名上方30px
                     logger.info("Click above character name (offset -30)")
 
-                # 点击偏移后的点直到选择服务器区域消失（表示选中成功）
-                self.ui_click_until_disappear(tmpClick, stop=self.I_SA_CHECK_SELECT_SVR_3, interval=3)
-                logger.info("Target found and clicked svr icon")
-                return True
+                # 点击后也可能弹出新区集结；不能让通用的无限点击循环透过弹窗点击。
+                # 只有选服页面确实消失，才认为角色选择成功。
+                for _ in range(3):
+                    self.screenshot()
+                    if self._dismiss_new_server_rally():
+                        rally_dismissals += 1
+                        if rally_dismissals >= 3:
+                            break
+                        continue
+                    if not self.appear(self.I_SA_CHECK_SELECT_SVR_3):
+                        logger.info("Target found and clicked svr icon")
+                        return True
+                    self.click(tmpClick)
+                    time.sleep(2)
+                self.screenshot()
+                if self._dismiss_new_server_rally():
+                    rally_dismissals += 1
+                elif not self.appear(self.I_SA_CHECK_SELECT_SVR_3):
+                    logger.info("Target found and clicked svr icon")
+                    return True
+                logger.error("选服页面未关闭或新区集结提示反复出现，停止点击")
+                self.save_error_log()
+                return False
 
             # 未匹配，滑动列表继续
             if lastList == processed_names:

@@ -133,5 +133,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "判断是否在 选择服务器 界面的标志物 选择区域图标"
+  },
+  {
+    "itemName": "sa_new_server_rally_cancel",
+    "imageName": "sa_new_server_rally_cancel.png",
+    "roiFront": "463,425,138,58",
+    "roiBack": "450,412,165,85",
+    "method": "Template matching",
+    "threshold": 0.85,
+    "description": "选择区服时新区集结提示的取消按钮，用于识别并点击"
   }
 ]
