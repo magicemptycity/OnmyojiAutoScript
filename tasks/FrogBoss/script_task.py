@@ -118,11 +118,13 @@ class ScriptTask(RightActivity, FrogBossAssets, GeneralBattleAssets):
         while 1:
             self.screenshot()
             if self.appear(self.I_GOLD_30_CHECK):
+                self.ui_click_until_smt_disappear(self.I_BET_SURE, stop=self.I_GOLD_30_CHECK, interval=1)
                 break
             if gold_30_timer.reached():
                 logger.info('Gold 30 not appear')
                 break
             if self.appear_then_click(self.I_GOLD_30, interval=3):
+                flag_glod_30 = 1
                 continue
         # 正式下注
         logger.info('Formal bet')
@@ -130,7 +132,10 @@ class ScriptTask(RightActivity, FrogBossAssets, GeneralBattleAssets):
             self.screenshot()
             if self.appear(self.I_BETTED):
                 break
-            if self.appear_then_click(self.I_BET_SURE, interval=2) and flag_glod_30 == 1:
+            if self.appear(self.I_GOLD_30_CHECK):
+                self.ui_click_until_smt_disappear(self.I_BET_SURE, stop=self.I_GOLD_30_CHECK, interval=1)
+                continue
+            if not self.appear(self.I_GOLD_30_CHECK) and flag_glod_30 == 1 and self.appear_then_click(self.I_BET_SURE, interval=1):
                 continue
             if self.appear_then_click(self.I_GOLD_30, interval=2):
                 flag_glod_30 = 1
