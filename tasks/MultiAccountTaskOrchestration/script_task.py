@@ -10,7 +10,10 @@ from typing import Any, ClassVar
 from module.exception import RequestHumanTakeover, TaskEnd
 from module.logger import logger
 from pydantic import BaseModel, ValidationError
-from module.config.multi_account_task_progress import set_task_local_status
+from module.config.multi_account_task_progress import (
+    set_task_local_status, settle_completed_group, normal_completed_today,
+    reconcile_normal_account_completion,
+)
 from module.config.model_overrides import model_with_group_overrides
 from module.config.multi_account_scheduler import resolve_independent_scheduler
 from module.config.multi_account_task_source import effective_task_config, uses_private_config
@@ -78,9 +81,14 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             logger.hr(f"处理账号 {account_info.character}-{account_info.svr}", 2)
             logger.info("开始处理账号 %s-%s", account_info.character, account_info.svr)
 
-            failed_task_names = account_info.failed_task_names
-            unfinished_task_names = account_info.unfinished_task_names
+            progress_is_today = account_info.task_progress_time.date() == datetime.now().date()
+            failed_task_names = account_info.failed_task_names if progress_is_today else []
+            unfinished_task_names = account_info.unfinished_task_names if progress_is_today else []
             if not failed_task_names and not unfinished_task_names:
+                # Covers a previously saved all-completed list that was never settled.
+                if progress_is_today and set(account_info.task_names).issubset(normal_completed_today(account_info)) and account_info.task_names:
+                    if reconcile_normal_account_completion(account_info):
+                        self._save_repeat_config()
                 last_complete_time = account_info.last_complete_time
                 now = datetime.now()
                 if last_complete_time.date() == now.date():
@@ -125,10 +133,8 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
 
             # 成功、失败和未完成状态分别保存。中断时只会保留当前项及其后的未完成项。
             remaining_failed_task_names = list(dict.fromkeys(failed_task_names))
-            completed_task_names = list(dict.fromkeys(account_info.completed_task_names))
-            if not failed_task_names and not unfinished_task_names:
-                # 新一轮完整执行不沿用上轮的成功清单。
-                completed_task_names = []
+            completed_task_names = [name for name in account_info.task_names
+                                    if name in normal_completed_today(account_info)]
 
             for task_index, task_name in enumerate(task_names):
                 # 在真正开始前持久化检查点；外部停止、强制退出或人工接管时可从当前项恢复。
@@ -329,8 +335,14 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             if not self._prepare_runnable_account(account_info, log_skip=True):
                 continue
             for item_index, batch in enumerate(self._enabled_fixed_time_batches(account_info)):
-                if batch.scheduler.next_run <= now and (task_names := self._fixed_batch_task_names_to_run(batch)):
-                    due_plan.append((batch.scheduler.priority, batch.scheduler.next_run, account_index, item_index, "group", account_info, batch, task_names))
+                if batch.scheduler.next_run > now:
+                    continue
+                task_names = self._fixed_batch_task_names_to_run(batch)
+                if not task_names:
+                    if settle_completed_group(batch, now=now):
+                        self._save_repeat_config()
+                    continue
+                due_plan.append((batch.scheduler.priority, batch.scheduler.next_run, account_index, item_index, "group", account_info, batch, task_names))
             for item_index, entry in enumerate(self._enabled_single_tasks(account_info)):
                 scheduler = self._single_task_scheduler(entry)
                 if scheduler is not None and scheduler.next_run <= now:
@@ -550,9 +562,10 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
     ) -> list[str]:
         """优先恢复上次失败或中断的任务，避免重复执行已成功任务。"""
         configured_task_names = account_info.task_names
+        completed_today = normal_completed_today(account_info)
         recovery_task_names = [*failed_task_names, *unfinished_task_names]
         if not recovery_task_names:
-            return configured_task_names
+            return [name for name in configured_task_names if name not in completed_today]
 
         task_names = [
             task_name
@@ -586,7 +599,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
                 ", ".join(self._task_display_name(name) for name in task_names),
             )
             return task_names
-        return configured_task_names
+        return [name for name in configured_task_names if name not in completed_today]
 
     @staticmethod
     def _task_display_name(task_name: str) -> str:

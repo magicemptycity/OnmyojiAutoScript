@@ -28,7 +28,9 @@ from module.server.multi_account_task_list_service import (
     reorder_enabled_tasks as _reorder_enabled_tasks,
     set_entry_enabled as _set_entry_enabled,
 )
-from module.server.multi_account_progress_service import set_task_progress_status as _set_task_progress_status
+from module.server.multi_account_progress_service import (
+    set_task_progress_status as _set_task_progress_status, settle_completed_group,
+)
 from module.server.multi_account_group_adapter import (
     ensure_disabled_group_task as _ensure_group_task,
     find_group as _find_group_batch,
@@ -717,7 +719,11 @@ async def set_fixed_time_batch_task_status(script_name: str, account_index: int,
     batch = _batch(_task_account(section, account_index), batch_id)
     entry = _batch_task_entry(batch, task_name)
     _set_task_progress_status(batch, entry.task_name, value, _task_display_name)
+    if value.strip().lower() == "completed":
+        settle_completed_group(batch)
+    refresh_fixed_time_scheduler(script_name, section)
     _save(script_name, multi_account_repeat_new_fixed=section)
+    await _broadcast_multi_account_overview(script_name)
     return True
 
 

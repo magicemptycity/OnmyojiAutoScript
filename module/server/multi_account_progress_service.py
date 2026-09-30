@@ -5,6 +5,7 @@ from typing import Any, Callable
 from fastapi import HTTPException
 
 from module.config.utils import convert_to_underscore
+from module.config.multi_account_task_progress import settle_completed_group
 
 
 def set_task_progress_status(

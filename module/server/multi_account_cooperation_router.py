@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
 from module.config.model_overrides import model_with_group_overrides
+from module.config.multi_account_task_progress import reconcile_normal_account_completion
 from module.config.utils import convert_to_underscore
 from module.server.api_logger import ApiLoggingRoute
 from module.server.multi_account_account_write_service import (
@@ -305,6 +306,7 @@ async def add_task(script_name: str, account_index: int, task_name: str):
     account = _task_account(section, account_index)
     key = _validate_task_name(script_name, task_name)
     if _add_task_entry(account, key, MultiAccountRepeatNewTask, mode="normal"):
+        reconcile_normal_account_completion(account)
         _save(script_name, multi_account_cooperation=section)
     return True
 
@@ -324,13 +326,17 @@ async def delete_task(script_name: str, account_index: int, task_name: str):
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
     _delete_task_entry(account, entry, mode="normal")
+    reconcile_normal_account_completion(account, invalidate_on_incomplete=False)
     _save(script_name, multi_account_cooperation=section)
     return True
 
 @multi_account_cooperation_app.put('/{script_name}/multi_account_cooperation/accounts/{account_index}/tasks/{task_name}/enable')
 async def set_task_enable(script_name: str, account_index: int, task_name: str, value: str):
     section = _section(script_name)
-    _task_entry(_task_account(section, account_index), task_name).enable = _convert_argument("boolean", value)
+    account = _task_account(section, account_index)
+    enabled = _convert_argument("boolean", value)
+    _task_entry(account, task_name).enable = enabled
+    reconcile_normal_account_completion(account, invalidate_on_incomplete=enabled)
     _save(script_name, multi_account_cooperation=section)
     return True
 
@@ -342,6 +348,7 @@ async def set_task_status(script_name: str, account_index: int, task_name: str, 
     account = _task_account(section, account_index)
     entry = _task_entry(account, task_name)
     _set_task_progress_status(account, entry.task_name, value, _task_display_name)
+    reconcile_normal_account_completion(account)
     _save(script_name, multi_account_cooperation=section)
     return True
 
@@ -367,6 +374,7 @@ async def set_account_task_progress(
     recovery_set = failed_set | set(unfinished)
     completed = [name for name in completed if name not in recovery_set]
     _save_account_task_progress(account, completed, failed, unfinished)
+    reconcile_normal_account_completion(account)
     _save(script_name, multi_account_cooperation=section)
     return True
 
