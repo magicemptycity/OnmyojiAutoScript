@@ -69,6 +69,12 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             raise TaskEnd(self.task_name)
         if self._has_orchestration_items():
             return self._run_orchestration_items()
+        overall_failed = self._run_normal_accounts()
+        self.set_next_run(self.task_name, success=not overall_failed)
+        raise TaskEnd(self.task_name)
+
+    def _run_normal_accounts(self) -> bool:
+        """Run a normal account list without rescheduling the outer OAS task."""
         overall_failed = False
 
         for account_index, account_info in enumerate(self.fade_conf.account_list):
@@ -211,10 +217,9 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             )
             # 第二次直接复用完整流程，由“今日已执行则跳过”自动跳过已完成账号。
             self._rerun_incomplete_accounts_done = True
-            return self.run()
+            return self._run_normal_accounts()
 
-        self.set_next_run(self.task_name, success=not overall_failed)
-        raise TaskEnd(self.task_name)
+        return overall_failed
 
     def _delay_for_server_update_before_accounts(self) -> bool:
         """维护期间不进入账号列表，外层任务延后到维护结束后再统一执行。"""
@@ -715,7 +720,7 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
                     exc,
                 )
             finally:
-                if task_success:
+                if task_success or self._persist_partial_runtime_record():
                     self._save_private_runtime_record(task_entry, task_config_backup)
                 self._restore_private_task_config(task_config_backup)
                 self.config._save_selected_fields = previous_save_fields
@@ -808,6 +813,10 @@ class ScriptTask(MultiAccountPriorityMixin, GameUi, MultiAccountRepeatNewAssets,
             config_source,
         )
         return task_key, public_backup, active.model_dump()
+
+    def _persist_partial_runtime_record(self) -> bool:
+        """Ordinary modes retain success-only persistence; collections may opt in."""
+        return False
 
     def _save_private_runtime_record(
         self,

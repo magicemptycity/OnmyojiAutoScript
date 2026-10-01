@@ -51,6 +51,7 @@ class ConfigMenu:
             'MultiAccountRepeat',
             'MultiAccountTaskOrchestration',
             'MultiAccountRepeatNewNormal',
+            'MultiAccountRepeatNewCollection',
             'MultiAccountCooperation',
             'MultiAccountRepeatNewFixed',
             'MultiAccountRepeatTimed',

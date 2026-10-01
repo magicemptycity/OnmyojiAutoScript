@@ -1,4 +1,5 @@
 import copy
+from contextvars import ContextVar
 import re
 from datetime import datetime
 
@@ -48,10 +49,23 @@ from tasks.MultiAccountTaskOrchestration.task_name_resolver import TASK_NAME_ALI
 
 
 multi_account_repeat_new_normal_app = APIRouter(route_class=ApiLoggingRoute)
+# When a collection instance delegates to these normal-mode routes, keep the
+# selected instance scoped to this request. Ordinary routes remain unaffected.
+_active_collection_instance: ContextVar[str | None] = ContextVar(
+    "normal_collection_instance", default=None
+)
 
 
 
 def _section(script_name: str):
+    instance_id = _active_collection_instance.get()
+    if instance_id is not None:
+        from tasks.MultiAccountRepeatNewCollection.service import get_instance
+        collection = mm.config_cache(script_name).model.multi_account_repeat_new_collection
+        try:
+            return get_instance(collection, instance_id).normal
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
     section = getattr(mm.config_cache(script_name).model, "multi_account_repeat_new_normal", None)
     if section is None:
         raise HTTPException(status_code=404, detail="当前配置没有多账号多任务新")
@@ -66,6 +80,18 @@ def _library(script_name: str):
 
 
 def _save(script_name: str, **fields) -> None:
+    instance_id = _active_collection_instance.get()
+    if instance_id is not None and "multi_account_repeat_new_normal" in fields:
+        from tasks.MultiAccountRepeatNewCollection.service import get_instance
+        config = mm.config_cache(script_name)
+        collection = config.model.multi_account_repeat_new_collection
+        get_instance(collection, instance_id).normal = fields["multi_account_repeat_new_normal"]
+        # A scheduler edit inside the normal settings must immediately update
+        # the native collection task's queue entry as well.
+        from module.server.multi_account_repeat_new_collection_router import _sync_outer
+        _sync_outer(collection)
+        config.save_selected_fields({"multi_account_repeat_new_collection": collection})
+        return
     mm.config_cache(script_name).save_selected_fields(fields)
 
 

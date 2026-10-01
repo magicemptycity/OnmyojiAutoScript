@@ -32,6 +32,7 @@ class MultiAccountFeature:
             "fixed_group",
             "fixed_batches",
             "orchestration",
+            "collection",
         }
         expected_copy = {"normal": "tasks", "task_list": "tasks", "timed": "tasks",
                          "fixed_group": "groups", "fixed_batches": "groups", "orchestration": "items"}
@@ -52,6 +53,14 @@ class MultiAccountFeature:
 
 # OASX 根据该清单选择通用页面；旧专属 API 继续保留兼容。
 MULTI_ACCOUNT_FEATURES = (
+    MultiAccountFeature(
+        key="multi_account_repeat_new_collection",
+        task_name="MultiAccountRepeatNewCollection",
+        display_name="多账号多任务新集合",
+        mode="collection",
+        api_prefix="multi_account_repeat_new_collection",
+        overview_kind="normal_collection",
+    ),
     MultiAccountFeature(
         key="multi_account_repeat_new_normal",
         account_copy_kind="tasks",

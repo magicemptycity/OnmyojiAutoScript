@@ -18,7 +18,7 @@ class ConfigManual:
         > CollectiveMissions
         > MultiAccountKekkaiUtilize > MultiAccountKekkaiUtilizeNew > MultiAccountKekkaiActivation > MultiAccountKekkaiActivationNew
         > MultiAccountDelegation > MultiAccountAreaBoss > MultiAccountHunt > MultiAccountRepeat
-        > MultiAccountTaskOrchestration > MultiAccountRepeatNewNormal > MultiAccountCooperation
+        > MultiAccountTaskOrchestration > MultiAccountRepeatNewNormal > MultiAccountRepeatNewCollection > MultiAccountCooperation
         > MultiAccountRepeatNewFixed > MultiAccountRepeatTimed
         > MultiAccountRepeatMorning > MultiAccountRepeatAfternoon > MultiAccountRepeatMidnight
         > MultiAccountRepeatDay > MultiAccountRepeatWeek > MultiAccountRepeatMonth

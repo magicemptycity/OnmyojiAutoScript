@@ -102,6 +102,7 @@ from tasks.MultiAccountHunt.config import MultiAccountHunt
 from tasks.MultiAccountRepeat.config import MultiAccountRepeat
 from tasks.MultiAccountTaskOrchestration.config import MultiAccountTaskOrchestration
 from tasks.MultiAccountRepeatNewNormal.config import MultiAccountRepeatNewNormal
+from tasks.MultiAccountRepeatNewCollection.config import MultiAccountRepeatNewCollection
 from tasks.MultiAccountCooperation.config import MultiAccountCooperation
 from tasks.MultiAccountRepeatNewFixed.config import MultiAccountRepeatNewFixed
 from tasks.MultiAccountRepeatTimed.config import MultiAccountRepeatTimed
@@ -197,6 +198,7 @@ class ConfigModel(ConfigBase):
     multi_account_shared_accounts: SharedPublicAccounts = Field(default_factory=SharedPublicAccounts)
     multi_account_task_orchestration: MultiAccountTaskOrchestration = Field(default_factory=MultiAccountTaskOrchestration)
     multi_account_repeat_new_normal: MultiAccountRepeatNewNormal = Field(default_factory=MultiAccountRepeatNewNormal)
+    multi_account_repeat_new_collection: MultiAccountRepeatNewCollection = Field(default_factory=MultiAccountRepeatNewCollection)
     multi_account_cooperation: MultiAccountCooperation = Field(default_factory=MultiAccountCooperation)
     multi_account_repeat_new_fixed: MultiAccountRepeatNewFixed = Field(default_factory=MultiAccountRepeatNewFixed)
     multi_account_repeat_timed: MultiAccountRepeatTimed = Field(default_factory=MultiAccountRepeatTimed)
